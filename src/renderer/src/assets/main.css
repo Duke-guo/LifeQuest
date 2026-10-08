@@ -6,46 +6,63 @@
   font-display: swap;
 }
 
+/* 数字/日期用的圆润字体，和中文标题、正文形成层次 */
+@font-face {
+  font-family: 'Baloo 2';
+  src: url('./fonts/baloo2-600.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Baloo 2';
+  src: url('./fonts/baloo2-700.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ===== 主题变量 ===== */
 :root {
   /* 明亮主题：简洁、明亮、不鲜艳 */
-  --bg: #f4f6f9;
+  --bg: #f6f4f4;
   --surface: #ffffff;
-  --surface-2: #eef1f5;
-  --text: #26282d;
-  --text-2: #5c6470;
-  --text-3: #9aa1ac;
-  --border: #e3e7ee;
-  --accent: #d98a2b;
-  --accent-soft: #fbeedb;
-  --accent-text: #8a5a16;
+  --surface-2: #f0ebea;
+  --text: #2b2626;
+  --text-2: #6b5f5d;
+  --text-3: #9d918f;
+  --border: #eae2e0;
+  --accent: #cf4a3c;
+  --accent-soft: #fbe8e5;
+  --accent-text: #962f24;
   --success: #2f9e5f;
-  --danger: #d95050;
-  --imp5: #d95050;
-  --imp4: #d98a2b;
-  --shadow: 0 2px 12px rgba(30, 40, 60, 0.07);
-  --shadow-lg: 0 8px 28px rgba(30, 40, 60, 0.16);
+  --danger: #c0392b;
+  --imp5: #b02a22;
+  --imp4: #e07b39;
+  --shadow: 0 2px 12px rgba(60, 30, 25, 0.08);
+  --shadow-lg: 0 8px 28px rgba(60, 30, 25, 0.18);
   --font-display: 'ZCOOL KuaiLe', 'Microsoft YaHei', sans-serif;
+  --font-num: 'Baloo 2', 'Segoe UI', 'Microsoft YaHei', sans-serif;
   --font-body: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
 }
 
 :root[data-theme='dark'] {
-  --bg: #16181d;
-  --surface: #1f2229;
-  --surface-2: #2a2e37;
-  --text: #e7e9ee;
-  --text-2: #9aa1ad;
-  --text-3: #6a7280;
-  --border: #303640;
-  --accent: #f0a63f;
-  --accent-soft: #2e2515;
-  --accent-text: #f0b96a;
+  --bg: #1a1616;
+  --surface: #241f1f;
+  --surface-2: #302929;
+  --text: #ece7e6;
+  --text-2: #a99e9c;
+  --text-3: #7a6f6d;
+  --border: #393030;
+  --accent: #e8635a;
+  --accent-soft: #331c19;
+  --accent-text: #f2938a;
   --success: #4cc27a;
-  --danger: #f06a6a;
-  --imp5: #f06a6a;
-  --imp4: #f0a63f;
-  --shadow: 0 2px 14px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.5);
+  --danger: #ef6b5c;
+  --imp5: #e0574c;
+  --imp4: #eb9152;
+  --shadow: 0 2px 14px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.55);
 }
 
 /* ===== 基础 ===== */
@@ -68,6 +85,29 @@ h3,
   font-family: var(--font-display);
   font-weight: 400;
   letter-spacing: 0.02em;
+}
+
+/* 数字/日期/时间统一用圆润数字字体，和中文形成层次 */
+.day,
+.hour,
+.wk,
+.wc-date,
+.date,
+.label,
+.weekday,
+.stars,
+.time,
+.level,
+.pill.time,
+.qa-row input[type='time'],
+.r-date,
+.r-time,
+.hist-time,
+input[type='date'],
+input[type='time'] {
+  font-family: var(--font-num);
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 h2,

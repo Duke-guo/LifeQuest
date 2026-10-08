@@ -42,7 +42,7 @@ onMounted(async () => {
 })
 
 const KIND_COLOR: Record<string, string> = {
-  note: '#d98a2b',
+  note: '#c9564a',
   task: '#5b8def',
   tag: '#55a89f'
 }
@@ -200,7 +200,7 @@ function refresh(): void {
     </header>
 
     <div class="legend">
-      <span class="lg"><i style="background: #d98a2b"></i>笔记</span>
+      <span class="lg"><i style="background: #c9564a"></i>笔记</span>
       <span class="lg"><i style="background: #5b8def"></i>任务</span>
       <span class="lg"><i style="background: #55a89f"></i>标签</span>
       <span class="stat">{{ nodes.length }} 个节点 · {{ edges.length }} 条关联</span>

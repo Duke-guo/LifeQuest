@@ -126,9 +126,9 @@ const phaseOf = derivePhase
       <svg class="canvas" :viewBox="`0 0 ${W} ${H}`">
         <defs>
           <linearGradient id="mainGrad" x1="0" x2="1">
-            <stop offset="0%" stop-color="#d98a2b" stop-opacity="0.35" />
-            <stop offset="50%" stop-color="#d98a2b" />
-            <stop offset="100%" stop-color="#d98a2b" stop-opacity="0.35" />
+            <stop offset="0%" stop-color="#c9564a" stop-opacity="0.35" />
+            <stop offset="50%" stop-color="#c9564a" />
+            <stop offset="100%" stop-color="#c9564a" stop-opacity="0.35" />
           </linearGradient>
         </defs>
 
@@ -262,7 +262,7 @@ const phaseOf = derivePhase
 }
 .main-seg.active {
   opacity: 1;
-  filter: drop-shadow(0 0 8px rgba(217, 138, 43, 0.55));
+  filter: drop-shadow(0 0 8px rgba(207, 74, 60, 0.55));
 }
 .side-arc {
   fill: none;

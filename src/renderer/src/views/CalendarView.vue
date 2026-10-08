@@ -575,8 +575,9 @@ async function toggleTask(t: Task): Promise<void> {
   padding: 0 0.7rem;
 }
 .nav .label {
-  font-weight: 600;
-  min-width: 150px;
+  font-weight: 700;
+  font-size: 1.15rem;
+  min-width: 160px;
   text-align: center;
 }
 
@@ -629,14 +630,19 @@ async function toggleTask(t: Task): Promise<void> {
   justify-content: space-between;
 }
 .day {
-  font-size: 0.82rem;
-  color: var(--text-2);
+  font-size: 1.22rem;
+  line-height: 1.1;
+  color: var(--text);
+  font-weight: 700;
+}
+.cell.today .day {
+  color: var(--accent);
 }
 .wk {
-  font-size: 0.62rem;
+  font-size: 0.72rem;
   color: var(--text-3);
   background: var(--surface-2);
-  padding: 0 4px;
+  padding: 0 5px;
   border-radius: 5px;
 }
 .cell-mid {
@@ -657,7 +663,7 @@ async function toggleTask(t: Task): Promise<void> {
   color: var(--danger);
 }
 .b-busy {
-  background: rgba(217, 138, 43, 0.18);
+  background: rgba(207, 74, 60, 0.18);
   color: var(--accent);
 }
 .b-mid {
@@ -695,7 +701,7 @@ async function toggleTask(t: Task): Promise<void> {
   white-space: nowrap;
 }
 .p-class {
-  background: rgba(217, 138, 43, 0.72);
+  background: rgba(207, 74, 60, 0.72);
 }
 .p-exam {
   background: rgba(217, 80, 80, 0.8);
@@ -742,7 +748,7 @@ async function toggleTask(t: Task): Promise<void> {
   color: var(--danger);
 }
 .tag-busy {
-  background: rgba(217, 138, 43, 0.16);
+  background: rgba(207, 74, 60, 0.16);
 }
 .tag-busy .wb-tag {
   color: var(--accent);
@@ -788,9 +794,9 @@ async function toggleTask(t: Task): Promise<void> {
   margin-bottom: 5px;
 }
 .wc-date {
-  font-size: 0.82rem;
-  color: var(--text-2);
-  font-weight: 600;
+  font-size: 1.05rem;
+  color: var(--text);
+  font-weight: 700;
 }
 .wc-body {
   display: flex;
