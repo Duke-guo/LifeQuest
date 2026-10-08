@@ -45,6 +45,8 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
           <span v-else-if="task.due" class="pill">{{ formatDate(task.due) }}</span>
           <span v-if="task.location" class="loc">{{ task.location }}</span>
           <span v-if="task.repeat === 'weekly'" class="pill weekly">每周</span>
+          <span v-else-if="task.repeat === 'monthly'" class="pill weekly">每月</span>
+          <span v-if="task.repeatUntil" class="pill range">至 {{ task.repeatUntil.slice(5) }}</span>
           <span v-if="task.description" class="desc">{{ task.description }}</span>
         </div>
       </div>
@@ -162,6 +164,10 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
 .pill.weekly {
   background: rgba(85, 168, 159, 0.16);
   color: #3d827a;
+}
+.pill.range {
+  background: var(--surface-2);
+  color: var(--text-2);
 }
 .loc {
   color: var(--text-3);

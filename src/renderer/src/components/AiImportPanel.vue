@@ -23,19 +23,35 @@ interface ParsedItem {
 const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 
 function mondayOf(d: Date): Date {
-  const day = d.getDay() // 0=周日
+  const day = d.getDay()
   const diff = day === 0 ? -6 : 1 - day
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() + diff)
 }
 
+function addDays(iso: string, n: number): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  return toDateStr(new Date(y, m - 1, d + n))
+}
+
 const imageSrc = ref('')
-/** 实际发给接口的（压缩后）图片 */
 const sendUrl = ref('')
 const busy = ref(false)
 const error = ref('')
 const items = ref<ParsedItem[]>([])
+
+/** 重复区间：起始日（默认本周周一）→ 截止日（默认 +16 周） */
 const weekAnchor = ref(toDateStr(mondayOf(new Date())))
-const repeatWeekly = ref(true)
+const repeatUntil = ref(addDays(weekAnchor.value, 7 * 16))
+const repeatMode = ref<'none' | 'weekly' | 'monthly'>('weekly')
+
+/** 学期考核 */
+const hasMidterm = ref(false)
+const midtermDate = ref('')
+const hasFinal = ref(false)
+const finalDate = ref('')
+
+const elapsed = ref(0)
+let timer: number | undefined
 
 /** 发送前压缩：长边限制 + JPEG 质量，避免请求体过大导致接口无法返回 */
 async function shrink(dataUrl: string, maxDim = 1100, quality = 0.75): Promise<string> {
@@ -90,9 +106,6 @@ async function onPaste(e: ClipboardEvent): Promise<void> {
   await useImage(await fileToDataUrl(files[0]))
 }
 
-const elapsed = ref(0)
-let timer: number | undefined
-
 async function recognize(): Promise<void> {
   if (!sendUrl.value) return
   busy.value = true
@@ -119,22 +132,19 @@ async function recognize(): Promise<void> {
     selected: true
   }))
   if (items.value.length === 0) error.value = '没有识别到任何事项'
-  if (items.value.every((i) => i.weekday || i.date)) repeatWeekly.value = items.value.some((i) => i.weekday) && items.value.every((i) => !i.date)
 }
 
-/** 最终落地的日期：图片里给了日期就用它，否则用「本周周一 + 星期几」推算 */
+/** 最终落地的日期：图片里给了日期就用它，否则用「起始日 + 星期几」推算 */
 function resolvedDate(it: ParsedItem): string | null {
   if (it.date) return it.date
-  if (it.weekday) {
-    const [y, m, d] = weekAnchor.value.split('-').map(Number)
-    return toDateStr(new Date(y, m - 1, d + (it.weekday - 1)))
-  }
+  if (it.weekday) return addDays(weekAnchor.value, it.weekday - 1)
   return null
 }
 
 async function importSelected(): Promise<void> {
   for (const it of items.value.filter((i) => i.selected)) {
     const date = resolvedDate(it)
+    const repeating = it.weekday && repeatMode.value !== 'none'
     await store.addTask({
       title: it.title,
       type: 'daily',
@@ -145,9 +155,31 @@ async function importSelected(): Promise<void> {
       endTime: it.endTime,
       location: it.location,
       remindMinutes: it.startTime ? 15 : null,
-      repeat: it.weekday && repeatWeekly.value ? 'weekly' : 'none'
+      repeat: repeating ? repeatMode.value : 'none',
+      repeatUntil: repeating && repeatUntil.value ? repeatUntil.value : null
     })
   }
+
+  // 学期考核：建成最高重要度的主线事项（这样对应周会被日历概括为「考试周」）
+  if (hasMidterm.value && midtermDate.value) {
+    await store.addTask({
+      title: '期中考核',
+      type: 'main',
+      kind: 'task',
+      importance: 5,
+      due: midtermDate.value
+    })
+  }
+  if (hasFinal.value && finalDate.value) {
+    await store.addTask({
+      title: '期末考核',
+      type: 'main',
+      kind: 'task',
+      importance: 5,
+      due: finalDate.value
+    })
+  }
+
   emit('imported')
 }
 </script>
@@ -159,7 +191,7 @@ async function importSelected(): Promise<void> {
       <button class="x" @click="emit('close')"><AppIcon name="close" :size="17" /></button>
     </div>
     <p class="hint">
-      上传课表 / 通知 / 便签截图，自动识别成任务。识别课表时会读出「星期几」，并可按周重复。
+      上传课表 / 通知 / 便签截图，自动识别成任务。课表会读出「星期几」，并按你设定的起止时间每周/每月重复。
     </p>
 
     <div class="ai-body">
@@ -183,16 +215,39 @@ async function importSelected(): Promise<void> {
 
         <div v-if="items.length" class="settings-bar">
           <label class="sb-field">
-            <span>本周周一</span>
+            <span>起始</span>
             <input v-model="weekAnchor" type="date" />
           </label>
-          <label class="sb-check">
-            <input v-model="repeatWeekly" type="checkbox" />
-            设为每周重复
+          <label class="sb-field">
+            <span>截止</span>
+            <input v-model="repeatUntil" type="date" />
+          </label>
+          <label class="sb-field">
+            <span>重复</span>
+            <select v-model="repeatMode">
+              <option value="weekly">每周</option>
+              <option value="monthly">每月</option>
+              <option value="none">不重复</option>
+            </select>
           </label>
           <button class="add-all" @click="importSelected">
             添加选中的 {{ items.filter((i) => i.selected).length }} 项
           </button>
+        </div>
+
+        <div v-if="items.length" class="exam-bar">
+          <span class="exam-title">学期考核</span>
+          <label class="sb-field">
+            <input v-model="hasMidterm" type="checkbox" />
+            期中
+            <input v-model="midtermDate" type="date" :disabled="!hasMidterm" />
+          </label>
+          <label class="sb-field">
+            <input v-model="hasFinal" type="checkbox" />
+            期末
+            <input v-model="finalDate" type="date" :disabled="!hasFinal" />
+          </label>
+          <span class="exam-hint">勾选后会建为最高重要度的主线事项，对应周会在日历上显示为「考试周」</span>
         </div>
 
         <div v-if="items.length" class="results">
@@ -304,37 +359,47 @@ async function importSelected(): Promise<void> {
   flex: 1;
   min-width: 0;
 }
-.settings-bar {
+.settings-bar,
+.exam-bar {
   display: flex;
   align-items: center;
   gap: 0.9rem;
   flex-wrap: wrap;
-  margin-bottom: 0.7rem;
-  padding-bottom: 0.7rem;
+  padding-bottom: 0.6rem;
+  margin-bottom: 0.6rem;
   border-bottom: 1px solid var(--border);
+}
+.exam-bar {
+  padding: 0.5rem 0.7rem;
+  background: var(--surface-2);
+  border-radius: 10px;
+  border-bottom: none;
+}
+.exam-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.exam-hint {
+  font-size: 0.74rem;
+  color: var(--text-3);
+  flex-basis: 100%;
 }
 .sb-field {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
   font-size: 0.82rem;
   color: var(--text-2);
 }
-.sb-field input {
+.sb-field input,
+.sb-field select {
   padding: 0.3rem 0.45rem;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
   color: var(--text);
   font-size: 0.82rem;
-}
-.sb-check {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.82rem;
-  color: var(--text-2);
-  cursor: pointer;
 }
 .add-all {
   margin-left: auto;
@@ -351,7 +416,7 @@ async function importSelected(): Promise<void> {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  max-height: 340px;
+  max-height: 330px;
   overflow-y: auto;
 }
 .result {

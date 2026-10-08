@@ -61,8 +61,10 @@ export interface Task {
   location: string | null
   /** 提前多少分钟提醒（仅 kind=schedule） */
   remindMinutes: number | null
-  /** 重复方式：none 单次；weekly 每周重复（以 due 为首次日期，按星期几循环） */
-  repeat?: 'none' | 'weekly'
+  /** 重复方式：none 单次；weekly 每周；monthly 每月（以 due 为首次日期，repeatUntil 为截止） */
+  repeat?: 'none' | 'weekly' | 'monthly'
+  /** 重复截止日期（含当天）；空表示不限 */
+  repeatUntil?: string | null
   tags: string[]
   tagIds: string[]
   /** 关联的笔记 id（日程 ↔ 笔记） */

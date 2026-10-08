@@ -1,31 +1,66 @@
 import type { Task, Plan, CalendarEvent, Weather, Mood } from '../../../shared/types'
 
-/** 把任务/日程转成日历事件；每周重复的任务会按给定区间展开 */
+/** 把任务/日程转成日历事件；重复任务按区间展开（每周 / 每月） */
 export function eventsFromTasks(tasks: Task[], rangeStart?: string, rangeEnd?: string): CalendarEvent[] {
   const out: CalendarEvent[] = []
   for (const t of tasks) {
     if (!t.due || t.status === 'archived') continue
 
-    if (t.repeat === 'weekly' && rangeStart && rangeEnd) {
-      const end = new Date(rangeEnd)
-      let cur = new Date(t.due)
-      const start = new Date(rangeStart)
-      // 先推进到区间附近，避免从很久以前开始循环
-      while (cur < start) {
-        cur = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 7)
-      }
-      let n = 0
-      while (cur <= end && n < 80) {
-        out.push(makeEvent(t, toStr(cur), `-w${n}`))
-        cur = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 7)
-        n++
-      }
+    const mode = t.repeat === 'weekly' || t.repeat === 'monthly' ? t.repeat : null
+    if (mode && rangeStart && rangeEnd) {
+      // 展开区间 = [可见区间] ∩ [due, repeatUntil]
+      const from = t.due > rangeStart ? t.due : rangeStart
+      const until = t.repeatUntil && t.repeatUntil < rangeEnd ? t.repeatUntil : rangeEnd
+      if (until < from) continue
+      const dates = expandRepeat(t.due, mode, t.repeatUntil ?? null, from, until)
+      dates.forEach((d, i) => out.push(makeEvent(t, d, `-r${i}`)))
       continue
     }
 
+    if (t.repeatUntil && t.due > t.repeatUntil) continue
     out.push(makeEvent(t, t.due, ''))
   }
   return out
+}
+
+/** 从 first 起按 weekly/monthly 推进，返回落在 [from, until] 内的日期 */
+function expandRepeat(
+  first: string,
+  mode: 'weekly' | 'monthly',
+  repeatUntil: string | null,
+  from: string,
+  until: string
+): string[] {
+  const out: string[] = []
+  const hardEnd = repeatUntil && repeatUntil < until ? repeatUntil : until
+  let cur = new Date(first)
+  const end = new Date(hardEnd)
+  let guard = 0
+  // 先推进到区间附近，避免从很久以前开始循环
+  while (cur < new Date(from) && guard < 400) {
+    cur = mode === 'weekly' ? addDays(cur, 7) : addMonth(cur)
+    guard++
+  }
+  guard = 0
+  while (cur <= end && guard < 200) {
+    out.push(toStr(cur))
+    cur = mode === 'weekly' ? addDays(cur, 7) : addMonth(cur)
+    guard++
+  }
+  return out
+}
+
+function addDays(d: Date, n: number): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)
+}
+
+/** 加一个月，日期溢出时收敛到当月最后一天（如 1/31 → 2/28） */
+function addMonth(d: Date): Date {
+  const y = d.getFullYear()
+  const m = d.getMonth() + 1
+  const day = d.getDate()
+  const last = new Date(y, m + 1, 0).getDate()
+  return new Date(y, m, Math.min(day, last))
 }
 
 function makeEvent(t: Task, date: string, suffix: string): CalendarEvent {

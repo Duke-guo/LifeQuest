@@ -25,6 +25,8 @@ const location = ref('')
 const seasonId = ref('')
 const tagInput = ref('')
 const tagIds = ref<string[]>([])
+const repeat = ref<'none' | 'weekly' | 'monthly'>('none')
+const repeatUntil = ref('')
 
 const conflicts = ref<Conflict[]>([])
 const pending = ref(false)
@@ -78,7 +80,9 @@ async function submit(force = false): Promise<void> {
     endTime: kind.value === 'schedule' ? endTime.value : null,
     location: location.value.trim() || null,
     seasonId: seasonId.value || null,
-    tagIds: tagIds.value
+    tagIds: tagIds.value,
+    repeat: repeat.value,
+    repeatUntil: repeat.value !== 'none' && repeatUntil.value ? repeatUntil.value : null
   })
 
   title.value = ''
@@ -168,6 +172,26 @@ async function onAiImported(): Promise<void> {
           <option value="">无赛季</option>
           <option v-for="s in seasonsStore.seasons" :key="s.id" :value="s.id">{{ s.name }}</option>
         </select>
+      </div>
+
+      <div class="row repeat-row">
+        <label class="inline-field">
+          <span>重复</span>
+          <select v-model="repeat">
+            <option value="none">不重复</option>
+            <option value="weekly">每周</option>
+            <option value="monthly">每月</option>
+          </select>
+        </label>
+        <template v-if="repeat !== 'none'">
+          <label class="inline-field">
+            <span>截止</span>
+            <input v-model="repeatUntil" type="date" />
+          </label>
+          <span class="range-hint">
+            从上面的日期起，{{ repeat === 'weekly' ? '每周' : '每月' }}重复到截止日（留空表示不限）
+          </span>
+        </template>
       </div>
 
       <div class="row tags-row">
@@ -293,6 +317,20 @@ input[type='time'] {
 }
 .tags-row {
   gap: 0.4rem;
+}
+.repeat-row {
+  gap: 0.7rem;
+}
+.inline-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--text-2);
+}
+.range-hint {
+  font-size: 0.78rem;
+  color: var(--text-3);
 }
 .tag-chip {
   display: inline-flex;
