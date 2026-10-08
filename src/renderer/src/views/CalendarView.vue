@@ -13,7 +13,9 @@ import {
 } from '../utils/schedule'
 import { toDateStr } from '../utils/helpers'
 import AppIcon from '../components/AppIcon.vue'
-import type { CalendarEvent } from '../../../shared/types'
+import TaskItem from '../components/TaskItem.vue'
+import TaskEditModal from '../components/TaskEditModal.vue'
+import type { CalendarEvent, Task } from '../../../shared/types'
 
 const emit = defineEmits<{ openJournal: [date: string] }>()
 const props = defineProps<{ focusDate?: string }>()
@@ -26,6 +28,14 @@ const semesterStore = useSemesterStore()
 type Mode = 'day' | 'week' | 'month'
 const mode = ref<Mode>('month')
 const cursor = ref(new Date())
+const editing = ref<Task | null>(null)
+const showDone = ref(false)
+
+// 日视图侧边栏：快速新增
+const newTitle = ref('')
+const newStart = ref('09:00')
+const newEnd = ref('10:00')
+const newImp = ref(3)
 
 onMounted(async () => {
   if (!tasksStore.loaded) await tasksStore.load()
@@ -42,9 +52,10 @@ onMounted(async () => {
 const today = toDateStr(new Date())
 const year = computed(() => cursor.value.getFullYear())
 const month = computed(() => cursor.value.getMonth())
+const cursorIso = computed(() => toDateStr(cursor.value))
 
 const visibleRange = computed<[string, string]>(() => {
-  if (mode.value === 'day') return [toDateStr(cursor.value), toDateStr(cursor.value)]
+  if (mode.value === 'day') return [cursorIso.value, cursorIso.value]
   if (mode.value === 'week') return [weekDays.value[0], weekDays.value[6]]
   const first = toDateStr(new Date(year.value, month.value, 1))
   const last = toDateStr(new Date(year.value, month.value + 1, 0))
@@ -59,7 +70,52 @@ const events = computed<CalendarEvent[]>(() => {
   ]
 })
 
-/** 格子底部颜色：上课 / 考试 / 放假 / 周末 / 学期外 */
+function eventsOn(date: string): CalendarEvent[] {
+  return events.value
+    .filter((e) => e.date === date)
+    .sort((a, b) => (a.time ?? '99:99').localeCompare(b.time ?? '99:99'))
+}
+
+/** 当天实际发生的任务（含重复日程展开出来的那一次） */
+const dayTasks = computed(() => {
+  const ids = new Set(eventsOn(cursorIso.value).map((e) => e.refId))
+  return tasksStore.tasks
+    .filter((t) => ids.has(t.id) && (showDone.value || t.status !== 'done'))
+    .sort((a, b) => (a.startTime ?? '99:99').localeCompare(b.startTime ?? '99:99'))
+})
+
+// ---------- 忙碌程度概括（月视图用） ----------
+function hoursOf(e: CalendarEvent): number {
+  if (!e.time || !e.endTime) return 1
+  const [sh, sm] = e.time.split(':').map(Number)
+  const [eh, em] = e.endTime.split(':').map(Number)
+  return Math.max(0.5, (eh * 60 + (em || 0) - sh * 60 - (sm || 0)) / 60)
+}
+
+function loadScore(date: string): number {
+  return eventsOn(date).reduce((s, e) => s + hoursOf(e), 0)
+}
+
+function busyLabel(date: string): string {
+  const n = eventsOn(date).length
+  if (n === 0) return '空闲'
+  const h = loadScore(date)
+  if (h >= 7) return '好忙'
+  if (h >= 4.5) return '较忙'
+  if (h >= 2.5) return '一般'
+  return '轻松'
+}
+
+function busyClass(date: string): string {
+  const n = eventsOn(date).length
+  if (n === 0) return 'b-free'
+  const h = loadScore(date)
+  if (h >= 7) return 'b-hard'
+  if (h >= 4.5) return 'b-busy'
+  if (h >= 2.5) return 'b-mid'
+  return 'b-easy'
+}
+
 const PHASE_LABEL: Record<string, string> = {
   class: '上课',
   exam: '考试周',
@@ -80,22 +136,8 @@ const PHASE_CLASS: Record<string, string> = {
   unknown: 'p-out'
 }
 
-/** 当天是否有实际安排（周末有课时仍算上课） */
 function dayPhase(date: string): string {
   return semesterStore.phaseOf(date, eventsOn(date).length > 0)
-}
-
-function eventsOn(date: string): CalendarEvent[] {
-  return events.value
-    .filter((e) => e.date === date)
-    .sort((a, b) => (a.time ?? '99:99').localeCompare(b.time ?? '99:99'))
-}
-
-const KIND_LABEL: Record<string, string> = {
-  schedule: '日程',
-  task: '任务',
-  plan: '计划',
-  journal: '日记'
 }
 
 // ---------- 月视图 ----------
@@ -135,8 +177,8 @@ const TAG_CLASS: Record<string, string> = {
   普通周: 'tag-normal'
 }
 
-// ---------- 日视图 ----------
-const HOURS = Array.from({ length: 18 }, (_, i) => i + 6) // 6:00 - 23:00
+// ---------- 日视图时间轴 ----------
+const HOURS = Array.from({ length: 18 }, (_, i) => i + 6)
 
 function topOf(time: string): number {
   const [h, m] = time.split(':').map(Number)
@@ -150,8 +192,7 @@ function heightOf(start: string, end: string): number {
   return Math.max(26, mins * (56 / 60))
 }
 
-const daySchedules = computed(() => eventsOn(toDateStr(cursor.value)).filter((e) => e.kind === 'schedule' && e.time))
-const dayOthers = computed(() => eventsOn(toDateStr(cursor.value)).filter((e) => e.kind !== 'schedule' || !e.time))
+const daySchedules = computed(() => eventsOn(cursorIso.value).filter((e) => e.kind === 'schedule' && e.time))
 
 // ---------- 导航 ----------
 function shift(delta: number): void {
@@ -173,10 +214,31 @@ function drillTo(date: string): void {
 }
 
 const title = computed(() => {
-  if (mode.value === 'day') return toDateStr(cursor.value)
+  if (mode.value === 'day') return cursorIso.value
   if (mode.value === 'week') return `${weekSummary.value.start} ~ ${weekSummary.value.end}`
   return `${year.value} 年 ${month.value + 1} 月`
 })
+
+// ---------- 日视图侧边栏：增删改 ----------
+async function quickAdd(): Promise<void> {
+  const t = newTitle.value.trim()
+  if (!t) return
+  await tasksStore.addTask({
+    title: t,
+    type: 'daily',
+    kind: 'schedule',
+    importance: newImp.value,
+    due: cursorIso.value,
+    startTime: newStart.value,
+    endTime: newEnd.value,
+    remindMinutes: 15
+  })
+  newTitle.value = ''
+}
+
+async function toggleTask(t: Task): Promise<void> {
+  await tasksStore.setStatus(t.id, t.status === 'done' ? 'todo' : 'done')
+}
 </script>
 
 <template>
@@ -201,7 +263,7 @@ const title = computed(() => {
       </div>
     </header>
 
-    <!-- ========== 月视图 ========== -->
+    <!-- ========== 月视图（只显示概括，不堆文字） ========== -->
     <template v-if="mode === 'month'">
       <div class="weekdays">
         <span v-for="w in ['日', '一', '二', '三', '四', '五', '六']" :key="w">{{ w }}</span>
@@ -211,45 +273,49 @@ const title = computed(() => {
           v-for="(c, i) in monthCells"
           :key="i"
           class="cell"
-          :class="{ empty: !c.inMonth, today: c.date === today, marked: c.inMonth && !!journalIndex.on(c.date) }"
+          :class="{ empty: !c.inMonth, today: c.date === today }"
           @click="c.inMonth && drillTo(c.date)"
         >
-          <div class="cell-head">
-            <span class="day">{{ c.day || '' }}</span>
-            <span v-if="c.inMonth && semesterStore.weekOf(c.date)" class="wk">
-              第{{ semesterStore.weekOf(c.date) }}周
-            </span>
-            <span
-              v-if="c.inMonth && journalIndex.on(c.date)?.weather"
-              class="wx"
-              :style="{ color: WEATHER_META[journalIndex.on(c.date)!.weather!].color }"
-              :title="WEATHER_META[journalIndex.on(c.date)!.weather!].label"
-            >
-              <AppIcon :name="journalIndex.on(c.date)!.weather!" :size="13" />
-            </span>
-          </div>
-          <div v-if="c.inMonth" class="dots">
-            <span
-              v-for="e in eventsOn(c.date).slice(0, 3)"
-              :key="e.id"
-              class="dot"
-              :class="`k-${e.kind}`"
-              :title="`${KIND_LABEL[e.kind]}：${e.title}`"
-            >
-              {{ e.time ? e.time + ' ' : '' }}{{ e.title }}
-            </span>
-            <span v-if="eventsOn(c.date).length > 3" class="more">+{{ eventsOn(c.date).length - 3 }}</span>
-          </div>
-          <div
-            v-if="c.inMonth"
-            class="phase-bar"
-            :class="PHASE_CLASS[dayPhase(c.date)]"
-            :title="`${PHASE_LABEL[dayPhase(c.date)]}${semesterStore.holidayOn(c.date) ? '：' + semesterStore.holidayOn(c.date)!.name : ''}`"
-          >
-            {{ semesterStore.holidayOn(c.date)?.name ?? PHASE_LABEL[dayPhase(c.date)] }}
-          </div>
+          <template v-if="c.inMonth">
+            <div class="cell-head">
+              <span class="day">{{ c.day }}</span>
+              <span class="wk">第{{ semesterStore.weekOf(c.date) }}周</span>
+            </div>
+            <div class="cell-mid">
+              <span class="busy" :class="busyClass(c.date)">
+                {{ busyLabel(c.date) }}
+                <template v-if="eventsOn(c.date).length">· {{ eventsOn(c.date).length }}</template>
+              </span>
+              <span class="icons">
+                <span
+                  v-if="journalIndex.on(c.date)?.weather"
+                  class="ico"
+                  :style="{ color: WEATHER_META[journalIndex.on(c.date)!.weather!].color }"
+                  :title="WEATHER_META[journalIndex.on(c.date)!.weather!].label"
+                >
+                  <AppIcon :name="journalIndex.on(c.date)!.weather!" :size="13" />
+                </span>
+                <span
+                  v-if="journalIndex.on(c.date)?.mood"
+                  class="ico"
+                  :style="{ color: MOOD_META[journalIndex.on(c.date)!.mood!].color }"
+                  :title="MOOD_META[journalIndex.on(c.date)!.mood!].label"
+                >
+                  <AppIcon :name="`mood-${journalIndex.on(c.date)!.mood}`" :size="13" />
+                </span>
+              </span>
+            </div>
+            <div class="phase-bar" :class="PHASE_CLASS[dayPhase(c.date)]">
+              {{ semesterStore.holidayOn(c.date)?.name ?? PHASE_LABEL[dayPhase(c.date)] }}
+            </div>
+          </template>
         </div>
       </div>
+
+      <!-- 说明：点格子进日视图，文字细节都在那里 -->
+      <p class="month-tip">
+        点任意格子进入<b>日视图</b>：那里可以看到、修改和新增当天的每一项安排，并能调整重要程度。
+      </p>
     </template>
 
     <!-- ========== 周视图 ========== -->
@@ -261,35 +327,26 @@ const title = computed(() => {
         </span>
       </div>
       <div class="week-grid">
-        <div
-          v-for="d in weekDays"
-          :key="d"
-          class="week-col"
-          :class="{ today: d === today }"
-          @click="drillTo(d)"
-        >
+        <div v-for="d in weekDays" :key="d" class="week-col" :class="{ today: d === today }" @click="drillTo(d)">
           <div class="wc-head">
             <span class="wc-date">{{ d.slice(5) }}</span>
-            <span v-if="semesterStore.weekOf(d)" class="wk">第{{ semesterStore.weekOf(d) }}周</span>
-            <span
-              v-if="journalIndex.on(d)?.mood"
-              class="wc-mood"
-              :style="{ color: MOOD_META[journalIndex.on(d)!.mood!].color }"
-            >
-              <AppIcon :name="`mood-${journalIndex.on(d)!.mood}`" :size="15" />
-            </span>
+            <span class="wk">第{{ semesterStore.weekOf(d) }}周</span>
+          </div>
+          <div class="wc-body">
+            <span class="busy" :class="busyClass(d)">{{ busyLabel(d) }}</span>
+            <span class="wc-count">{{ eventsOn(d).length }} 项</span>
           </div>
           <div class="wc-events">
-            <span v-for="e in eventsOn(d)" :key="e.id" class="dot" :class="`k-${e.kind}`">
+            <span v-for="e in eventsOn(d).slice(0, 4)" :key="e.id" class="dot" :class="`k-${e.kind}`">
               {{ e.time ? e.time + ' ' : '' }}{{ e.title }}
             </span>
-            <span v-if="eventsOn(d).length === 0" class="wc-none">—</span>
+            <span v-if="eventsOn(d).length > 4" class="more">+{{ eventsOn(d).length - 4 }}</span>
           </div>
         </div>
       </div>
     </template>
 
-    <!-- ========== 日视图（时间段） ========== -->
+    <!-- ========== 日视图（左时间轴 + 右可编辑侧栏） ========== -->
     <template v-else>
       <div class="day-layout">
         <div class="timeline">
@@ -308,45 +365,76 @@ const title = computed(() => {
         </div>
 
         <aside class="day-side">
-          <div v-if="journalIndex.on(toDateStr(cursor))" class="mood-card">
-            <h4>当日日记</h4>
-            <div class="mood-row">
-              <span
-                v-if="journalIndex.on(toDateStr(cursor))!.weather"
-                class="chip"
-                :style="{ color: WEATHER_META[journalIndex.on(toDateStr(cursor))!.weather!].color }"
-              >
-                <AppIcon :name="journalIndex.on(toDateStr(cursor))!.weather!" :size="15" />
-                {{ WEATHER_META[journalIndex.on(toDateStr(cursor))!.weather!].label }}
-              </span>
-              <span
-                v-if="journalIndex.on(toDateStr(cursor))!.mood"
-                class="chip"
-                :style="{ color: MOOD_META[journalIndex.on(toDateStr(cursor))!.mood!].color }"
-              >
-                <AppIcon :name="`mood-${journalIndex.on(toDateStr(cursor))!.mood}`" :size="15" />
-                {{ MOOD_META[journalIndex.on(toDateStr(cursor))!.mood!].label }}
-              </span>
+          <!-- 当天安排：与任务页一致，可勾选 / 编辑 / 删除 / 调重要度 -->
+          <div class="side-card">
+            <div class="side-head">
+              <h4>当天安排</h4>
+              <span class="side-sub">{{ dayTasks.length }} 项</span>
+              <label class="done-toggle">
+                <input v-model="showDone" type="checkbox" />
+                显示已完成
+              </label>
             </div>
-            <button class="open-journal" @click="emit('openJournal', toDateStr(cursor))">打开这天的日记</button>
-          </div>
-          <div v-else class="mood-card">
-            <h4>当日日记</h4>
-            <p class="none">这天还没有写日记</p>
-            <button class="open-journal" @click="emit('openJournal', toDateStr(cursor))">去写这天的日记</button>
+
+            <div v-if="dayTasks.length === 0" class="none">这天还没有安排</div>
+            <TaskItem
+              v-for="t in dayTasks"
+              :key="t.id"
+              :task="t"
+              @toggle="toggleTask(t)"
+              @edit="editing = t"
+              @remove="tasksStore.removeTask(t.id)"
+            />
+
+            <div class="quick-add">
+              <input v-model="newTitle" class="qa-title" placeholder="新增当天的安排…" @keyup.enter="quickAdd" />
+              <div class="qa-row">
+                <input v-model="newStart" type="time" />
+                <span class="dash">–</span>
+                <input v-model="newEnd" type="time" />
+                <select v-model.number="newImp">
+                  <option :value="5">★5</option>
+                  <option :value="4">★4</option>
+                  <option :value="3">★3</option>
+                  <option :value="2">★2</option>
+                  <option :value="1">★1</option>
+                </select>
+                <button class="qa-btn" @click="quickAdd">添加</button>
+              </div>
+            </div>
           </div>
 
-          <div class="other-card">
-            <h4>当天其它事项</h4>
-            <div v-if="dayOthers.length === 0" class="none">无</div>
-            <div v-for="e in dayOthers" :key="e.id" class="other-row">
-              <span class="dot" :class="`k-${e.kind}`">{{ KIND_LABEL[e.kind] }}</span>
-              <span>{{ e.title }}</span>
+          <!-- 当日日记 -->
+          <div class="side-card">
+            <h4>当日日记</h4>
+            <div v-if="journalIndex.on(cursorIso)" class="mood-row">
+              <span
+                v-if="journalIndex.on(cursorIso)!.weather"
+                class="chip"
+                :style="{ color: WEATHER_META[journalIndex.on(cursorIso)!.weather!].color }"
+              >
+                <AppIcon :name="journalIndex.on(cursorIso)!.weather!" :size="15" />
+                {{ WEATHER_META[journalIndex.on(cursorIso)!.weather!].label }}
+              </span>
+              <span
+                v-if="journalIndex.on(cursorIso)!.mood"
+                class="chip"
+                :style="{ color: MOOD_META[journalIndex.on(cursorIso)!.mood!].color }"
+              >
+                <AppIcon :name="`mood-${journalIndex.on(cursorIso)!.mood}`" :size="15" />
+                {{ MOOD_META[journalIndex.on(cursorIso)!.mood!].label }}
+              </span>
             </div>
+            <p v-else class="none">这天还没有写日记</p>
+            <button class="open-journal" @click="emit('openJournal', cursorIso)">
+              {{ journalIndex.on(cursorIso) ? '打开这天的日记' : '去写这天的日记' }}
+            </button>
           </div>
         </aside>
       </div>
     </template>
+
+    <TaskEditModal v-if="editing" :task="editing" @close="editing = null" />
   </div>
 </template>
 
@@ -416,7 +504,7 @@ const title = computed(() => {
   gap: 6px;
 }
 .cell {
-  min-height: 118px;
+  min-height: 92px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface);
@@ -443,9 +531,6 @@ const title = computed(() => {
   border-color: var(--accent);
   background: var(--accent-soft);
 }
-.cell.marked .day {
-  font-weight: 700;
-}
 .cell-head {
   display: flex;
   align-items: center;
@@ -456,13 +541,51 @@ const title = computed(() => {
   color: var(--text-2);
 }
 .wk {
-  font-size: 0.64rem;
+  font-size: 0.62rem;
   color: var(--text-3);
   background: var(--surface-2);
   padding: 0 4px;
   border-radius: 5px;
-  margin-left: auto;
-  margin-right: 4px;
+}
+.cell-mid {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.3rem;
+  margin-top: 0.35rem;
+}
+.busy {
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+.b-hard {
+  background: rgba(217, 80, 80, 0.16);
+  color: var(--danger);
+}
+.b-busy {
+  background: rgba(217, 138, 43, 0.18);
+  color: var(--accent);
+}
+.b-mid {
+  background: rgba(217, 165, 43, 0.16);
+  color: #a8801f;
+}
+.b-easy {
+  background: rgba(85, 168, 159, 0.16);
+  color: #3d827a;
+}
+.b-free {
+  background: var(--surface-2);
+  color: var(--text-3);
+}
+.icons {
+  display: inline-flex;
+  gap: 3px;
+}
+.ico {
+  display: inline-flex;
 }
 .phase-bar {
   margin-top: auto;
@@ -484,46 +607,18 @@ const title = computed(() => {
 .p-holiday {
   background: rgba(85, 168, 159, 0.8);
 }
-.p-weekend {
-  background: var(--surface-2);
-  color: var(--text-3);
-}
+.p-weekend,
 .p-out {
   background: var(--surface-2);
   color: var(--text-3);
 }
-.wx {
-  display: inline-flex;
-}
-.dots {
-  margin-top: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.dot {
-  font-size: 0.7rem;
-  border-radius: 4px;
-  padding: 1px 5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.k-schedule {
-  background: rgba(91, 141, 239, 0.16);
-  color: #3f6fd0;
-}
-.k-task {
-  background: var(--accent-soft);
-  color: var(--accent-text);
-}
-.k-plan {
-  background: rgba(85, 168, 159, 0.16);
-  color: #3d827a;
-}
-.more {
-  font-size: 0.68rem;
+.month-tip {
+  margin-top: 0.8rem;
+  font-size: 0.8rem;
   color: var(--text-3);
+}
+.month-tip b {
+  color: var(--accent);
 }
 
 /* 周视图 */
@@ -594,21 +689,51 @@ const title = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }
 .wc-date {
   font-size: 0.82rem;
   color: var(--text-2);
   font-weight: 600;
 }
+.wc-body {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 5px;
+}
+.wc-count {
+  font-size: 0.7rem;
+  color: var(--text-3);
+}
 .wc-events {
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
-.wc-none {
+.dot {
+  font-size: 0.7rem;
+  border-radius: 4px;
+  padding: 1px 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.k-schedule {
+  background: rgba(91, 141, 239, 0.16);
+  color: #3f6fd0;
+}
+.k-task {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.k-plan {
+  background: rgba(85, 168, 159, 0.16);
+  color: #3d827a;
+}
+.more {
+  font-size: 0.68rem;
   color: var(--text-3);
-  font-size: 0.8rem;
 }
 
 /* 日视图 */
@@ -623,7 +748,6 @@ const title = computed(() => {
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
-  padding: 0;
   overflow: hidden;
 }
 .hour-row {
@@ -657,28 +781,93 @@ const title = computed(() => {
   font-size: 0.72rem;
 }
 .day-side {
-  width: 260px;
+  width: 320px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.9rem;
 }
-.mood-card,
-.other-card {
+.side-card {
   background: var(--surface);
   border-radius: 12px;
-  padding: 1rem;
+  padding: 0.9rem;
   box-shadow: var(--shadow);
 }
+.side-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+.side-head h4 {
+  margin: 0;
+}
+.side-sub {
+  font-size: 0.74rem;
+  color: var(--text-3);
+}
+.done-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.74rem;
+  color: var(--text-3);
+  cursor: pointer;
+}
 h4 {
-  margin: 0 0 0.6rem;
+  margin: 0 0 0.5rem;
   font-size: 0.95rem;
+}
+.quick-add {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.qa-title {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.86rem;
+}
+.qa-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.qa-row input[type='time'],
+.qa-row select {
+  padding: 0.3rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.78rem;
+}
+.dash {
+  color: var(--text-3);
+}
+.qa-btn {
+  margin-left: auto;
+  padding: 0.35rem 0.9rem;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.82rem;
 }
 .mood-row {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
-  margin-bottom: 0.7rem;
+  margin-bottom: 0.6rem;
 }
 .chip {
   display: inline-flex;
@@ -701,14 +890,7 @@ h4 {
 }
 .none {
   color: var(--text-3);
-  font-size: 0.85rem;
-  margin: 0 0 0.6rem;
-}
-.other-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.85rem;
-  padding: 0.2rem 0;
+  font-size: 0.84rem;
+  margin: 0 0 0.5rem;
 }
 </style>
