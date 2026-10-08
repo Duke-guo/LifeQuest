@@ -32,6 +32,7 @@ export async function setupIpc(): Promise<void> {
   JSON_FILES.links = join(paths.config, 'links.json')
   JSON_FILES.semester = join(paths.config, 'semester.json')
   JSON_FILES.daynotes = join(paths.config, 'daynotes.json')
+  JSON_FILES.history = join(paths.config, 'history.json')
   JSON_FILES.tasks = join(paths.tasks, 'tasks.json')
   JSON_FILES.plans = join(paths.plans, 'plans.json')
   register()

@@ -225,6 +225,21 @@ export interface DayNotesFile {
   days: DayNote[]
 }
 
+// ===================== 添加/删除历史（误删可一键找回） =====================
+export interface HistoryEntry {
+  id: string
+  /** ISO 时间戳 */
+  at: string
+  action: 'add' | 'delete'
+  /** 当时的完整快照 */
+  task: Task
+}
+
+export interface HistoryFile {
+  schemaVersion: number
+  entries: HistoryEntry[]
+}
+
 // ===================== 日历事件（B6 / B7 / B9 / B13） =====================
 export type CalendarEventKind = 'task' | 'schedule' | 'plan' | 'journal'
 

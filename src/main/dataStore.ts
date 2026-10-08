@@ -95,6 +95,7 @@ async function seedDefaults(paths: DataPaths): Promise<void> {
     [join(paths.config, 'tags.json'), { schemaVersion: CURRENT_SCHEMA_VERSION, tags: [] }],
     [join(paths.config, 'links.json'), { schemaVersion: CURRENT_SCHEMA_VERSION, links: [] }],
     [join(paths.config, 'daynotes.json'), { schemaVersion: CURRENT_SCHEMA_VERSION, days: [] }],
+    [join(paths.config, 'history.json'), { schemaVersion: CURRENT_SCHEMA_VERSION, entries: [] }],
     [
       join(paths.config, 'semester.json'),
       {

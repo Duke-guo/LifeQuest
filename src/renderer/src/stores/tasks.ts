@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { dataApi } from '../services/data'
+import { useHistoryStore } from './history'
 import type { Task, TasksFile, TaskType, TaskStatus, TaskKind, RepeatMode } from '../../../shared/types'
 import { uid } from '../utils/helpers'
 
@@ -74,6 +75,20 @@ export const useTasksStore = defineStore('tasks', () => {
     }
     tasks.value.push(task)
     await persist()
+    await useHistoryStore().record('add', task)
+    return task
+  }
+
+  /** 按快照重新添加（用于「历史添加」里找回误删的项） */
+  async function restoreTask(snapshot: Task): Promise<Task> {
+    const task: Task = {
+      ...JSON.parse(JSON.stringify(snapshot)),
+      id: uid(),
+      createdAt: new Date().toISOString()
+    }
+    tasks.value.push(task)
+    await persist()
+    await useHistoryStore().record('add', task)
     return task
   }
 
@@ -93,8 +108,10 @@ export const useTasksStore = defineStore('tasks', () => {
   }
 
   async function removeTask(id: string): Promise<void> {
+    const victim = tasks.value.find((x) => x.id === id)
     tasks.value = tasks.value.filter((x) => x.id !== id)
     await persist()
+    if (victim) await useHistoryStore().record('delete', victim)
   }
 
   /** 按类型分组，重要度从高到低 */
@@ -119,6 +136,7 @@ export const useTasksStore = defineStore('tasks', () => {
     load,
     persist,
     addTask,
+    restoreTask,
     updateTask,
     setStatus,
     removeTask,

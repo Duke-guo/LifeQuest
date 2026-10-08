@@ -7,6 +7,7 @@ import { findConflicts, conflictsOn, REPEAT_LABELS, REPEAT_OPTIONS, type Conflic
 import { toDateStr } from '../utils/helpers'
 import TaskItem from '../components/TaskItem.vue'
 import TaskEditModal from '../components/TaskEditModal.vue'
+import AddHistory from '../components/AddHistory.vue'
 import AiImportPanel from '../components/AiImportPanel.vue'
 import AppIcon from '../components/AppIcon.vue'
 import type { TaskType, TaskKind, Task, RepeatMode } from '../../../shared/types'
@@ -215,6 +216,8 @@ async function onAiImported(): Promise<void> {
           <button type="button" class="add-btn" @click="submit(true)">仍然添加</button>
         </div>
       </div>
+
+      <AddHistory />
     </form>
 
     <section v-for="s in sections" :key="s.type" class="task-section">

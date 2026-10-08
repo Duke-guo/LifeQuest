@@ -231,6 +231,8 @@ export interface WeekSummary {
   end: string
   tag: WeekTag
   score: number
+  /** 本周安排总时长（小时） */
+  hours: number
   scheduleCount: number
   taskCount: number
 }
@@ -238,23 +240,47 @@ export interface WeekSummary {
 const EXAM_HINTS = ['考', '试', '期末', '期中', '测验']
 const HOLIDAY_HINTS = ['假', '放假', '旅行', '旅游', '春假', '寒假', '暑假']
 
-/** 按任务/日程密度与关键词概括一周 */
-export function summarizeWeek(tasks: Task[], weekStart: Date): WeekSummary {
+/** 单个事件占用的时长（小时） */
+export function eventHours(e: CalendarEvent): number {
+  if (!e.time || !e.endTime) return 1
+  const [sh, sm] = e.time.split(':').map(Number)
+  const [eh, em] = e.endTime.split(':').map(Number)
+  return Math.max(0.5, (eh * 60 + (em || 0) - sh * 60 - (sm || 0)) / 60)
+}
+
+/** 按任务/日程密度与关键词概括一周
+ *  注意：必须用与日历相同的「重复展开」逻辑，否则重复课程会漏算（会误判为轻松周） */
+export function summarizeWeek(
+  tasks: Task[],
+  weekStart: Date,
+  skipDates?: Set<string>
+): WeekSummary {
   const days: string[] = []
   for (let i = 0; i < 7; i++) {
-    const d = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + i)
-    days.push(toStr(d))
+    days.push(toStr(new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + i)))
   }
-  const inWeek = tasks.filter((t) => t.due && days.includes(t.due) && t.status !== 'archived')
-  const schedules = inWeek.filter((t) => t.kind === 'schedule')
-  const score = inWeek.reduce((s, t) => s + (t.importance || 3), 0)
-  const text = inWeek.map((t) => t.title).join(' ')
+
+  const evs = eventsFromTasks(tasks, days[0], days[6], skipDates)
+  const schedules = evs.filter((e) => e.kind === 'schedule')
+  const totalHours = evs.reduce((s, e) => s + eventHours(e), 0)
+  const score = evs.reduce((s, e) => s + (e.meta?.importance ?? 3), 0)
+  const text = evs.map((e) => e.title).join(' ')
+  const skipCount = skipDates ? days.filter((d) => skipDates.has(d)).length : 0
 
   let tag: WeekTag = '普通周'
   if (EXAM_HINTS.some((h) => text.includes(h))) tag = '考试周'
-  else if (HOLIDAY_HINTS.some((h) => text.includes(h))) tag = '放假周'
-  else if (inWeek.length >= 12) tag = '忙碌周'
-  else if (inWeek.length <= 3) tag = '轻松周'
+  else if (skipCount >= 3 || HOLIDAY_HINTS.some((h) => text.includes(h))) tag = '放假周'
+  else if (evs.length === 0) tag = '轻松周'
+  else if (totalHours >= 24) tag = '忙碌周'
+  else if (totalHours < 10) tag = '轻松周'
 
-  return { start: days[0], end: days[6], tag, score, scheduleCount: schedules.length, taskCount: inWeek.length }
+  return {
+    start: days[0],
+    end: days[6],
+    tag,
+    score,
+    hours: Math.round(totalHours),
+    scheduleCount: schedules.length,
+    taskCount: evs.length
+  }
 }

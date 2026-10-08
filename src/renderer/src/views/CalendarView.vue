@@ -9,6 +9,7 @@ import {
   eventsFromTasks,
   eventsFromPlans,
   summarizeWeek,
+  eventHours,
   WEATHER_META,
   MOOD_META
 } from '../utils/schedule'
@@ -16,6 +17,7 @@ import { toDateStr } from '../utils/helpers'
 import AppIcon from '../components/AppIcon.vue'
 import TaskItem from '../components/TaskItem.vue'
 import TaskEditModal from '../components/TaskEditModal.vue'
+import AddHistory from '../components/AddHistory.vue'
 import type { CalendarEvent, Task } from '../../../shared/types'
 
 const emit = defineEmits<{ openJournal: [date: string] }>()
@@ -103,15 +105,8 @@ const dayTasks = computed(() => {
 })
 
 // ---------- 忙碌程度：算法只提供「默认值」，用户可自己写 ----------
-function hoursOf(e: CalendarEvent): number {
-  if (!e.time || !e.endTime) return 1
-  const [sh, sm] = e.time.split(':').map(Number)
-  const [eh, em] = e.endTime.split(':').map(Number)
-  return Math.max(0.5, (eh * 60 + (em || 0) - sh * 60 - (sm || 0)) / 60)
-}
-
 function loadScore(date: string): number {
-  return eventsOn(date).reduce((s, e) => s + hoursOf(e), 0)
+  return eventsOn(date).reduce((s, e) => s + eventHours(e), 0)
 }
 
 /** 算法默认档位（按当天安排的总时长） */
@@ -203,7 +198,9 @@ const weekDays = computed(() =>
   })
 )
 
-const weekSummary = computed(() => summarizeWeek(tasksStore.tasks, weekStart.value))
+const weekSummary = computed(() =>
+  summarizeWeek(tasksStore.tasks, weekStart.value, semesterStore.noClassDates)
+)
 
 const TAG_CLASS: Record<string, string> = {
   考试周: 'tag-exam',
@@ -238,6 +235,34 @@ function shift(delta: number): void {
   else d.setMonth(d.getMonth() + delta)
   cursor.value = new Date(d.getFullYear(), d.getMonth(), d.getDate())
 }
+
+/** 滚轮切换：稍微快一点滚动就翻页（带滑入动画） */
+const animKey = ref(0)
+const slideDir = ref<'next' | 'prev'>('next')
+let wheelAcc = 0
+let wheelLockUntil = 0
+let wheelResetTimer: number | undefined
+
+function onWheel(e: WheelEvent): void {
+  if (Math.abs(e.deltaY) < 1) return
+  const now = Date.now()
+  if (now < wheelLockUntil) return
+
+  wheelAcc += e.deltaY
+  if (wheelResetTimer) window.clearTimeout(wheelResetTimer)
+  wheelResetTimer = window.setTimeout(() => (wheelAcc = 0), 180)
+
+  if (Math.abs(wheelAcc) >= 40) {
+    const dir = wheelAcc > 0 ? 1 : -1
+    wheelAcc = 0
+    wheelLockUntil = now + 380
+    slideDir.value = dir > 0 ? 'next' : 'prev'
+    shift(dir)
+    animKey.value++
+  }
+}
+
+const slideClass = computed(() => (slideDir.value === 'next' ? 'slide-next' : 'slide-prev'))
 
 function goToday(): void {
   cursor.value = new Date()
@@ -304,7 +329,7 @@ async function toggleTask(t: Task): Promise<void> {
       <div class="weekdays">
         <span v-for="w in ['日', '一', '二', '三', '四', '五', '六']" :key="w">{{ w }}</span>
       </div>
-      <div class="grid">
+      <div class="grid" :key="`m${animKey}`" :class="slideClass" @wheel.prevent="onWheel">
         <div
           v-for="(c, i) in monthCells"
           :key="i"
@@ -350,7 +375,7 @@ async function toggleTask(t: Task): Promise<void> {
 
       <!-- 说明：点格子进日视图，文字细节都在那里 -->
       <p class="month-tip">
-        点任意格子进入<b>日视图</b>：那里可以看到、修改和新增当天的每一项安排，并能调整重要程度。
+        滚轮可快速翻月 · 点任意格子进入<b>日视图</b>：那里能查看、修改、新增当天的每一项安排，并调整重要程度。
       </p>
     </template>
 
@@ -359,24 +384,47 @@ async function toggleTask(t: Task): Promise<void> {
       <div class="week-banner" :class="TAG_CLASS[weekSummary.tag]">
         <span class="wb-tag">{{ weekSummary.tag }}</span>
         <span class="wb-meta">
-          共 {{ weekSummary.taskCount }} 项 · 日程 {{ weekSummary.scheduleCount }} 个 · 重要度合计 {{ weekSummary.score }}
+          共 {{ weekSummary.taskCount }} 项 · 日程 {{ weekSummary.scheduleCount }} 个 · 合计
+          {{ weekSummary.hours }} 小时 · 重要度合计 {{ weekSummary.score }}
         </span>
       </div>
-      <div class="week-grid">
+      <div class="week-grid" :key="`w${animKey}`" :class="slideClass" @wheel.prevent="onWheel">
         <div v-for="d in weekDays" :key="d" class="week-col" :class="{ today: d === today }" @click="drillTo(d)">
           <div class="wc-head">
             <span class="wc-date">{{ d.slice(5) }}</span>
             <span class="wk">第{{ semesterStore.weekOf(d) }}周</span>
           </div>
+
           <div class="wc-body">
             <span class="busy" :class="busyClass(d)">{{ busyLabel(d) }}</span>
-            <span class="wc-count">{{ eventsOn(d).length }} 项</span>
+            <span class="wc-count">{{ eventsOn(d).length }} 项 · {{ Math.round(loadScore(d)) }}h</span>
+            <span class="icons">
+              <span
+                v-if="journalIndex.on(d)?.weather"
+                class="ico"
+                :style="{ color: WEATHER_META[journalIndex.on(d)!.weather!].color }"
+              >
+                <AppIcon :name="journalIndex.on(d)!.weather!" :size="13" />
+              </span>
+              <span
+                v-if="journalIndex.on(d)?.mood"
+                class="ico"
+                :style="{ color: MOOD_META[journalIndex.on(d)!.mood!].color }"
+              >
+                <AppIcon :name="`mood-${journalIndex.on(d)!.mood}`" :size="13" />
+              </span>
+            </span>
           </div>
+
+          <div class="wc-phase" :class="PHASE_CLASS[dayPhase(d)]">
+            {{ semesterStore.holidayOn(d)?.name ?? PHASE_LABEL[dayPhase(d)] }}
+          </div>
+
           <div class="wc-events">
-            <span v-for="e in eventsOn(d).slice(0, 4)" :key="e.id" class="dot" :class="`k-${e.kind}`">
+            <span v-for="e in eventsOn(d).slice(0, 5)" :key="e.id" class="dot" :class="`k-${e.kind}`">
               {{ e.time ? e.time + ' ' : '' }}{{ e.title }}
             </span>
-            <span v-if="eventsOn(d).length > 4" class="more">+{{ eventsOn(d).length - 4 }}</span>
+            <span v-if="eventsOn(d).length > 5" class="more">+{{ eventsOn(d).length - 5 }}</span>
           </div>
         </div>
       </div>
@@ -385,7 +433,7 @@ async function toggleTask(t: Task): Promise<void> {
     <!-- ========== 日视图（左时间轴 + 右可编辑侧栏） ========== -->
     <template v-else>
       <div class="day-layout">
-        <div class="timeline">
+        <div class="timeline" :key="`d${animKey}`" :class="slideClass" @wheel.prevent="onWheel">
           <div v-for="h in HOURS" :key="h" class="hour-row">
             <span class="hour">{{ String(h).padStart(2, '0') }}:00</span>
           </div>
@@ -444,6 +492,7 @@ async function toggleTask(t: Task): Promise<void> {
                 </select>
                 <button class="qa-btn" @click="quickAdd">添加</button>
               </div>
+              <AddHistory compact />
             </div>
           </div>
 
@@ -752,6 +801,48 @@ async function toggleTask(t: Task): Promise<void> {
 .wc-count {
   font-size: 0.7rem;
   color: var(--text-3);
+}
+.wc-phase {
+  height: 15px;
+  border-radius: 4px;
+  font-size: 0.62rem;
+  line-height: 15px;
+  text-align: center;
+  color: #fff;
+  margin-bottom: 5px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.wc-body .icons {
+  margin-left: auto;
+}
+
+/* 滚轮切换的滑入动画 */
+@keyframes slideNext {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes slidePrev {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.slide-next {
+  animation: slideNext 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.slide-prev {
+  animation: slidePrev 0.26s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .wc-events {
   display: flex;
