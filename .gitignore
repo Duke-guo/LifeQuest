@@ -3,6 +3,8 @@ out/
 dist/
 release/
 /LifeQuest.exe
+.shot*.png
+.screenshot*.png
 .npm-cache/
 .electron-cache/
 .electron-builder-cache/
