@@ -1,8 +1,11 @@
 node_modules/
 out/
 dist/
+release/
+/LifeQuest.exe
 .npm-cache/
 .electron-cache/
+.electron-builder-cache/
 LifeQuest-Data/
 *.log
 .DS_Store

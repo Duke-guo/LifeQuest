@@ -22,8 +22,13 @@ const FOLDERS = ['config', 'tasks', 'journal', 'notes', 'plans', 'archive', 'ass
 const migrations: Record<number, (data: Record<string, unknown>) => Record<string, unknown>> = {}
 
 export function defaultDataRoot(): string {
-  // 数据默认存在应用目录（D 盘工作区）下的 LifeQuest-Data 文件夹
-  return join(app.getAppPath(), 'LifeQuest-Data')
+  // 便携版：数据放在便携 exe 同级目录
+  if (process.env.PORTABLE_EXECUTABLE_DIR) {
+    return join(process.env.PORTABLE_EXECUTABLE_DIR, 'LifeQuest-Data')
+  }
+  // 打包安装版：数据放在 exe 同级目录；开发时：放在项目目录（D 盘工作区）
+  const base = app.isPackaged ? dirname(app.getPath('exe')) : app.getAppPath()
+  return join(base, 'LifeQuest-Data')
 }
 
 export function resolveDataRoot(): string {
