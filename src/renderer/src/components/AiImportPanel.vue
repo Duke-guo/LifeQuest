@@ -11,6 +11,7 @@ const store = useTasksStore()
 
 interface ParsedItem {
   title: string
+  weekday: number | null
   date: string | null
   startTime: string | null
   endTime: string | null
@@ -19,10 +20,46 @@ interface ParsedItem {
   selected: boolean
 }
 
+const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+
+function mondayOf(d: Date): Date {
+  const day = d.getDay() // 0=周日
+  const diff = day === 0 ? -6 : 1 - day
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + diff)
+}
+
 const imageSrc = ref('')
+/** 实际发给接口的（压缩后）图片 */
+const sendUrl = ref('')
 const busy = ref(false)
 const error = ref('')
 const items = ref<ParsedItem[]>([])
+const weekAnchor = ref(toDateStr(mondayOf(new Date())))
+const repeatWeekly = ref(true)
+
+/** 发送前压缩：长边限制 + JPEG 质量，避免请求体过大导致接口无法返回 */
+async function shrink(dataUrl: string, maxDim = 1100, quality = 0.75): Promise<string> {
+  try {
+    const img = new Image()
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve()
+      img.onerror = () => reject(new Error('图片加载失败'))
+      img.src = dataUrl
+    })
+    const scale = Math.min(1, maxDim / Math.max(img.width, img.height))
+    const w = Math.max(1, Math.round(img.width * scale))
+    const h = Math.max(1, Math.round(img.height * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return dataUrl
+    ctx.drawImage(img, 0, 0, w, h)
+    return canvas.toDataURL('image/jpeg', quality)
+  } catch {
+    return dataUrl
+  }
+}
 
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve) => {
@@ -32,29 +69,32 @@ function fileToDataUrl(file: File): Promise<string> {
   })
 }
 
+async function useImage(dataUrl: string): Promise<void> {
+  imageSrc.value = dataUrl
+  sendUrl.value = await shrink(dataUrl)
+  items.value = []
+  error.value = ''
+}
+
 async function onPick(e: Event): Promise<void> {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
-  imageSrc.value = await fileToDataUrl(file)
-  items.value = []
-  error.value = ''
+  await useImage(await fileToDataUrl(file))
   input.value = ''
 }
 
 async function onPaste(e: ClipboardEvent): Promise<void> {
   const files = e.clipboardData?.files
   if (!files || files.length === 0) return
-  imageSrc.value = await fileToDataUrl(files[0])
-  items.value = []
-  error.value = ''
+  await useImage(await fileToDataUrl(files[0]))
 }
 
 async function recognize(): Promise<void> {
-  if (!imageSrc.value) return
+  if (!sendUrl.value) return
   busy.value = true
   error.value = ''
-  const res = await dataApi.aiImageToTasks(imageSrc.value)
+  const res = await dataApi.aiImageToTasks(sendUrl.value)
   busy.value = false
   if (!res.ok) {
     error.value = res.error ?? '识别失败'
@@ -63,6 +103,7 @@ async function recognize(): Promise<void> {
   const raw = (res.items ?? []) as Array<Record<string, unknown>>
   items.value = raw.map((r) => ({
     title: String(r.title ?? '未命名事项'),
+    weekday: Number(r.weekday) >= 1 && Number(r.weekday) <= 7 ? Number(r.weekday) : null,
     date: typeof r.date === 'string' && r.date ? r.date : null,
     startTime: typeof r.startTime === 'string' && r.startTime ? r.startTime : null,
     endTime: typeof r.endTime === 'string' && r.endTime ? r.endTime : null,
@@ -71,19 +112,33 @@ async function recognize(): Promise<void> {
     selected: true
   }))
   if (items.value.length === 0) error.value = '没有识别到任何事项'
+  if (items.value.every((i) => i.weekday || i.date)) repeatWeekly.value = items.value.some((i) => i.weekday) && items.value.every((i) => !i.date)
+}
+
+/** 最终落地的日期：图片里给了日期就用它，否则用「本周周一 + 星期几」推算 */
+function resolvedDate(it: ParsedItem): string | null {
+  if (it.date) return it.date
+  if (it.weekday) {
+    const [y, m, d] = weekAnchor.value.split('-').map(Number)
+    return toDateStr(new Date(y, m - 1, d + (it.weekday - 1)))
+  }
+  return null
 }
 
 async function importSelected(): Promise<void> {
   for (const it of items.value.filter((i) => i.selected)) {
+    const date = resolvedDate(it)
     await store.addTask({
       title: it.title,
       type: 'daily',
       kind: it.startTime ? 'schedule' : 'task',
       importance: it.importance,
-      due: it.date ?? toDateStr(new Date()),
+      due: date,
       startTime: it.startTime,
       endTime: it.endTime,
-      location: it.location
+      location: it.location,
+      remindMinutes: it.startTime ? 15 : null,
+      repeat: it.weekday && repeatWeekly.value ? 'weekly' : 'none'
     })
   }
   emit('imported')
@@ -96,7 +151,9 @@ async function importSelected(): Promise<void> {
       <h3><AppIcon name="sparkle" :size="17" /> AI 识图添加</h3>
       <button class="x" @click="emit('close')"><AppIcon name="close" :size="17" /></button>
     </div>
-    <p class="hint">上传课表 / 通知 / 便签截图，自动识别成任务。需先在「设置 → AI」填 API Key。</p>
+    <p class="hint">
+      上传课表 / 通知 / 便签截图，自动识别成任务。识别课表时会读出「星期几」，并可按周重复。
+    </p>
 
     <div class="ai-body">
       <div class="left">
@@ -108,33 +165,46 @@ async function importSelected(): Promise<void> {
           <img v-else :src="imageSrc" alt="待识别" />
           <input type="file" accept="image/*" hidden @change="onPick" />
         </label>
-        <button class="recog-btn" :disabled="!imageSrc || busy" @click="recognize">
+        <button class="recog-btn" :disabled="!sendUrl || busy" @click="recognize">
           {{ busy ? '识别中…' : '识别图片' }}
         </button>
       </div>
 
       <div class="right">
         <p v-if="error" class="err">{{ error }}</p>
-        <div v-if="items.length" class="results">
-          <div v-for="(it, i) in items" :key="i" class="result">
-            <input v-model="it.selected" type="checkbox" />
-            <input v-model="it.title" class="r-title" />
-            <input v-model="it.date" type="date" class="r-date" />
-            <input v-model="it.startTime" type="time" class="r-time" />
-            <input v-model="it.endTime" type="time" class="r-time" />
-            <select v-model.number="it.importance" class="r-imp">
-              <option :value="5">5</option>
-              <option :value="4">4</option>
-              <option :value="3">3</option>
-              <option :value="2">2</option>
-              <option :value="1">1</option>
-            </select>
-          </div>
+
+        <div v-if="items.length" class="settings-bar">
+          <label class="sb-field">
+            <span>本周周一</span>
+            <input v-model="weekAnchor" type="date" />
+          </label>
+          <label class="sb-check">
+            <input v-model="repeatWeekly" type="checkbox" />
+            设为每周重复
+          </label>
           <button class="add-all" @click="importSelected">
             添加选中的 {{ items.filter((i) => i.selected).length }} 项
           </button>
         </div>
-        <p v-else class="none">识别结果会显示在这里，可逐条修改后再添加。</p>
+
+        <div v-if="items.length" class="results">
+          <div v-for="(it, i) in items" :key="i" class="result">
+            <input v-model="it.selected" type="checkbox" class="r-check" />
+            <input v-model="it.title" class="r-title" />
+            <select v-model.number="it.weekday" class="r-wd">
+              <option :value="null">—</option>
+              <option v-for="(w, wi) in WEEKDAYS" :key="w" :value="wi + 1">{{ w }}</option>
+            </select>
+            <input v-model="it.startTime" type="time" class="r-time" />
+            <input v-model="it.endTime" type="time" class="r-time" />
+            <input v-model="it.location" class="r-loc" placeholder="地点" />
+            <span class="r-date" :class="{ warn: !resolvedDate(it) }">
+              {{ resolvedDate(it) ?? '需选星期' }}
+            </span>
+          </div>
+        </div>
+
+        <p v-else class="none">识别结果会显示在这里，可逐条修改星期/时间后再添加。</p>
       </div>
     </div>
   </section>
@@ -172,7 +242,7 @@ async function importSelected(): Promise<void> {
   align-items: flex-start;
 }
 .left {
-  width: 240px;
+  width: 220px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -184,7 +254,7 @@ async function importSelected(): Promise<void> {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  min-height: 140px;
+  min-height: 130px;
   border: 2px dashed var(--border);
   border-radius: 12px;
   color: var(--text-3);
@@ -200,7 +270,7 @@ async function importSelected(): Promise<void> {
 }
 .drop img {
   max-width: 100%;
-  max-height: 200px;
+  max-height: 220px;
   border-radius: 8px;
 }
 .recog-btn {
@@ -220,38 +290,40 @@ async function importSelected(): Promise<void> {
   flex: 1;
   min-width: 0;
 }
-.results {
+.settings-bar {
   display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.7rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid var(--border);
 }
-.result {
+.sb-field {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--text-2);
+}
+.sb-field input {
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.82rem;
+}
+.sb-check {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  flex-wrap: wrap;
-}
-.result input,
-.result select {
-  padding: 0.3rem 0.4rem;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--surface);
-  color: var(--text);
-  font-size: 0.8rem;
-}
-.r-title {
-  flex: 1;
-  min-width: 130px;
-}
-.r-time,
-.r-date,
-.r-imp {
-  width: auto;
+  font-size: 0.82rem;
+  color: var(--text-2);
+  cursor: pointer;
 }
 .add-all {
-  align-self: flex-start;
-  margin-top: 0.4rem;
+  margin-left: auto;
   padding: 0.45rem 1rem;
   border: none;
   border-radius: 9px;
@@ -260,6 +332,52 @@ async function importSelected(): Promise<void> {
   cursor: pointer;
   font-weight: 600;
   font-size: 0.85rem;
+}
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 340px;
+  overflow-y: auto;
+}
+.result {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.result input,
+.result select {
+  padding: 0.28rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.78rem;
+}
+.r-title {
+  flex: 1;
+  min-width: 120px;
+}
+.r-loc {
+  width: 90px;
+}
+.r-wd {
+  width: 66px;
+}
+.r-time {
+  width: 78px;
+}
+.r-check {
+  flex-shrink: 0;
+}
+.r-date {
+  font-size: 0.72rem;
+  color: var(--text-3);
+  width: 82px;
+  flex-shrink: 0;
+}
+.r-date.warn {
+  color: var(--danger);
 }
 .err {
   color: var(--danger);

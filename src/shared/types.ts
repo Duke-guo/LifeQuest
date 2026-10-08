@@ -57,9 +57,12 @@ export interface Task {
   /** 日程时间段 HH:mm（仅 kind=schedule） */
   startTime: string | null
   endTime: string | null
+  /** 地名/教室 */
   location: string | null
   /** 提前多少分钟提醒（仅 kind=schedule） */
   remindMinutes: number | null
+  /** 重复方式：none 单次；weekly 每周重复（以 due 为首次日期，按星期几循环） */
+  repeat?: 'none' | 'weekly'
   tags: string[]
   tagIds: string[]
   /** 关联的笔记 id（日程 ↔ 笔记） */

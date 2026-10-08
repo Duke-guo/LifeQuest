@@ -1,6 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
-import { writeFile } from 'fs/promises'
+import { writeFile, readFile } from 'fs/promises'
 import { setupIpc } from './ipc'
 
 function createWindow(): void {
@@ -16,6 +16,15 @@ function createWindow(): void {
       contextIsolation: true
     }
   })
+
+  // 调试：把渲染进程 console 转发到主进程 stdout
+  if (process.env.LIFEQUEST_SCREENSHOT) {
+    mainWindow.webContents.on('console-message', (event: unknown, ...rest: unknown[]) => {
+      const ev = event as { message?: string }
+      const legacy = typeof rest[1] === 'string' ? (rest[1] as string) : ''
+      console.log('[renderer]', ev?.message ?? legacy)
+    })
+  }
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
@@ -57,6 +66,35 @@ function createWindow(): void {
           if (process.env.LIFEQUEST_CLICK) {
             const labels = process.env.LIFEQUEST_CLICK.split(',').map((s) => s.trim()).filter(Boolean)
             for (const label of labels) {
+              if (label.startsWith('@wait:')) {
+                const ms = Number(label.slice(6)) || 1000
+                await new Promise((res) => setTimeout(res, ms))
+                continue
+              }
+              if (label === '@image') {
+                if (!process.env.LIFEQUEST_IMAGE) continue
+                const buf = await readFile(process.env.LIFEQUEST_IMAGE)
+                const b64 = buf.toString('base64')
+                const r = await mainWindow.webContents.executeJavaScript(
+                  `(async () => {
+                    const b64 = ${JSON.stringify(b64)}
+                    const bin = atob(b64)
+                    const arr = new Uint8Array(bin.length)
+                    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
+                    const file = new File([arr], 'img.jpg', { type: 'image/jpeg' })
+                    const dt = new DataTransfer()
+                    dt.items.add(file)
+                    const ev = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true })
+                    const panel = document.querySelector('.ai-panel')
+                    if (!panel) return 'no panel'
+                    panel.dispatchEvent(ev)
+                    return 'pasted'
+                  })()`
+                )
+                console.log('inject image ->', r)
+                await new Promise((res) => setTimeout(res, 1000))
+                continue
+              }
               const r = await mainWindow.webContents.executeJavaScript(
                 `(() => {
                   const sel = '${label}'

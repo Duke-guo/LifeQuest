@@ -1,22 +1,44 @@
 import type { Task, Plan, CalendarEvent, Weather, Mood } from '../../../shared/types'
 
-/** 把任务/日程转成日历事件 */
-export function eventsFromTasks(tasks: Task[]): CalendarEvent[] {
+/** 把任务/日程转成日历事件；每周重复的任务会按给定区间展开 */
+export function eventsFromTasks(tasks: Task[], rangeStart?: string, rangeEnd?: string): CalendarEvent[] {
   const out: CalendarEvent[] = []
   for (const t of tasks) {
     if (!t.due || t.status === 'archived') continue
-    out.push({
-      id: `task-${t.id}`,
-      date: t.due,
-      kind: t.kind === 'schedule' ? 'schedule' : 'task',
-      title: t.title,
-      time: t.startTime ?? undefined,
-      endTime: t.endTime ?? undefined,
-      refId: t.id,
-      meta: { importance: t.importance, status: t.status, location: t.location }
-    })
+
+    if (t.repeat === 'weekly' && rangeStart && rangeEnd) {
+      const end = new Date(rangeEnd)
+      let cur = new Date(t.due)
+      const start = new Date(rangeStart)
+      // 先推进到区间附近，避免从很久以前开始循环
+      while (cur < start) {
+        cur = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 7)
+      }
+      let n = 0
+      while (cur <= end && n < 80) {
+        out.push(makeEvent(t, toStr(cur), `-w${n}`))
+        cur = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 7)
+        n++
+      }
+      continue
+    }
+
+    out.push(makeEvent(t, t.due, ''))
   }
   return out
+}
+
+function makeEvent(t: Task, date: string, suffix: string): CalendarEvent {
+  return {
+    id: `task-${t.id}${suffix}`,
+    date,
+    kind: t.kind === 'schedule' ? 'schedule' : 'task',
+    title: t.title,
+    time: t.startTime ?? undefined,
+    endTime: t.endTime ?? undefined,
+    refId: t.id,
+    meta: { importance: t.importance, status: t.status, location: t.location }
+  }
 }
 
 /** 把活动计划展开为区间内的每日事件 */

@@ -17,6 +17,7 @@ export interface NewTaskInput {
   seasonId?: string | null
   tagIds?: string[]
   linkedNoteIds?: string[]
+  repeat?: 'none' | 'weekly'
   description?: string
 }
 
@@ -33,6 +34,7 @@ export const useTasksStore = defineStore('tasks', () => {
       endTime: t.endTime ?? null,
       location: t.location ?? null,
       remindMinutes: t.remindMinutes ?? null,
+      repeat: t.repeat ?? 'none',
       tagIds: t.tagIds ?? [],
       linkedNoteIds: t.linkedNoteIds ?? []
     }))
@@ -60,6 +62,7 @@ export const useTasksStore = defineStore('tasks', () => {
       endTime: input.endTime ?? null,
       location: input.location ?? null,
       remindMinutes: input.remindMinutes ?? null,
+      repeat: input.repeat ?? 'none',
       tags: [],
       tagIds: input.tagIds ?? [],
       linkedNoteIds: input.linkedNoteIds ?? [],

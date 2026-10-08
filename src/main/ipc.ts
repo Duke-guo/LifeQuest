@@ -1,5 +1,7 @@
 import { ipcMain, dialog } from 'electron'
 import { join, relative, isAbsolute } from 'path'
+import { request as httpsRequest } from 'https'
+import { request as httpRequest } from 'http'
 import {
   initDataStore,
   readJsonFile,
@@ -35,8 +37,92 @@ export async function setupIpc(): Promise<void> {
 
 const AI_PROMPT = `你是一个日程识别助手。请阅读这张图片（可能是课表、通知、日程截图、手写便签、海报等），提取其中所有事项，只输出 JSON 数组，不要输出任何解释文字。
 每个元素格式：
-{"title":"事项标题","date":"YYYY-MM-DD 或 null","startTime":"HH:mm 或 null","endTime":"HH:mm 或 null","location":"地点或 null","importance":3}
-importance 取 1-5 的整数。无法确定的字段填 null。`
+{"title":"事项标题","weekday":1-7 或 null,"date":"YYYY-MM-DD 或 null","startTime":"HH:mm 或 null","endTime":"HH:mm 或 null","location":"地点或 null","importance":3}
+说明：
+- weekday 表示星期几，1=周一 … 7=周日。课表类图片请务必填 weekday。
+- date 只在图片里出现具体日期时才填，否则填 null。
+- importance 取 1-5 的整数。无法确定的字段填 null。`
+
+/** 单次 POST 尝试（用 Node 原生 https，走主进程自己的 socket） */
+function postJsonOnce(
+  url: string,
+  headers: Record<string, string>,
+  body: string,
+  timeoutMs: number
+): Promise<{ status: number; text: string }> {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url)
+    const lib = u.protocol === 'https:' ? httpsRequest : httpRequest
+    let done = false
+    const finish = (fn: () => void): void => {
+      if (done) return
+      done = true
+      fn()
+    }
+    const req = lib(
+      {
+        method: 'POST',
+        hostname: u.hostname,
+        port: u.port || (u.protocol === 'https:' ? 443 : 80),
+        path: `${u.pathname}${u.search}`,
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+          'Accept-Encoding': 'identity',
+          Connection: 'close',
+          'Content-Length': Buffer.byteLength(body)
+        }
+      },
+      (res) => {
+        const chunks: Buffer[] = []
+        const done2 = (): void =>
+          finish(() =>
+            resolve({ status: res.statusCode ?? 0, text: Buffer.concat(chunks).toString('utf8') })
+          )
+        res.on('data', (c: Buffer) => chunks.push(c))
+        res.on('end', done2)
+        res.on('close', done2)
+        res.on('error', (e) => finish(() => reject(e)))
+      }
+    )
+    req.setTimeout(timeoutMs, () => {
+      finish(() => reject(new Error(`请求超时（${timeoutMs}ms）`)))
+      req.destroy()
+    })
+    req.on('error', (e) => {
+      if ((e as NodeJS.ErrnoException).code === 'ECONNRESET' && !done) {
+        finish(() => reject(new Error('连接被重置')))
+        return
+      }
+      finish(() => reject(e))
+    })
+    req.write(body)
+    req.end()
+  })
+}
+
+/** 带重试的 POST：网络偶发只回响应头不回响应体，重试可显著提高成功率 */
+async function postJson(
+  url: string,
+  headers: Record<string, string>,
+  body: string,
+  timeoutMs = 15000,
+  attempts = 3
+): Promise<{ status: number; text: string }> {
+  let lastError: Error | null = null
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      const r = await postJsonOnce(url, headers, body, timeoutMs)
+      if (r.text.length > 0) return r
+      lastError = new Error('响应体为空')
+      console.log(`[postJson] 第 ${i} 次响应体为空，重试…`)
+    } catch (e) {
+      lastError = e as Error
+      console.log(`[postJson] 第 ${i} 次失败：${(e as Error).message}`)
+    }
+  }
+  throw lastError ?? new Error('请求失败')
+}
 
 function register(): void {
   ipcMain.handle('data:root', () => dataRoot)
@@ -110,38 +196,46 @@ function register(): void {
       return { ok: false, error: '尚未配置 AI：请到「设置 → AI 识图」填写 API Key 并启用。' }
     }
     try {
-      const res = await fetch(`${ai.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
-        method: 'POST',
-        headers: {
+      const started = Date.now()
+      const reqBody = JSON.stringify({
+        model: ai.model,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: AI_PROMPT },
+              { type: 'image_url', image_url: { url: dataUrl } }
+            ]
+          }
+        ]
+      })
+      const { status, text: rawText } = await postJson(
+        `${ai.baseUrl.replace(/\/+$/, '')}/chat/completions`,
+        {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${ai.apiKey}`
         },
-        body: JSON.stringify({
-          model: ai.model,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: AI_PROMPT },
-                { type: 'image_url', image_url: { url: dataUrl } }
-              ]
-            }
-          ]
-        })
-      })
-      if (!res.ok) {
-        const text = await res.text()
-        return { ok: false, error: `接口返回 ${res.status}：${text.slice(0, 300)}` }
+        reqBody
+      )
+      console.log('[ai] HTTP', status, `${((Date.now() - started) / 1000).toFixed(1)}s`)
+      if (status < 200 || status >= 300) {
+        return { ok: false, error: `接口返回 ${status}：${rawText.slice(0, 300)}` }
       }
-      const json = (await res.json()) as {
-        choices?: Array<{ message?: { content?: string } }>
+      const json = JSON.parse(rawText) as {
+        choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>
       }
-      const content = json.choices?.[0]?.message?.content ?? ''
+      const msg = json.choices?.[0]?.message
+      const content = msg?.content ?? ''
       const match = content.match(/\[[\s\S]*\]/)
-      if (!match) return { ok: false, error: `未能从返回中解析出任务列表：${content.slice(0, 200)}` }
+      if (!match) {
+        console.log('[ai] 未匹配到 JSON 数组，原始返回:', rawText.slice(0, 400))
+        return { ok: false, error: `未能从返回中解析出任务列表：${content.slice(0, 200)}` }
+      }
       const items = JSON.parse(match[0])
+      console.log('[ai] 解析出', items.length, '条')
       return { ok: true, items }
     } catch (e) {
+      console.error('[ai] 异常:', e)
       return { ok: false, error: `请求失败：${(e as Error).message}` }
     }
   })

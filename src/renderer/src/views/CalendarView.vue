@@ -39,10 +39,18 @@ const today = toDateStr(new Date())
 const year = computed(() => cursor.value.getFullYear())
 const month = computed(() => cursor.value.getMonth())
 
-const events = computed<CalendarEvent[]>(() => [
-  ...eventsFromTasks(tasksStore.tasks),
-  ...eventsFromPlans(plansStore.plans)
-])
+const visibleRange = computed<[string, string]>(() => {
+  if (mode.value === 'day') return [toDateStr(cursor.value), toDateStr(cursor.value)]
+  if (mode.value === 'week') return [weekDays.value[0], weekDays.value[6]]
+  const first = toDateStr(new Date(year.value, month.value, 1))
+  const last = toDateStr(new Date(year.value, month.value + 1, 0))
+  return [first, last]
+})
+
+const events = computed<CalendarEvent[]>(() => {
+  const [s, e] = visibleRange.value
+  return [...eventsFromTasks(tasksStore.tasks, s, e), ...eventsFromPlans(plansStore.plans)]
+})
 
 function eventsOn(date: string): CalendarEvent[] {
   return events.value
