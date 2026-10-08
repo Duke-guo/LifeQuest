@@ -13,5 +13,13 @@ if (!exe) {
   process.exit(1)
 }
 
-copyFileSync(join(dir, exe), 'LifeQuest.exe')
-console.log(`已更新 LifeQuest.exe  <-  ${exe}`)
+try {
+  copyFileSync(join(dir, exe), 'LifeQuest.exe')
+  console.log(`已更新 LifeQuest.exe  <-  ${exe}`)
+} catch (e) {
+  if (e && e.code === 'EBUSY') {
+    console.error('更新失败：LifeQuest.exe 正在运行，请先关闭应用再重试（或直接运行 npm run release）。')
+    process.exit(1)
+  }
+  throw e
+}
