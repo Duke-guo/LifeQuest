@@ -192,6 +192,17 @@ function createWindow(): void {
                     )
                     .join(' ') + '\\n'
               }
+              // 布局体检：格子是否被裁剪 / 页面是否溢出
+              const grid = document.querySelector('.grid, .week-grid')
+              if (grid) {
+                const kids = [...grid.children]
+                const clipped = kids.filter((c) => c.scrollHeight > c.clientHeight + 1).length
+                out +=
+                  '[grid 高 ' + Math.round(grid.getBoundingClientRect().height) +
+                  '，格子高 ' + kids.slice(0, 7).map((c) => Math.round(c.getBoundingClientRect().height)).join(',') +
+                  '，被裁剪 ' + clipped +
+                  '，页面溢出 ' + (document.documentElement.scrollHeight - window.innerHeight) + ']\\n'
+              }
               out += document.body.innerText
               const tas = [...document.querySelectorAll('textarea')].map((t) => t.value).filter((v) => v)
               const ins = [...document.querySelectorAll('input')].map((i) => i.value).filter((v) => v)

@@ -286,8 +286,19 @@ function drillTo(date: string): void {
   mode.value = 'day'
 }
 
+const WEEKDAY_CN = ['日', '一', '二', '三', '四', '五', '六']
+
+/** 'YYYY-MM-DD' → 一二三四五六日（本地时间） */
+function weekdayOf(date: string): string {
+  const [y, m, d] = date.split('-').map(Number)
+  return WEEKDAY_CN[new Date(y, m - 1, d).getDay()]
+}
+
 const title = computed(() => {
-  if (mode.value === 'day') return cursorIso.value
+  if (mode.value === 'day') {
+    const [y, m, d] = cursorIso.value.split('-').map(Number)
+    return `${y} 年 ${m} 月 ${d} 日 · 星期${WEEKDAY_CN[new Date(y, m - 1, d).getDay()]}`
+  }
   if (mode.value === 'week') return `${weekSummary.value.start} ~ ${weekSummary.value.end}`
   return `${year.value} 年 ${month.value + 1} 月`
 })
@@ -316,23 +327,26 @@ async function toggleTask(t: Task): Promise<void> {
 
 <template>
   <div class="calendar-view">
-    <header class="view-head">
-      <div>
+    <header class="view-head cal-head">
+      <div class="ch-left">
         <h2>日历</h2>
         <p class="sub">任务 · 日程 · 计划 · 日记，一处聚合</p>
       </div>
-      <div class="controls">
+
+      <!-- 日期放在页面正中 -->
+      <div class="nav">
+        <button @click="shift(-1)">‹</button>
+        <span class="label">{{ title }}</span>
+        <button @click="shift(1)">›</button>
+      </div>
+
+      <div class="ch-right">
         <div class="modes">
           <button :class="{ on: mode === 'day' }" @click="mode = 'day'">日</button>
           <button :class="{ on: mode === 'week' }" @click="mode = 'week'">周</button>
           <button :class="{ on: mode === 'month' }" @click="mode = 'month'">月</button>
         </div>
-        <div class="nav">
-          <button @click="shift(-1)">‹</button>
-          <span class="label">{{ title }}</span>
-          <button @click="shift(1)">›</button>
-          <button class="today-btn" @click="goToday">今天</button>
-        </div>
+        <button class="today-btn" @click="goToday">今天</button>
       </div>
     </header>
 
@@ -404,6 +418,9 @@ async function toggleTask(t: Task): Promise<void> {
     <template v-else-if="mode === 'week'">
       <div class="week-banner" :class="TAG_CLASS[weekSummary.tag]">
         <span class="wb-tag">{{ weekSummary.tag }}</span>
+        <span v-if="semesterStore.weekOf(weekSummary.start)" class="wb-week">
+          第 {{ semesterStore.weekOf(weekSummary.start) }} 周
+        </span>
         <span class="wb-meta">
           共 {{ weekSummary.taskCount }} 项 · 日程 {{ weekSummary.scheduleCount }} 个 · 合计
           {{ weekSummary.hours }} 小时 · 重要度合计 {{ weekSummary.score }}
@@ -419,8 +436,8 @@ async function toggleTask(t: Task): Promise<void> {
           @click="drillTo(d)"
         >
           <div class="wc-head">
+            <span class="wc-wd">周{{ weekdayOf(d) }}</span>
             <span class="wc-date">{{ d.slice(5) }}</span>
-            <span class="wk">第{{ semesterStore.weekOf(d) }}周</span>
           </div>
 
           <div class="wc-body">
@@ -575,6 +592,36 @@ async function toggleTask(t: Task): Promise<void> {
   gap: 1rem;
   flex-wrap: wrap;
 }
+/* 页头三列：标题 | 日期（正中） | 视图切换 */
+.cal-head {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 1rem;
+}
+.ch-left {
+  justify-self: start;
+}
+.ch-right {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.ch-right .today-btn {
+  height: 30px;
+  padding: 0 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.ch-right .today-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
 .modes {
   display: flex;
   background: var(--surface-2);
@@ -613,8 +660,9 @@ async function toggleTask(t: Task): Promise<void> {
   padding: 0 0.7rem;
 }
 .nav .label {
+  font-family: var(--font-num);
   font-weight: 700;
-  font-size: 1.15rem;
+  font-size: 1.5rem;
   min-width: 160px;
   text-align: center;
 }
@@ -663,13 +711,16 @@ async function toggleTask(t: Task): Promise<void> {
   background: var(--accent-soft);
 }
 .cell-head {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  min-height: 2.05rem;
 }
 .day {
-  font-size: 1.22rem;
-  line-height: 1.1;
+  font-family: var(--font-num);
+  font-size: 1.95rem;
+  line-height: 1;
   color: var(--text);
   font-weight: 700;
 }
@@ -677,7 +728,10 @@ async function toggleTask(t: Task): Promise<void> {
   color: var(--accent);
 }
 .wk {
-  font-size: 0.72rem;
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: 0.66rem;
   color: var(--text-3);
   background: var(--surface-2);
   padding: 0 5px;
@@ -686,9 +740,9 @@ async function toggleTask(t: Task): Promise<void> {
 .cell-mid {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 0.3rem;
-  margin-top: 0.35rem;
+  margin-top: 0.3rem;
 }
 .busy {
   font-size: 0.72rem;
@@ -813,15 +867,34 @@ async function toggleTask(t: Task): Promise<void> {
   background: var(--accent-soft);
 }
 .wc-head {
+  position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 5px;
+  justify-content: center;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+.wc-head .wk {
+  position: static;
+}
+.wc-wd {
+  font-size: 0.74rem;
+  color: var(--text-3);
 }
 .wc-date {
-  font-size: 1.05rem;
+  font-family: var(--font-num);
+  font-size: 1.6rem;
+  line-height: 1;
   color: var(--text);
   font-weight: 700;
+}
+.wb-week {
+  font-family: var(--font-num);
+  font-weight: 700;
+  font-size: 0.78rem;
+  color: var(--text-2);
+  margin-left: 0.5rem;
 }
 .wc-body {
   display: flex;
