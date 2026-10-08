@@ -57,10 +57,19 @@ async function toggleAi(): Promise<void> {
   await store.save()
 }
 
-async function saveAi(): Promise<void> {
-  await store.save()
-  aiSaved.value = '已保存'
-  window.setTimeout(() => (aiSaved.value = ''), 2000)
+let aiSaveTimer: number | undefined
+
+/** AI 设置：输入即自动保存，避免忘记点按钮导致丢失 */
+function onAiInput(field: 'baseUrl' | 'apiKey' | 'model', value: string): void {
+  const a = ai()
+  if (!a) return
+  a[field] = value
+  if (aiSaveTimer) window.clearTimeout(aiSaveTimer)
+  aiSaveTimer = window.setTimeout(async () => {
+    await store.save()
+    aiSaved.value = '已自动保存'
+    window.setTimeout(() => (aiSaved.value = ''), 1800)
+  }, 500)
 }
 
 async function doExport(): Promise<void> {
@@ -124,7 +133,7 @@ async function doExport(): Promise<void> {
           <input
             :value="ai()?.baseUrl"
             placeholder="https://api.deepseek.com"
-            @input="ai() && (ai()!.baseUrl = ($event.target as HTMLInputElement).value)"
+            @input="onAiInput('baseUrl', ($event.target as HTMLInputElement).value)"
           />
         </div>
         <div class="field">
@@ -133,7 +142,7 @@ async function doExport(): Promise<void> {
             :value="ai()?.apiKey"
             type="password"
             placeholder="sk-..."
-            @input="ai() && (ai()!.apiKey = ($event.target as HTMLInputElement).value)"
+            @input="onAiInput('apiKey', ($event.target as HTMLInputElement).value)"
           />
         </div>
         <div class="field">
@@ -141,7 +150,7 @@ async function doExport(): Promise<void> {
           <input
             :value="ai()?.model"
             placeholder="deepseek-chat"
-            @input="ai() && (ai()!.model = ($event.target as HTMLInputElement).value)"
+            @input="onAiInput('model', ($event.target as HTMLInputElement).value)"
           />
         </div>
         <p class="hint">
@@ -149,7 +158,7 @@ async function doExport(): Promise<void> {
           <code>config/settings.json</code>，不会上传到其它地方。
         </p>
         <div class="ai-actions">
-          <button class="btn" @click="saveAi">保存 AI 设置</button>
+          <span class="autosave">填写后自动保存，无需手动提交</span>
           <span v-if="aiSaved" class="msg">{{ aiSaved }}</span>
         </div>
       </section>
@@ -259,6 +268,10 @@ h3 {
   display: flex;
   align-items: center;
   gap: 0.7rem;
+}
+.autosave {
+  font-size: 0.8rem;
+  color: var(--text-3);
 }
 .msg {
   color: var(--success);
