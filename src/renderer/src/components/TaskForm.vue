@@ -40,11 +40,11 @@ async function submit(): Promise<void> {
       <option value="daily">每日</option>
     </select>
     <select v-model="importance">
-      <option :value="5">重要 ★5</option>
-      <option :value="4">重要 ★4</option>
-      <option :value="3">一般 ★3</option>
-      <option :value="2">次要 ★2</option>
-      <option :value="1">低 ★1</option>
+      <option :value="5">5 · 最重要</option>
+      <option :value="4">4 · 重要</option>
+      <option :value="3">3 · 一般</option>
+      <option :value="2">2 · 次要</option>
+      <option :value="1">1 · 低</option>
     </select>
     <select v-model="seasonId">
       <option value="">无赛季</option>

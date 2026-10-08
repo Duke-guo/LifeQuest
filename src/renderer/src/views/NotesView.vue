@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useNotesStore } from '../stores/notes'
+import AppIcon from '../components/AppIcon.vue'
 
 const store = useNotesStore()
 const title = ref('')
@@ -75,7 +76,9 @@ async function remove(id: string): Promise<void> {
           <div class="note-title">{{ n.title }}</div>
           <div class="note-meta">
             <span>{{ n.date }}</span>
-            <span class="stars">{{ '★'.repeat(n.rating) }}</span>
+            <span class="stars">
+              <AppIcon v-for="i in n.rating" :key="i" name="star" :size="11" />
+            </span>
           </div>
           <button class="del" title="删除" @click.stop="remove(n.id)">✕</button>
         </div>
@@ -92,11 +95,11 @@ async function remove(id: string): Promise<void> {
           <label>
             评价
             <select v-model="rating">
-              <option :value="5">★★★★★</option>
-              <option :value="4">★★★★</option>
-              <option :value="3">★★★</option>
-              <option :value="2">★★</option>
-              <option :value="1">★</option>
+              <option :value="5">5 分</option>
+              <option :value="4">4 分</option>
+              <option :value="3">3 分</option>
+              <option :value="2">2 分</option>
+              <option :value="1">1 分</option>
             </select>
           </label>
           <label>
@@ -166,6 +169,8 @@ async function remove(id: string): Promise<void> {
   justify-content: space-between;
 }
 .stars {
+  display: inline-flex;
+  gap: 1px;
   color: var(--accent);
 }
 .del {

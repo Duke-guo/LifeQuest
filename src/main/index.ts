@@ -41,16 +41,18 @@ function createWindow(): void {
         try {
           if (process.env.LIFEQUEST_VIEW) {
             const view = process.env.LIFEQUEST_VIEW
+            await mainWindow.webContents.executeJavaScript(`document.querySelector('.fab')?.click()`)
+            await new Promise((r) => setTimeout(r, 700))
             const clickResult = await mainWindow.webContents.executeJavaScript(
               `(() => {
-                const btns = [...document.querySelectorAll('nav button')]
+                const btns = [...document.querySelectorAll('button')]
                 const target = btns.find((b) => b.textContent.includes('${view}'))
                 if (target) { target.click(); return 'clicked' }
                 return 'not found'
               })()`
             )
             console.log('navigate:', view, '->', clickResult)
-            await new Promise((r) => setTimeout(r, 400))
+            await new Promise((r) => setTimeout(r, 700))
           }
           if (process.env.LIFEQUEST_CLICK) {
             const label = process.env.LIFEQUEST_CLICK

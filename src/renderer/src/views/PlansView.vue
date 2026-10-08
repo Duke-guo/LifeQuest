@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { usePlansStore } from '../stores/plans'
+import AppIcon from '../components/AppIcon.vue'
 
 const store = usePlansStore()
 const title = ref('')
@@ -46,7 +47,7 @@ async function create(): Promise<void> {
     <section>
       <div v-for="p in store.plans" :key="p.id" class="plan-row card">
         <div>
-          <div class="plan-title">🗓 {{ p.title }}</div>
+          <div class="plan-title"><AppIcon name="plans" :size="17" /> {{ p.title }}</div>
           <div v-if="p.start || p.end" class="plan-meta">{{ p.start || '…' }} ~ {{ p.end || '…' }}</div>
           <div v-if="p.notes" class="plan-notes">{{ p.notes }}</div>
         </div>
@@ -100,6 +101,9 @@ async function create(): Promise<void> {
 }
 .plan-title {
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 .plan-meta {
   font-size: 0.85rem;

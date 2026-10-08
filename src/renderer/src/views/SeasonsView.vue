@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useSeasonsStore, derivePhase } from '../stores/seasons'
 import { useGamificationStore } from '../stores/gamification'
 import { dataApi } from '../services/data'
+import AppIcon from '../components/AppIcon.vue'
 import type { Season, SeasonType } from '../../../shared/types'
 
 const seasonsStore = useSeasonsStore()
@@ -76,7 +77,9 @@ async function generateReview(season: Season): Promise<void> {
     `- 笔记：${notes.length} 篇（总计）`,
     '',
     '## 成就',
-    ...gStore.achievements.map((a) => `- ${a.achieved ? '🏅' : '🔒'} ${a.name}（${a.progress}/${a.target}）`),
+    ...gStore.achievements.map(
+      (a) => `- [${a.achieved ? '已达成' : '未达成'}] ${a.name}（${a.progress}/${a.target}）`
+    ),
     '',
     '## 完成时间轴',
     ...(timeline.length ? timeline.map((t) => `- ${t.completedAt!.slice(0, 10)} ${t.title}`) : ['（暂无完成记录）']),
@@ -110,7 +113,10 @@ async function generateReview(season: Season): Promise<void> {
           class="badge"
           :class="{ achieved: a.achieved }"
         >
-          <div class="badge-name">{{ a.achieved ? '🏅' : '🔒' }} {{ a.name }}</div>
+          <div class="badge-name">
+            <AppIcon :name="a.achieved ? 'star' : 'lock'" :size="15" />
+            {{ a.name }}
+          </div>
           <div class="badge-desc">{{ a.desc }}（{{ a.progress }}/{{ a.target }}）</div>
         </div>
       </div>
@@ -120,7 +126,10 @@ async function generateReview(season: Season): Promise<void> {
       <h3>赛季列表</h3>
       <div v-for="s in seasonsStore.seasons" :key="s.id" class="season-row card">
         <div class="season-info">
-          <div class="season-name">{{ s.type === 'main' ? '🗡' : '🧭' }} {{ s.name }}</div>
+          <div class="season-name">
+            <AppIcon :name="s.type === 'main' ? 'tasks' : 'compass'" :size="17" />
+            {{ s.name }}
+          </div>
           <div class="season-meta">{{ s.start }} ~ {{ s.end }} · {{ derivePhase(s.start, s.end) }}</div>
           <div v-if="s.categories.length" class="season-cats">类别：{{ s.categories.join('、') }}</div>
         </div>
@@ -181,6 +190,9 @@ async function generateReview(season: Season): Promise<void> {
 }
 .badge-name {
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 .badge-desc {
   font-size: 0.8rem;
@@ -194,6 +206,9 @@ async function generateReview(season: Season): Promise<void> {
 }
 .season-name {
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 .season-meta {
   font-size: 0.85rem;

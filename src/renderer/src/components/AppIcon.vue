@@ -59,5 +59,12 @@ defineProps<{ name: string; size?: number }>()
     <template v-else-if="name === 'plus'">
       <path d="M12 5v14M5 12h14" />
     </template>
+    <template v-else-if="name === 'star'">
+      <path d="M12 3.6l2.6 5.2 5.8.85-4.2 4.1 1 5.75L12 16.8l-5.2 2.7 1-5.75-4.2-4.1 5.8-.85z" />
+    </template>
+    <template v-else-if="name === 'lock'">
+      <rect x="5" y="10.5" width="14" height="9.5" rx="2.2" />
+      <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" />
+    </template>
   </svg>
 </template>
