@@ -14,6 +14,7 @@ import {
   MOOD_META
 } from '../utils/schedule'
 import { toDateStr } from '../utils/helpers'
+import { computeDayColor, type DayColor } from '../utils/dayColor'
 import AppIcon from '../components/AppIcon.vue'
 import TaskItem from '../components/TaskItem.vue'
 import TaskEditModal from '../components/TaskEditModal.vue'
@@ -129,13 +130,13 @@ function busyLabel(date: string): string {
 
 function busyClass(date: string): string {
   if (dayNotes.busyOf(date)) return 'b-custom'
-  const n = eventsOn(date).length
-  if (n === 0) return 'b-free'
-  const h = loadScore(date)
-  if (h >= 7) return 'b-hard'
-  if (h >= 4.5) return 'b-busy'
-  if (h >= 2.5) return 'b-mid'
-  return 'b-easy'
+  return 'b-auto'
+}
+
+/** 每天的颜色：色相=忙碌程度，饱和度=心情，明度=天气 */
+function colorOf(date: string): DayColor {
+  const j = journalIndex.on(date)
+  return computeDayColor(loadScore(date), eventsOn(date).length, j?.mood, j?.weather)
 }
 
 async function saveBusy(): Promise<void> {
@@ -170,6 +171,17 @@ const PHASE_CLASS: Record<string, string> = {
 function dayPhase(date: string): string {
   return semesterStore.phaseOf(date, eventsOn(date).length > 0)
 }
+
+/** 当前视图内每天的颜色，按日期索引（避免模板里重复计算） */
+const colorMap = computed<Record<string, DayColor>>(() => {
+  const map: Record<string, DayColor> = {}
+  if (mode.value === 'month') {
+    for (const c of monthCells.value) if (c.inMonth) map[c.date] = colorOf(c.date)
+  } else if (mode.value === 'week') {
+    for (const d of weekDays.value) map[d] = colorOf(d)
+  }
+  return map
+})
 
 // ---------- 月视图 ----------
 const monthCells = computed(() => {
@@ -335,6 +347,7 @@ async function toggleTask(t: Task): Promise<void> {
           :key="i"
           class="cell"
           :class="{ empty: !c.inMonth, today: c.date === today }"
+          :style="c.inMonth ? { background: colorMap[c.date]?.bg } : undefined"
           @click="c.inMonth && drillTo(c.date)"
         >
           <template v-if="c.inMonth">
@@ -343,7 +356,15 @@ async function toggleTask(t: Task): Promise<void> {
               <span class="wk">第{{ semesterStore.weekOf(c.date) }}周</span>
             </div>
             <div class="cell-mid">
-              <span class="busy" :class="busyClass(c.date)">
+              <span
+                class="busy"
+                :class="busyClass(c.date)"
+                :style="
+                  dayNotes.busyOf(c.date)
+                    ? undefined
+                    : { background: colorMap[c.date]?.chipBg, color: colorMap[c.date]?.chipFg }
+                "
+              >
                 {{ busyLabel(c.date) }}
                 <template v-if="eventsOn(c.date).length">· {{ eventsOn(c.date).length }}</template>
               </span>
@@ -389,14 +410,31 @@ async function toggleTask(t: Task): Promise<void> {
         </span>
       </div>
       <div class="week-grid" :key="`w${animKey}`" :class="slideClass" @wheel.prevent="onWheel">
-        <div v-for="d in weekDays" :key="d" class="week-col" :class="{ today: d === today }" @click="drillTo(d)">
+        <div
+          v-for="d in weekDays"
+          :key="d"
+          class="week-col"
+          :class="{ today: d === today }"
+          :style="{ background: colorMap[d]?.bg }"
+          @click="drillTo(d)"
+        >
           <div class="wc-head">
             <span class="wc-date">{{ d.slice(5) }}</span>
             <span class="wk">第{{ semesterStore.weekOf(d) }}周</span>
           </div>
 
           <div class="wc-body">
-            <span class="busy" :class="busyClass(d)">{{ busyLabel(d) }}</span>
+            <span
+              class="busy"
+              :class="busyClass(d)"
+              :style="
+                dayNotes.busyOf(d)
+                  ? undefined
+                  : { background: colorMap[d]?.chipBg, color: colorMap[d]?.chipFg }
+              "
+            >
+              {{ busyLabel(d) }}
+            </span>
             <span class="wc-count">{{ eventsOn(d).length }} 项 · {{ Math.round(loadScore(d)) }}h</span>
             <span class="icons">
               <span
@@ -658,28 +696,12 @@ async function toggleTask(t: Task): Promise<void> {
   border-radius: 6px;
   padding: 1px 6px;
 }
-.b-hard {
-  background: rgba(217, 80, 80, 0.16);
-  color: var(--danger);
-}
-.b-busy {
-  background: rgba(207, 74, 60, 0.18);
-  color: var(--accent);
-}
-.b-mid {
-  background: rgba(217, 165, 43, 0.16);
-  color: #a8801f;
-}
-.b-easy {
-  background: rgba(85, 168, 159, 0.16);
-  color: #3d827a;
-}
-.b-free {
-  background: var(--surface-2);
-  color: var(--text-3);
+/* 忙碌标签的颜色由算法注入（见 utils/dayColor.ts）；只有"用户自定义"用固定紫色区分 */
+.b-auto {
+  /* 颜色来自 :style */
 }
 .b-custom {
-  background: rgba(155, 107, 217, 0.18);
+  background: rgba(155, 107, 217, 0.22);
   color: #7d52b8;
 }
 .icons {

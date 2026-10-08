@@ -61,15 +61,20 @@ function createWindow(): void {
             await mainWindow.webContents.executeJavaScript(`document.querySelector('.fab')?.click()`)
             await new Promise((r) => setTimeout(r, 700))
             const clickResult = await mainWindow.webContents.executeJavaScript(
-              `(() => {
-                const btns = [...document.querySelectorAll('button')]
-                const target = btns.find((b) => b.textContent.includes('${view}'))
-                if (target) { target.click(); return 'clicked' }
-                return 'not found'
+              `(async () => {
+                const view = ${JSON.stringify(view)}
+                const core = document.querySelector('.core')
+                if (core && (core.textContent || '').includes(view)) { core.click(); return 'core' }
+                const ring = [...document.querySelectorAll('.ring-item')].find((b) => (b.title || '').includes(view))
+                if (!ring) return 'not found'
+                ring.click()
+                await new Promise((r) => setTimeout(r, 150))
+                document.querySelector('.core')?.click()
+                return 'ring->core'
               })()`
             )
             console.log('navigate:', view, '->', clickResult)
-            await new Promise((r) => setTimeout(r, 700))
+            await new Promise((r) => setTimeout(r, 900))
           }
           if (process.env.LIFEQUEST_CLICK) {
             const labels = process.env.LIFEQUEST_CLICK.split(',').map((s) => s.trim()).filter(Boolean)
@@ -166,7 +171,14 @@ function createWindow(): void {
           console.log('screenshot saved:', process.env.LIFEQUEST_SCREENSHOT)
           const text = await mainWindow.webContents.executeJavaScript(
             `(() => {
-              let out = '[theme=' + document.documentElement.dataset.theme + ' bg=' + getComputedStyle(document.body).backgroundColor + ' radial=' + document.querySelectorAll('.radial-item').length + ' avatar=' + document.querySelectorAll('.avatar').length + ']\\n'
+              let out = '[theme=' + document.documentElement.dataset.theme + ' bg=' + getComputedStyle(document.body).backgroundColor + ' avatar=' + document.querySelectorAll('.avatar').length + ']\\n'
+              // 日历格子配色统计（验证颜色是否多样）
+              const cells = [...document.querySelectorAll('.cell, .week-col')].filter((c) => !c.classList.contains('empty'))
+              if (cells.length) {
+                const bgs = [...new Set(cells.map((c) => getComputedStyle(c).backgroundColor))]
+                out += '[格子 ' + cells.length + ' 个，不同底色 ' + bgs.length + ' 种]\\n'
+                out += bgs.slice(0, 10).join('  ') + '\\n'
+              }
               out += document.body.innerText
               const tas = [...document.querySelectorAll('textarea')].map((t) => t.value).filter((v) => v)
               const ins = [...document.querySelectorAll('input')].map((i) => i.value).filter((v) => v)
