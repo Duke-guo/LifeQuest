@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useTasksStore } from '../stores/tasks'
 import { usePlansStore } from '../stores/plans'
 import { useJournalIndexStore } from '../stores/journalIndex'
 import { useSemesterStore } from '../stores/semester'
+import { useDayNotesStore } from '../stores/dayNotes'
 import {
   eventsFromTasks,
   eventsFromPlans,
@@ -24,12 +25,12 @@ const tasksStore = useTasksStore()
 const plansStore = usePlansStore()
 const journalIndex = useJournalIndexStore()
 const semesterStore = useSemesterStore()
+const dayNotes = useDayNotesStore()
 
 type Mode = 'day' | 'week' | 'month'
 const mode = ref<Mode>('month')
 const cursor = ref(new Date())
 const editing = ref<Task | null>(null)
-const showDone = ref(false)
 
 // 日视图侧边栏：快速新增
 const newTitle = ref('')
@@ -37,11 +38,15 @@ const newStart = ref('09:00')
 const newEnd = ref('10:00')
 const newImp = ref(3)
 
+// 日视图侧边栏：当天标签（忙碌程度由用户自己写）
+const busyInput = ref('')
+
 onMounted(async () => {
   if (!tasksStore.loaded) await tasksStore.load()
   await plansStore.load()
   await journalIndex.load()
   await semesterStore.load()
+  await dayNotes.load()
   if (props.focusDate) {
     const [fy, fm, fd] = props.focusDate.split('-').map(Number)
     cursor.value = new Date(fy, fm - 1, fd)
@@ -53,6 +58,15 @@ const today = toDateStr(new Date())
 const year = computed(() => cursor.value.getFullYear())
 const month = computed(() => cursor.value.getMonth())
 const cursorIso = computed(() => toDateStr(cursor.value))
+
+// 切换日期时，同步「当天标签」输入框
+watch(
+  cursorIso,
+  (d) => {
+    busyInput.value = dayNotes.busyOf(d) ?? ''
+  },
+  { immediate: true }
+)
 
 const visibleRange = computed<[string, string]>(() => {
   if (mode.value === 'day') return [cursorIso.value, cursorIso.value]
@@ -76,15 +90,19 @@ function eventsOn(date: string): CalendarEvent[] {
     .sort((a, b) => (a.time ?? '99:99').localeCompare(b.time ?? '99:99'))
 }
 
-/** 当天实际发生的任务（含重复日程展开出来的那一次） */
+/** 当天实际发生的任务（含重复日程展开出来的那一次）；已完成的保留显示 */
 const dayTasks = computed(() => {
   const ids = new Set(eventsOn(cursorIso.value).map((e) => e.refId))
   return tasksStore.tasks
-    .filter((t) => ids.has(t.id) && (showDone.value || t.status !== 'done'))
-    .sort((a, b) => (a.startTime ?? '99:99').localeCompare(b.startTime ?? '99:99'))
+    .filter((t) => ids.has(t.id))
+    .sort((a, b) => {
+      if (a.status === 'done' && b.status !== 'done') return 1
+      if (b.status === 'done' && a.status !== 'done') return -1
+      return (a.startTime ?? '99:99').localeCompare(b.startTime ?? '99:99')
+    })
 })
 
-// ---------- 忙碌程度概括（月视图用） ----------
+// ---------- 忙碌程度：算法只提供「默认值」，用户可自己写 ----------
 function hoursOf(e: CalendarEvent): number {
   if (!e.time || !e.endTime) return 1
   const [sh, sm] = e.time.split(':').map(Number)
@@ -96,7 +114,8 @@ function loadScore(date: string): number {
   return eventsOn(date).reduce((s, e) => s + hoursOf(e), 0)
 }
 
-function busyLabel(date: string): string {
+/** 算法默认档位（按当天安排的总时长） */
+function autoLabel(date: string): string {
   const n = eventsOn(date).length
   if (n === 0) return '空闲'
   const h = loadScore(date)
@@ -106,7 +125,15 @@ function busyLabel(date: string): string {
   return '轻松'
 }
 
+/** 显示用的标签：用户写过就用用户的 */
+function busyLabel(date: string): string {
+  const custom = dayNotes.busyOf(date)
+  if (custom !== undefined && custom !== '') return custom
+  return autoLabel(date)
+}
+
 function busyClass(date: string): string {
+  if (dayNotes.busyOf(date)) return 'b-custom'
   const n = eventsOn(date).length
   if (n === 0) return 'b-free'
   const h = loadScore(date)
@@ -114,6 +141,15 @@ function busyClass(date: string): string {
   if (h >= 4.5) return 'b-busy'
   if (h >= 2.5) return 'b-mid'
   return 'b-easy'
+}
+
+async function saveBusy(): Promise<void> {
+  await dayNotes.setBusy(cursorIso.value, busyInput.value.trim())
+}
+
+async function useAutoBusy(): Promise<void> {
+  busyInput.value = ''
+  await dayNotes.setBusy(cursorIso.value, '')
 }
 
 const PHASE_LABEL: Record<string, string> = {
@@ -370,10 +406,17 @@ async function toggleTask(t: Task): Promise<void> {
             <div class="side-head">
               <h4>当天安排</h4>
               <span class="side-sub">{{ dayTasks.length }} 项</span>
-              <label class="done-toggle">
-                <input v-model="showDone" type="checkbox" />
-                显示已完成
-              </label>
+            </div>
+
+            <div class="busy-edit">
+              <span class="be-label">忙碌程度</span>
+              <input
+                v-model="busyInput"
+                class="be-input"
+                :placeholder="`留空 = 按时间自动算（${autoLabel(cursorIso)}）`"
+                @change="saveBusy"
+              />
+              <button v-if="dayNotes.busyOf(cursorIso)" class="be-clear" @click="useAutoBusy">用默认</button>
             </div>
 
             <div v-if="dayTasks.length === 0" class="none">这天还没有安排</div>
@@ -579,6 +622,10 @@ async function toggleTask(t: Task): Promise<void> {
 .b-free {
   background: var(--surface-2);
   color: var(--text-3);
+}
+.b-custom {
+  background: rgba(155, 107, 217, 0.18);
+  color: #7d52b8;
 }
 .icons {
   display: inline-flex;
@@ -814,6 +861,43 @@ async function toggleTask(t: Task): Promise<void> {
   font-size: 0.74rem;
   color: var(--text-3);
   cursor: pointer;
+}
+.busy-edit {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px dashed var(--border);
+}
+.be-label {
+  font-size: 0.76rem;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.be-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.82rem;
+}
+.be-clear {
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-3);
+  border-radius: 7px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.74rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.be-clear:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 h4 {
   margin: 0 0 0.5rem;

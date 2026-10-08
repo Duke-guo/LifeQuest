@@ -211,6 +211,20 @@ export interface Semester {
 
 export type SemesterFile = Semester
 
+// ===================== 每日标签（用户自己写的忙碌程度 / 备注） =====================
+export interface DayNote {
+  date: string
+  /** 用户自定义的忙碌标签；为空则用算法算出的默认值 */
+  busy?: string
+  /** 备注 */
+  note?: string
+}
+
+export interface DayNotesFile {
+  schemaVersion: number
+  days: DayNote[]
+}
+
 // ===================== 日历事件（B6 / B7 / B9 / B13） =====================
 export type CalendarEventKind = 'task' | 'schedule' | 'plan' | 'journal'
 
