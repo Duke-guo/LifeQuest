@@ -59,7 +59,9 @@ for (const model of only ? models.filter((m) => m === only) : models) {
       continue
     }
     const json = JSON.parse(text)
-    const content = json.choices?.[0]?.message?.content ?? ''
+    const choice = json.choices?.[0]
+    console.log('finish_reason:', choice?.finish_reason, '| usage:', JSON.stringify(json.usage ?? {}))
+    const content = choice?.message?.content ?? ''
     const match = content.match(/\[[\s\S]*\]/)
     if (match) {
       const items = JSON.parse(match[0])
