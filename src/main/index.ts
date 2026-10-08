@@ -130,6 +130,10 @@ function createWindow(): void {
           console.log('--- PAGE TEXT ---')
           console.log(text)
           console.log('--- END PAGE TEXT ---')
+          // 打包版抓不到 stdout，可把页面内容写到文件便于验证
+          if (process.env.LIFEQUEST_DUMP) {
+            await writeFile(process.env.LIFEQUEST_DUMP, text, 'utf-8')
+          }
         } catch (e) {
           console.error('screenshot failed', e)
         }

@@ -5,6 +5,7 @@ release/
 /LifeQuest.exe
 .shot*.png
 .screenshot*.png
+.pkgdump.txt
 .npm-cache/
 .electron-cache/
 .electron-builder-cache/
