@@ -90,14 +90,21 @@ async function onPaste(e: ClipboardEvent): Promise<void> {
   await useImage(await fileToDataUrl(files[0]))
 }
 
+const elapsed = ref(0)
+let timer: number | undefined
+
 async function recognize(): Promise<void> {
   if (!sendUrl.value) return
   busy.value = true
   error.value = ''
+  elapsed.value = 0
+  timer = window.setInterval(() => (elapsed.value += 1), 1000)
+  const started = Date.now()
   const res = await dataApi.aiImageToTasks(sendUrl.value)
+  if (timer) window.clearInterval(timer)
   busy.value = false
   if (!res.ok) {
-    error.value = res.error ?? '识别失败'
+    error.value = `${res.error ?? '识别失败'}（耗时 ${((Date.now() - started) / 1000).toFixed(1)} 秒）`
     return
   }
   const raw = (res.items ?? []) as Array<Record<string, unknown>>
@@ -166,8 +173,9 @@ async function importSelected(): Promise<void> {
           <input type="file" accept="image/*" hidden @change="onPick" />
         </label>
         <button class="recog-btn" :disabled="!sendUrl || busy" @click="recognize">
-          {{ busy ? '识别中…' : '识别图片' }}
+          {{ busy ? `识别中… ${elapsed}s` : '识别图片' }}
         </button>
+        <p v-if="busy" class="tiny">网络不畅时会自动重试，最长约 45 秒</p>
       </div>
 
       <div class="right">
@@ -285,6 +293,12 @@ async function importSelected(): Promise<void> {
 .recog-btn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+.tiny {
+  font-size: 0.72rem;
+  color: var(--text-3);
+  margin: 0.2rem 0 0;
+  text-align: center;
 }
 .right {
   flex: 1;

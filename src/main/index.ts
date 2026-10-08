@@ -48,6 +48,14 @@ function createWindow(): void {
     mainWindow.webContents.once('did-finish-load', () => {
       setTimeout(async () => {
         try {
+          // 等待渲染进程挂载完成（首次启动可能因杀软扫描而较慢）
+          for (let i = 0; i < 80; i++) {
+            const ready = await mainWindow.webContents.executeJavaScript(
+              `!!document.querySelector('.fab, .avatar')`
+            )
+            if (ready) break
+            await new Promise((r) => setTimeout(r, 250))
+          }
           if (process.env.LIFEQUEST_VIEW) {
             const view = process.env.LIFEQUEST_VIEW
             await mainWindow.webContents.executeJavaScript(`document.querySelector('.fab')?.click()`)

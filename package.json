@@ -9,7 +9,7 @@
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit",
     "dist": "electron-vite build && electron-builder --win portable",
-    "release": "npm run dist && node scripts/copy-portable.mjs"
+    "release": "npm run dist && node scripts/post-release.mjs"
   },
   "dependencies": {
     "pinia": "^4.0.3",

@@ -26,9 +26,22 @@ export function defaultDataRoot(): string {
   if (process.env.PORTABLE_EXECUTABLE_DIR) {
     return join(process.env.PORTABLE_EXECUTABLE_DIR, 'LifeQuest-Data')
   }
-  // 打包安装版：数据放在 exe 同级目录；开发时：放在项目目录（D 盘工作区）
-  const base = app.isPackaged ? dirname(app.getPath('exe')) : app.getAppPath()
-  return join(base, 'LifeQuest-Data')
+  if (app.isPackaged) {
+    const exeDir = dirname(app.getPath('exe'))
+    // 从 exe 所在目录向上找已存在的 LifeQuest-Data：
+    // 这样把程序放在工作区子目录（如 app/）时，数据仍落在工作区根目录
+    let dir = exeDir
+    for (let i = 0; i < 4; i++) {
+      const candidate = join(dir, 'LifeQuest-Data')
+      if (existsSync(candidate)) return candidate
+      const parent = dirname(dir)
+      if (parent === dir) break
+      dir = parent
+    }
+    return join(exeDir, 'LifeQuest-Data')
+  }
+  // 开发模式：放在项目目录（D 盘工作区）
+  return join(app.getAppPath(), 'LifeQuest-Data')
 }
 
 export function resolveDataRoot(): string {
