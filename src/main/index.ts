@@ -55,23 +55,25 @@ function createWindow(): void {
             await new Promise((r) => setTimeout(r, 700))
           }
           if (process.env.LIFEQUEST_CLICK) {
-            const label = process.env.LIFEQUEST_CLICK
-            const clickResult = await mainWindow.webContents.executeJavaScript(
-              `(() => {
-                const sel = '${label}'
-                if (sel.startsWith('.')) {
-                  const el = document.querySelector(sel)
-                  if (el) { el.click(); return 'clicked(sel)' }
-                  return 'not found(sel)'
-                }
-                const btns = [...document.querySelectorAll('button')]
-                const target = btns.find((b) => b.textContent.includes(sel))
-                if (target) { target.click(); return 'clicked' }
-                return 'not found'
-              })()`
-            )
-            console.log('click:', label, '->', clickResult)
-            await new Promise((r) => setTimeout(r, 900))
+            const labels = process.env.LIFEQUEST_CLICK.split(',').map((s) => s.trim()).filter(Boolean)
+            for (const label of labels) {
+              const r = await mainWindow.webContents.executeJavaScript(
+                `(() => {
+                  const sel = '${label}'
+                  if (sel.startsWith('.')) {
+                    const el = document.querySelector(sel)
+                    if (el) { el.click(); return 'clicked(sel)' }
+                    return 'not found(sel)'
+                  }
+                  const btns = [...document.querySelectorAll('button')]
+                  const target = btns.find((b) => b.textContent.includes(sel))
+                  if (target) { target.click(); return 'clicked' }
+                  return 'not found'
+                })()`
+              )
+              console.log('click:', label, '->', r)
+              await new Promise((res) => setTimeout(res, 700))
+            }
           }
           const image = await mainWindow.webContents.capturePage()
           await writeFile(process.env.LIFEQUEST_SCREENSHOT as string, image.toPNG())

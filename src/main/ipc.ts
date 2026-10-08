@@ -50,8 +50,13 @@ function register(): void {
   ipcMain.handle('data:writeJson', async (_e, key: string, data: unknown) => {
     const file = JSON_FILES[key]
     if (!file) return false
-    await writeJsonFile(file, data)
-    return true
+    try {
+      await writeJsonFile(file, data)
+      return true
+    } catch (err) {
+      console.error('[data:writeJson] 写入失败:', key, err)
+      return false
+    }
   })
 
   ipcMain.handle('data:readMarkdown', (_e, rel: string) => readMarkdownFile(safeResolve(rel)))
