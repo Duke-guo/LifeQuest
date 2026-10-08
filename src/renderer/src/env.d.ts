@@ -1,0 +1,21 @@
+/// <reference types="vite/client" />
+
+declare module '*.vue' {
+  import type { DefineComponent } from 'vue'
+  const component: DefineComponent<object, object, unknown>
+  export default component
+}
+
+interface Window {
+  api: {
+    ping: () => Promise<string>
+    dataRoot: () => Promise<string>
+    readJson: (key: string) => Promise<unknown>
+    writeJson: (key: string, data: unknown) => Promise<boolean>
+    readMarkdown: (rel: string) => Promise<string>
+    writeMarkdown: (rel: string, content: string) => Promise<boolean>
+    listFiles: (dir: string, ext?: string) => Promise<string[]>
+    deleteFile: (rel: string) => Promise<boolean>
+    exportData: () => Promise<{ canceled: boolean; dest?: string }>
+  }
+}
