@@ -1,12 +1,23 @@
-import type { Task, Plan, CalendarEvent, Weather, Mood } from '../../../shared/types'
+import type { Task, Plan, CalendarEvent, Weather, Mood, RepeatMode } from '../../../shared/types'
 
-/** 把任务/日程转成日历事件；重复任务按区间展开（每周 / 每月） */
+export const REPEAT_LABELS: Record<RepeatMode, string> = {
+  none: '不重复',
+  daily: '每天',
+  weekdays: '工作日',
+  weekly: '每周',
+  biweekly: '每两周',
+  monthly: '每月'
+}
+
+export const REPEAT_OPTIONS: RepeatMode[] = ['none', 'daily', 'weekdays', 'weekly', 'biweekly', 'monthly']
+
+/** 把任务/日程转成日历事件；重复任务按区间展开 */
 export function eventsFromTasks(tasks: Task[], rangeStart?: string, rangeEnd?: string): CalendarEvent[] {
   const out: CalendarEvent[] = []
   for (const t of tasks) {
     if (!t.due || t.status === 'archived') continue
 
-    const mode = t.repeat === 'weekly' || t.repeat === 'monthly' ? t.repeat : null
+    const mode = t.repeat && t.repeat !== 'none' ? t.repeat : null
     if (mode && rangeStart && rangeEnd) {
       // 展开区间 = [可见区间] ∩ [due, repeatUntil]
       const from = t.due > rangeStart ? t.due : rangeStart
@@ -23,31 +34,51 @@ export function eventsFromTasks(tasks: Task[], rangeStart?: string, rangeEnd?: s
   return out
 }
 
-/** 从 first 起按 weekly/monthly 推进，返回落在 [from, until] 内的日期 */
+/** 从 first 起按 mode 推进，返回落在 [from, until] 内的日期 */
 function expandRepeat(
   first: string,
-  mode: 'weekly' | 'monthly',
+  mode: RepeatMode,
   repeatUntil: string | null,
   from: string,
   until: string
 ): string[] {
   const out: string[] = []
   const hardEnd = repeatUntil && repeatUntil < until ? repeatUntil : until
-  let cur = new Date(first)
+  const fromDate = new Date(from)
   const end = new Date(hardEnd)
+  let cur = new Date(first)
   let guard = 0
   // 先推进到区间附近，避免从很久以前开始循环
-  while (cur < new Date(from) && guard < 400) {
-    cur = mode === 'weekly' ? addDays(cur, 7) : addMonth(cur)
+  while (cur < fromDate && guard < 4000) {
+    cur = nextDate(cur, mode)
     guard++
   }
   guard = 0
-  while (cur <= end && guard < 200) {
+  while (cur <= end && guard < 800) {
     out.push(toStr(cur))
-    cur = mode === 'weekly' ? addDays(cur, 7) : addMonth(cur)
+    cur = nextDate(cur, mode)
     guard++
   }
   return out
+}
+
+function nextDate(d: Date, mode: RepeatMode): Date {
+  switch (mode) {
+    case 'daily':
+      return addDays(d, 1)
+    case 'weekdays': {
+      let n = addDays(d, 1)
+      while (n.getDay() === 0 || n.getDay() === 6) n = addDays(n, 1)
+      return n
+    }
+    case 'biweekly':
+      return addDays(d, 14)
+    case 'monthly':
+      return addMonth(d)
+    case 'weekly':
+    default:
+      return addDays(d, 7)
+  }
 }
 
 function addDays(d: Date, n: number): Date {

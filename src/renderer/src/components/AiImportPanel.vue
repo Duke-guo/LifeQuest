@@ -3,7 +3,9 @@ import { ref } from 'vue'
 import { useTasksStore } from '../stores/tasks'
 import { dataApi } from '../services/data'
 import { toDateStr } from '../utils/helpers'
+import { REPEAT_LABELS, REPEAT_OPTIONS } from '../utils/schedule'
 import AppIcon from './AppIcon.vue'
+import type { RepeatMode } from '../../../shared/types'
 
 const emit = defineEmits<{ imported: []; close: [] }>()
 
@@ -42,7 +44,7 @@ const items = ref<ParsedItem[]>([])
 /** 重复区间：起始日（默认本周周一）→ 截止日（默认 +16 周） */
 const weekAnchor = ref(toDateStr(mondayOf(new Date())))
 const repeatUntil = ref(addDays(weekAnchor.value, 7 * 16))
-const repeatMode = ref<'none' | 'weekly' | 'monthly'>('weekly')
+const repeatMode = ref<RepeatMode>('weekly')
 
 /** 学期考核 */
 const hasMidterm = ref(false)
@@ -225,9 +227,9 @@ async function importSelected(): Promise<void> {
           <label class="sb-field">
             <span>重复</span>
             <select v-model="repeatMode">
-              <option value="weekly">每周</option>
-              <option value="monthly">每月</option>
-              <option value="none">不重复</option>
+              <option v-for="m in REPEAT_OPTIONS" :key="m" :value="m">
+                {{ REPEAT_LABELS[m] }}
+              </option>
             </select>
           </label>
           <button class="add-all" @click="importSelected">

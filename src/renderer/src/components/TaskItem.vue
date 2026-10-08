@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { Task } from '../../../shared/types'
 import { formatDate } from '../utils/helpers'
+import { REPEAT_LABELS } from '../utils/schedule'
 
 const props = defineProps<{ task: Task }>()
 const emit = defineEmits<{ toggle: []; remove: [] }>()
@@ -44,8 +45,9 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
           </span>
           <span v-else-if="task.due" class="pill">{{ formatDate(task.due) }}</span>
           <span v-if="task.location" class="loc">{{ task.location }}</span>
-          <span v-if="task.repeat === 'weekly'" class="pill weekly">每周</span>
-          <span v-else-if="task.repeat === 'monthly'" class="pill weekly">每月</span>
+          <span v-if="task.repeat && task.repeat !== 'none'" class="pill weekly">
+            {{ REPEAT_LABELS[task.repeat] }}
+          </span>
           <span v-if="task.repeatUntil" class="pill range">至 {{ task.repeatUntil.slice(5) }}</span>
           <span v-if="task.description" class="desc">{{ task.description }}</span>
         </div>

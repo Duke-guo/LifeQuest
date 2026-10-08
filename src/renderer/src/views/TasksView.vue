@@ -3,12 +3,12 @@ import { ref, computed, onMounted } from 'vue'
 import { useTasksStore } from '../stores/tasks'
 import { useSeasonsStore } from '../stores/seasons'
 import { useTagsStore } from '../stores/tags'
-import { findConflicts, conflictsOn, type Conflict } from '../utils/schedule'
+import { findConflicts, conflictsOn, REPEAT_LABELS, REPEAT_OPTIONS, type Conflict } from '../utils/schedule'
 import { toDateStr } from '../utils/helpers'
 import TaskItem from '../components/TaskItem.vue'
 import AiImportPanel from '../components/AiImportPanel.vue'
 import AppIcon from '../components/AppIcon.vue'
-import type { TaskType, TaskKind, Task } from '../../../shared/types'
+import type { TaskType, TaskKind, Task, RepeatMode } from '../../../shared/types'
 
 const store = useTasksStore()
 const seasonsStore = useSeasonsStore()
@@ -25,7 +25,7 @@ const location = ref('')
 const seasonId = ref('')
 const tagInput = ref('')
 const tagIds = ref<string[]>([])
-const repeat = ref<'none' | 'weekly' | 'monthly'>('none')
+const repeat = ref<RepeatMode>('none')
 const repeatUntil = ref('')
 
 const conflicts = ref<Conflict[]>([])
@@ -178,9 +178,7 @@ async function onAiImported(): Promise<void> {
         <label class="inline-field">
           <span>重复</span>
           <select v-model="repeat">
-            <option value="none">不重复</option>
-            <option value="weekly">每周</option>
-            <option value="monthly">每月</option>
+            <option v-for="m in REPEAT_OPTIONS" :key="m" :value="m">{{ REPEAT_LABELS[m] }}</option>
           </select>
         </label>
         <template v-if="repeat !== 'none'">
@@ -189,7 +187,7 @@ async function onAiImported(): Promise<void> {
             <input v-model="repeatUntil" type="date" />
           </label>
           <span class="range-hint">
-            从上面的日期起，{{ repeat === 'weekly' ? '每周' : '每月' }}重复到截止日（留空表示不限）
+            从上面的日期起「{{ REPEAT_LABELS[repeat] }}」重复到截止日（留空表示不限）
           </span>
         </template>
       </div>

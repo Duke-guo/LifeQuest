@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { dataApi } from '../services/data'
-import type { Task, TasksFile, TaskType, TaskStatus, TaskKind } from '../../../shared/types'
+import type { Task, TasksFile, TaskType, TaskStatus, TaskKind, RepeatMode } from '../../../shared/types'
 import { uid } from '../utils/helpers'
 
 export interface NewTaskInput {
@@ -17,7 +17,7 @@ export interface NewTaskInput {
   seasonId?: string | null
   tagIds?: string[]
   linkedNoteIds?: string[]
-  repeat?: 'none' | 'weekly' | 'monthly'
+  repeat?: RepeatMode
   repeatUntil?: string | null
   description?: string
 }

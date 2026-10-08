@@ -36,6 +36,9 @@ export interface LinksFile {
 }
 
 // ===================== 任务 / 日程（B14） =====================
+/** 重复方式；以 due 为首次日期，按 repeatUntil 截止 */
+export type RepeatMode = 'none' | 'daily' | 'weekdays' | 'weekly' | 'biweekly' | 'monthly'
+
 export type TaskType = 'main' | 'side' | 'daily'
 export type TaskStatus = 'todo' | 'doing' | 'done' | 'archived'
 /** task = 粗略任务（可无时间）；schedule = 日程（有具体时间段） */
@@ -61,8 +64,8 @@ export interface Task {
   location: string | null
   /** 提前多少分钟提醒（仅 kind=schedule） */
   remindMinutes: number | null
-  /** 重复方式：none 单次；weekly 每周；monthly 每月（以 due 为首次日期，repeatUntil 为截止） */
-  repeat?: 'none' | 'weekly' | 'monthly'
+  /** 重复方式：见 RepeatMode；空/ none 表示单次 */
+  repeat?: RepeatMode
   /** 重复截止日期（含当天）；空表示不限 */
   repeatUntil?: string | null
   tags: string[]
