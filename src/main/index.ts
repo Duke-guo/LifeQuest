@@ -74,6 +74,31 @@ function createWindow(): void {
           if (process.env.LIFEQUEST_CLICK) {
             const labels = process.env.LIFEQUEST_CLICK.split(',').map((s) => s.trim()).filter(Boolean)
             for (const label of labels) {
+              if (label.startsWith('@file:')) {
+                const sel = JSON.stringify(label.slice(6))
+                if (!process.env.LIFEQUEST_IMAGE) continue
+                const buf = await readFile(process.env.LIFEQUEST_IMAGE)
+                const b64 = buf.toString('base64')
+                const r = await mainWindow.webContents.executeJavaScript(
+                  `(async () => {
+                    const b64 = ${JSON.stringify(b64)}
+                    const bin = atob(b64)
+                    const arr = new Uint8Array(bin.length)
+                    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
+                    const file = new File([arr], 'img.png', { type: 'image/png' })
+                    const dt = new DataTransfer()
+                    dt.items.add(file)
+                    const inp = document.querySelector(${sel})
+                    if (!inp) return 'no input'
+                    inp.files = dt.files
+                    inp.dispatchEvent(new Event('change', { bubbles: true }))
+                    return 'file set'
+                  })()`
+                )
+                console.log('inject file ->', r)
+                await new Promise((res) => setTimeout(res, 1500))
+                continue
+              }
               if (label.startsWith('@wait:')) {
                 const ms = Number(label.slice(6)) || 1000
                 await new Promise((res) => setTimeout(res, ms))

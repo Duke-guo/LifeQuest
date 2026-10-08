@@ -6,6 +6,7 @@ import { useTagsStore } from '../stores/tags'
 import { findConflicts, conflictsOn, REPEAT_LABELS, REPEAT_OPTIONS, type Conflict } from '../utils/schedule'
 import { toDateStr } from '../utils/helpers'
 import TaskItem from '../components/TaskItem.vue'
+import TaskEditModal from '../components/TaskEditModal.vue'
 import AiImportPanel from '../components/AiImportPanel.vue'
 import AppIcon from '../components/AppIcon.vue'
 import type { TaskType, TaskKind, Task, RepeatMode } from '../../../shared/types'
@@ -31,6 +32,7 @@ const repeatUntil = ref('')
 const conflicts = ref<Conflict[]>([])
 const pending = ref(false)
 const showAi = ref(false)
+const editing = ref<Task | null>(null)
 
 const sections: Array<{ type: TaskType; label: string }> = [
   { type: 'main', label: '主线任务' },
@@ -224,8 +226,11 @@ async function onAiImported(): Promise<void> {
         :task="t"
         @toggle="store.setStatus(t.id, t.status === 'done' ? 'todo' : 'done')"
         @remove="store.removeTask(t.id)"
+        @edit="editing = t"
       />
     </section>
+
+    <TaskEditModal v-if="editing" :task="editing" @close="editing = null" />
   </div>
 </template>
 

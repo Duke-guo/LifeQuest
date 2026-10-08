@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useTasksStore } from '../stores/tasks'
+import { useSemesterStore } from '../stores/semester'
 import { dataApi } from '../services/data'
 import { toDateStr } from '../utils/helpers'
 import { REPEAT_LABELS, REPEAT_OPTIONS } from '../utils/schedule'
@@ -10,29 +11,49 @@ import type { RepeatMode } from '../../../shared/types'
 const emit = defineEmits<{ imported: []; close: [] }>()
 
 const store = useTasksStore()
+const semesterStore = useSemesterStore()
+
+onMounted(async () => {
+  if (!semesterStore.loaded) await semesterStore.load()
+  // 默认区间直接取自「学期计划」：开学日 → 教学最后一天
+  if (semesterStore.start) globalFrom.value = semesterStore.start
+  if (semesterStore.teachingEnd) globalUntil.value = semesterStore.teachingEnd
+})
+
+/** 从校历图片导入：已改为直接读学期配置，不再走 AI */
 
 interface Session {
   key: string
   weekday: number | null
-  date: string | null
   startTime: string | null
   endTime: string | null
   location: string | null
   selected: boolean
 }
 
+interface ExamInfo {
+  date: string
+  startTime: string
+  endTime: string
+  location: string
+}
+
 interface CourseGroup {
   key: string
   name: string
   sessions: Session[]
-  midterm: string
-  final: string
+  /** 这门课的上课起止（空则用全局默认） */
+  from: string
+  until: string
+  midterm: ExamInfo
+  final: ExamInfo
 }
 
 const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 
 let seq = 0
 const nextKey = (): string => `k${++seq}`
+const emptyExam = (): ExamInfo => ({ date: '', startTime: '', endTime: '', location: '' })
 
 function mondayOf(d: Date): Date {
   const day = d.getDay()
@@ -45,18 +66,26 @@ function addDays(iso: string, n: number): string {
   return toDateStr(new Date(y, m - 1, d + n))
 }
 
+/** 从 from 起（含当天）第一个落在指定星期几的日期；weekday 1=周一 … 7=周日 */
+function firstOnOrAfter(fromIso: string, weekday: number): string {
+  if (!fromIso) return ''
+  const [y, m, d] = fromIso.split('-').map(Number)
+  const base = new Date(y, m - 1, d)
+  const cur = base.getDay() === 0 ? 7 : base.getDay()
+  const diff = (weekday - cur + 7) % 7
+  return toDateStr(new Date(y, m - 1, d + diff))
+}
+
 const imageSrc = ref('')
 const sendUrl = ref('')
 const busy = ref(false)
 const error = ref('')
 const courses = ref<CourseGroup[]>([])
 
-/** 重复区间：起始日（默认本周周一）→ 截止日（默认 +16 周） */
-const weekAnchor = ref(toDateStr(mondayOf(new Date())))
-const repeatUntil = ref(addDays(weekAnchor.value, 7 * 16))
+/** 全局默认：上课起始（默认本周周一）→ 截止（默认 +16 周） */
+const globalFrom = ref(toDateStr(mondayOf(new Date())))
+const globalUntil = ref(addDays(globalFrom.value, 7 * 16))
 const repeatMode = ref<RepeatMode>('weekly')
-const globalMidterm = ref('')
-const globalFinal = ref('')
 
 const elapsed = ref(0)
 let timer: number | undefined
@@ -136,12 +165,19 @@ async function recognize(): Promise<void> {
   for (const r of raw) {
     const name = String(r.title ?? '未命名课程').trim()
     if (!map.has(name)) {
-      map.set(name, { key: nextKey(), name, sessions: [], midterm: '', final: '' })
+      map.set(name, {
+        key: nextKey(),
+        name,
+        sessions: [],
+        from: '',
+        until: '',
+        midterm: emptyExam(),
+        final: emptyExam()
+      })
     }
     map.get(name)!.sessions.push({
       key: nextKey(),
       weekday: Number(r.weekday) >= 1 && Number(r.weekday) <= 7 ? Number(r.weekday) : null,
-      date: typeof r.date === 'string' && r.date ? r.date : null,
       startTime: typeof r.startTime === 'string' && r.startTime ? r.startTime : null,
       endTime: typeof r.endTime === 'string' && r.endTime ? r.endTime : null,
       location: typeof r.location === 'string' && r.location ? r.location : null,
@@ -152,11 +188,18 @@ async function recognize(): Promise<void> {
   if (courses.value.length === 0) error.value = '没有识别到任何课程'
 }
 
-/** 会话落地日期：图片给了日期就用它，否则用「起始日 + 星期几」推算 */
-function resolvedDate(s: Session): string | null {
-  if (s.date) return s.date
-  if (s.weekday) return addDays(weekAnchor.value, s.weekday - 1)
-  return null
+function courseFrom(c: CourseGroup): string {
+  return c.from || globalFrom.value
+}
+
+function courseUntil(c: CourseGroup): string {
+  return c.until || globalUntil.value
+}
+
+/** 某个时段第一次上课的日期 */
+function sessionDate(c: CourseGroup, s: Session): string | null {
+  if (!s.weekday) return null
+  return firstOnOrAfter(courseFrom(c), s.weekday)
 }
 
 function removeSession(c: CourseGroup, s: Session): void {
@@ -165,15 +208,7 @@ function removeSession(c: CourseGroup, s: Session): void {
 }
 
 function addSession(c: CourseGroup): void {
-  c.sessions.push({
-    key: nextKey(),
-    weekday: 1,
-    date: null,
-    startTime: '08:00',
-    endTime: '09:50',
-    location: '',
-    selected: true
-  })
+  c.sessions.push({ key: nextKey(), weekday: 1, startTime: '08:00', endTime: '09:50', location: '', selected: true })
 }
 
 function addCourse(): void {
@@ -181,10 +216,12 @@ function addCourse(): void {
     key: nextKey(),
     name: '新课程',
     sessions: [
-      { key: nextKey(), weekday: 1, date: null, startTime: '08:00', endTime: '09:50', location: '', selected: true }
+      { key: nextKey(), weekday: 1, startTime: '08:00', endTime: '09:50', location: '', selected: true }
     ],
-    midterm: '',
-    final: ''
+    from: '',
+    until: '',
+    midterm: emptyExam(),
+    final: emptyExam()
   })
 }
 
@@ -196,29 +233,43 @@ async function importAll(): Promise<void> {
   const repeating = repeatMode.value !== 'none'
   for (const c of courses.value) {
     const name = c.name.trim() || '未命名课程'
+    const until = courseUntil(c)
+
     for (const s of c.sessions.filter((x) => x.selected)) {
+      const date = sessionDate(c, s)
+      if (!date) continue
       await store.addTask({
         title: name,
         type: 'daily',
         kind: s.startTime ? 'schedule' : 'task',
         importance: 3,
-        due: resolvedDate(s),
+        due: date,
         startTime: s.startTime,
         endTime: s.endTime,
         location: s.location?.trim() || null,
         remindMinutes: s.startTime ? 15 : null,
-        repeat: repeating && s.weekday ? repeatMode.value : 'none',
-        repeatUntil: repeating && s.weekday ? repeatUntil.value : null
+        repeat: repeating ? repeatMode.value : 'none',
+        repeatUntil: repeating && until ? until : null
       })
     }
-    // 每门课各自的考核时间（作为最高重要度的主线事项，对应周自动显示为「考试周」）
-    const mid = c.midterm || globalMidterm.value
-    const fin = c.final || globalFinal.value
-    if (mid) {
-      await store.addTask({ title: `${name} · 期中考核`, type: 'main', kind: 'task', importance: 5, due: mid })
-    }
-    if (fin) {
-      await store.addTask({ title: `${name} · 期末考核`, type: 'main', kind: 'task', importance: 5, due: fin })
+
+    // 考试作为独立的一次性日程（有自己的日期、时段、地点）
+    for (const [label, exam] of [
+      ['期中考核', c.midterm],
+      ['期末考核', c.final]
+    ] as const) {
+      if (!exam.date) continue
+      await store.addTask({
+        title: `${name} · ${label}`,
+        type: 'main',
+        kind: exam.startTime ? 'schedule' : 'task',
+        importance: 5,
+        due: exam.date,
+        startTime: exam.startTime || null,
+        endTime: exam.endTime || null,
+        location: exam.location.trim() || null,
+        remindMinutes: exam.startTime ? 30 : null
+      })
     }
   }
   emit('imported')
@@ -232,7 +283,7 @@ async function importAll(): Promise<void> {
       <button class="x" @click="emit('close')"><AppIcon name="close" :size="17" /></button>
     </div>
     <p class="hint">
-      上传课表 / 通知 / 截图。识别结果按「课程」分组，一门课可以有多个上课时段，并可为每门课分别设置期中/期末时间。
+      识别结果按「课程」分组。每门课可设<b>上课起止</b>（如第 1–20 周），考核另设<b>日期 + 时段 + 地点</b>（如第 21 周某天）。
     </p>
 
     <div class="ai-body">
@@ -248,21 +299,32 @@ async function importAll(): Promise<void> {
         <button class="recog-btn" :disabled="!sendUrl || busy" @click="recognize">
           {{ busy ? `识别中… ${elapsed}s` : '识别图片' }}
         </button>
-        <p v-if="busy" class="tiny">网络不畅时会自动重试，最长约 45 秒</p>
+        <p v-if="busy" class="tiny">课表越密，模型思考越久，通常 10~40 秒，请稍候</p>
       </div>
 
       <div class="right">
         <p v-if="error" class="err">{{ error }}</p>
 
+        <div class="cal-bar">
+          <span class="sem-info">
+            学期计划：{{ semesterStore.semester.name }} · {{ semesterStore.start }} ~
+            {{ semesterStore.teachingEnd }}（考试 {{ semesterStore.semester.examStart || '?' }}~{{
+              semesterStore.semester.examEnd || '?'
+            }}）
+          </span>
+          <span class="sem-hint">可在「计划」页调整开学日 / 教学结束 / 考试周 / 假期</span>
+        </div>
+        <p v-if="semesterStore.semester.holidays.length" class="holiday-list">
+          停课日：{{
+            semesterStore.semester.holidays
+              .map((h) => `${h.name} ${h.start.slice(5)}~${h.end.slice(5)}`)
+              .join('、')
+          }}（这些日期不排课）
+        </p>
+
         <div v-if="courses.length" class="settings-bar">
-          <label class="sb-field">
-            <span>起始</span>
-            <input v-model="weekAnchor" type="date" />
-          </label>
-          <label class="sb-field">
-            <span>截止</span>
-            <input v-model="repeatUntil" type="date" />
-          </label>
+          <label class="sb-field"><span>默认起始</span><input v-model="globalFrom" type="date" /></label>
+          <label class="sb-field"><span>默认截止</span><input v-model="globalUntil" type="date" /></label>
           <label class="sb-field">
             <span>重复</span>
             <select v-model="repeatMode">
@@ -270,12 +332,6 @@ async function importAll(): Promise<void> {
             </select>
           </label>
           <button class="add-all" @click="importAll">添加 {{ courses.length }} 门课 / {{ totalSessions }} 个时段</button>
-        </div>
-
-        <div v-if="courses.length" class="defaults">
-          <span class="sec-label">统一默认考核时间（各课程留空时使用）</span>
-          <label class="sb-field">期中 <input v-model="globalMidterm" type="date" /></label>
-          <label class="sb-field">期末 <input v-model="globalFinal" type="date" /></label>
         </div>
 
         <div v-if="courses.length" class="courses">
@@ -297,25 +353,44 @@ async function importAll(): Promise<void> {
               <input v-model="s.startTime" type="time" class="r-time" />
               <input v-model="s.endTime" type="time" class="r-time" />
               <input v-model="s.location" class="r-loc" placeholder="地点" />
-              <span class="r-date" :class="{ warn: !resolvedDate(s) }">
-                {{ resolvedDate(s) ?? '需选星期' }}
+              <span class="r-date" :class="{ warn: !sessionDate(c, s) }">
+                {{ sessionDate(c, s) ?? '需选星期' }}
               </span>
               <button class="icon-btn" title="删除这个时段" @click="removeSession(c, s)">
                 <AppIcon name="close" :size="14" />
               </button>
             </div>
 
-            <div class="session-actions">
+            <div class="course-foot">
               <button class="ghost-mini" @click="addSession(c)">＋ 加一个时段</button>
-              <label class="sb-field exam">期中 <input v-model="c.midterm" type="date" /></label>
-              <label class="sb-field exam">期末 <input v-model="c.final" type="date" /></label>
+              <label class="sb-field">
+                <span>上课期间</span>
+                <input v-model="c.from" type="date" :placeholder="globalFrom" />
+                <em>~</em>
+                <input v-model="c.until" type="date" :placeholder="globalUntil" />
+              </label>
+            </div>
+
+            <div class="exam-row">
+              <span class="exam-label">期中</span>
+              <input v-model="c.midterm.date" type="date" />
+              <input v-model="c.midterm.startTime" type="time" />
+              <input v-model="c.midterm.endTime" type="time" />
+              <input v-model="c.midterm.location" class="ex-loc" placeholder="考场" />
+            </div>
+            <div class="exam-row">
+              <span class="exam-label">期末</span>
+              <input v-model="c.final.date" type="date" />
+              <input v-model="c.final.startTime" type="time" />
+              <input v-model="c.final.endTime" type="time" />
+              <input v-model="c.final.location" class="ex-loc" placeholder="考场" />
             </div>
           </div>
 
           <button class="ghost-mini add-course" @click="addCourse">＋ 手动添加一门课程</button>
         </div>
 
-        <p v-else class="none">识别结果会按课程显示在这里，可增删时段、逐条修改，并设置每门课的考核时间。</p>
+        <p v-else class="none">识别结果会按课程显示在这里，可增删时段、设置每门课的上课起止与考核时间。</p>
       </div>
     </div>
   </section>
@@ -353,7 +428,7 @@ async function importAll(): Promise<void> {
   align-items: flex-start;
 }
 .left {
-  width: 210px;
+  width: 200px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -381,7 +456,7 @@ async function importAll(): Promise<void> {
 }
 .drop img {
   max-width: 100%;
-  max-height: 220px;
+  max-height: 240px;
   border-radius: 8px;
 }
 .recog-btn {
@@ -407,8 +482,7 @@ async function importAll(): Promise<void> {
   flex: 1;
   min-width: 0;
 }
-.settings-bar,
-.defaults {
+.settings-bar {
   display: flex;
   align-items: center;
   gap: 0.8rem;
@@ -417,23 +491,16 @@ async function importAll(): Promise<void> {
   margin-bottom: 0.6rem;
   border-bottom: 1px solid var(--border);
 }
-.defaults {
-  background: var(--surface-2);
-  border-radius: 10px;
-  padding: 0.5rem 0.7rem;
-  border-bottom: none;
-}
-.sec-label {
-  font-size: 0.78rem;
-  color: var(--text-3);
-  flex-basis: 100%;
-}
 .sb-field {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   font-size: 0.8rem;
   color: var(--text-2);
+}
+.sb-field em {
+  font-style: normal;
+  color: var(--text-3);
 }
 .sb-field input,
 .sb-field select {
@@ -455,11 +522,41 @@ async function importAll(): Promise<void> {
   font-weight: 600;
   font-size: 0.85rem;
 }
+.cal-btn {
+  cursor: pointer;
+}
+.cal-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+.sem-info {
+  font-size: 0.8rem;
+  color: var(--text-2);
+}
+.sem-hint {
+  font-size: 0.74rem;
+  color: var(--text-3);
+}
+.cal-msg {
+  font-size: 0.8rem;
+  color: var(--success);
+}
+.holiday-list {
+  font-size: 0.78rem;
+  color: var(--text-3);
+  margin: 0 0 0.6rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--surface-2);
+  border-radius: 8px;
+}
 .courses {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  max-height: 400px;
+  max-height: 430px;
   overflow-y: auto;
 }
 .course {
@@ -494,14 +591,16 @@ async function importAll(): Promise<void> {
   color: var(--text-3);
   white-space: nowrap;
 }
-.session {
+.session,
+.exam-row {
   display: flex;
   align-items: center;
   gap: 0.3rem;
-  padding: 0.15rem 0;
+  padding: 0.14rem 0;
 }
 .session input,
-.session select {
+.session select,
+.exam-row input {
   padding: 0.26rem 0.34rem;
   border: 1px solid var(--border);
   border-radius: 7px;
@@ -528,6 +627,28 @@ async function importAll(): Promise<void> {
 .r-date.warn {
   color: var(--danger);
 }
+.exam-row {
+  margin-top: 0.15rem;
+}
+.exam-label {
+  font-size: 0.76rem;
+  color: var(--text-2);
+  width: 30px;
+  flex-shrink: 0;
+}
+.ex-loc {
+  flex: 1;
+  min-width: 70px;
+}
+.course-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  margin: 0.5rem 0;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border);
+}
 .icon-btn {
   border: none;
   background: none;
@@ -538,15 +659,6 @@ async function importAll(): Promise<void> {
 }
 .icon-btn:hover {
   color: var(--danger);
-}
-.session-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-  flex-wrap: wrap;
-  margin-top: 0.45rem;
-  padding-top: 0.45rem;
-  border-top: 1px dashed var(--border);
 }
 .ghost-mini {
   border: 1px dashed var(--border);

@@ -5,7 +5,7 @@ import { formatDate } from '../utils/helpers'
 import { REPEAT_LABELS } from '../utils/schedule'
 
 const props = defineProps<{ task: Task }>()
-const emit = defineEmits<{ toggle: []; remove: [] }>()
+const emit = defineEmits<{ toggle: []; remove: []; edit: [] }>()
 
 const done = computed(() => props.task.status === 'done')
 const isSchedule = computed(() => props.task.kind === 'schedule')
@@ -37,7 +37,7 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
         <circle cx="20" cy="20" r="2.4" class="hub" />
       </svg>
 
-      <div class="body">
+      <div class="body" title="点击编辑" @click="emit('edit')">
         <div class="title">{{ task.title }}</div>
         <div class="meta">
           <span v-if="isSchedule && task.startTime" class="pill time">
@@ -131,6 +131,7 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
 .body {
   flex: 1;
   min-width: 0;
+  cursor: pointer;
 }
 .title {
   font-weight: 550;

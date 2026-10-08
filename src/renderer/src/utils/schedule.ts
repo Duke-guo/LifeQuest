@@ -11,8 +11,13 @@ export const REPEAT_LABELS: Record<RepeatMode, string> = {
 
 export const REPEAT_OPTIONS: RepeatMode[] = ['none', 'daily', 'weekdays', 'weekly', 'biweekly', 'monthly']
 
-/** 把任务/日程转成日历事件；重复任务按区间展开 */
-export function eventsFromTasks(tasks: Task[], rangeStart?: string, rangeEnd?: string): CalendarEvent[] {
+/** 把任务/日程转成日历事件；重复任务按区间展开，可跳过停课日 */
+export function eventsFromTasks(
+  tasks: Task[],
+  rangeStart?: string,
+  rangeEnd?: string,
+  skipDates?: Set<string>
+): CalendarEvent[] {
   const out: CalendarEvent[] = []
   for (const t of tasks) {
     if (!t.due || t.status === 'archived') continue
@@ -24,7 +29,10 @@ export function eventsFromTasks(tasks: Task[], rangeStart?: string, rangeEnd?: s
       const until = t.repeatUntil && t.repeatUntil < rangeEnd ? t.repeatUntil : rangeEnd
       if (until < from) continue
       const dates = expandRepeat(t.due, mode, t.repeatUntil ?? null, from, until)
-      dates.forEach((d, i) => out.push(makeEvent(t, d, `-r${i}`)))
+      dates.forEach((d, i) => {
+        if (skipDates?.has(d)) return
+        out.push(makeEvent(t, d, `-r${i}`))
+      })
       continue
     }
 

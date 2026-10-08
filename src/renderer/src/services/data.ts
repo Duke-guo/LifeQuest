@@ -5,7 +5,8 @@ import type {
   AchievementsFile,
   PlansFile,
   TagsFile,
-  LinksFile
+  LinksFile,
+  SemesterFile
 } from '../../../shared/types'
 
 /**
@@ -44,6 +45,10 @@ export const dataApi = {
 
   readPlans: async (): Promise<PlansFile | null> => (await window.api.readJson('plans')) as PlansFile | null,
   writePlans: (p: PlansFile): Promise<boolean> => window.api.writeJson('plans', plain(p)),
+
+  readSemester: async (): Promise<SemesterFile | null> =>
+    (await window.api.readJson('semester')) as SemesterFile | null,
+  writeSemester: (s: SemesterFile): Promise<boolean> => window.api.writeJson('semester', plain(s)),
 
   readMarkdown: (rel: string): Promise<string> => window.api.readMarkdown(rel),
   writeMarkdown: (rel: string, content: string): Promise<boolean> =>

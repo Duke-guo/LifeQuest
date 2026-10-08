@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useTasksStore } from '../stores/tasks'
 import { usePlansStore } from '../stores/plans'
 import { useJournalIndexStore } from '../stores/journalIndex'
+import { useSemesterStore } from '../stores/semester'
 import {
   eventsFromTasks,
   eventsFromPlans,
@@ -20,6 +21,7 @@ const props = defineProps<{ focusDate?: string }>()
 const tasksStore = useTasksStore()
 const plansStore = usePlansStore()
 const journalIndex = useJournalIndexStore()
+const semesterStore = useSemesterStore()
 
 type Mode = 'day' | 'week' | 'month'
 const mode = ref<Mode>('month')
@@ -29,6 +31,7 @@ onMounted(async () => {
   if (!tasksStore.loaded) await tasksStore.load()
   await plansStore.load()
   await journalIndex.load()
+  await semesterStore.load()
   if (props.focusDate) {
     cursor.value = new Date(props.focusDate)
     mode.value = 'day'
@@ -49,8 +52,30 @@ const visibleRange = computed<[string, string]>(() => {
 
 const events = computed<CalendarEvent[]>(() => {
   const [s, e] = visibleRange.value
-  return [...eventsFromTasks(tasksStore.tasks, s, e), ...eventsFromPlans(plansStore.plans)]
+  return [
+    ...eventsFromTasks(tasksStore.tasks, s, e, semesterStore.noClassDates),
+    ...eventsFromPlans(plansStore.plans)
+  ]
 })
+
+/** 格子底部颜色：上课 / 考试 / 放假 / 学期外 */
+const PHASE_LABEL: Record<string, string> = {
+  class: '上课',
+  exam: '考试周',
+  holiday: '放假',
+  before: '开学前',
+  after: '学期结束',
+  unknown: ''
+}
+
+const PHASE_CLASS: Record<string, string> = {
+  class: 'p-class',
+  exam: 'p-exam',
+  holiday: 'p-holiday',
+  before: 'p-out',
+  after: 'p-out',
+  unknown: 'p-out'
+}
 
 function eventsOn(date: string): CalendarEvent[] {
   return events.value
@@ -182,6 +207,9 @@ const title = computed(() => {
         >
           <div class="cell-head">
             <span class="day">{{ c.day || '' }}</span>
+            <span v-if="c.inMonth && semesterStore.weekOf(c.date)" class="wk">
+              第{{ semesterStore.weekOf(c.date) }}周
+            </span>
             <span
               v-if="c.inMonth && journalIndex.on(c.date)?.weather"
               class="wx"
@@ -193,7 +221,7 @@ const title = computed(() => {
           </div>
           <div v-if="c.inMonth" class="dots">
             <span
-              v-for="e in eventsOn(c.date).slice(0, 4)"
+              v-for="e in eventsOn(c.date).slice(0, 3)"
               :key="e.id"
               class="dot"
               :class="`k-${e.kind}`"
@@ -201,7 +229,15 @@ const title = computed(() => {
             >
               {{ e.time ? e.time + ' ' : '' }}{{ e.title }}
             </span>
-            <span v-if="eventsOn(c.date).length > 4" class="more">+{{ eventsOn(c.date).length - 4 }}</span>
+            <span v-if="eventsOn(c.date).length > 3" class="more">+{{ eventsOn(c.date).length - 3 }}</span>
+          </div>
+          <div
+            v-if="c.inMonth"
+            class="phase-bar"
+            :class="PHASE_CLASS[semesterStore.phaseOf(c.date)]"
+            :title="`${PHASE_LABEL[semesterStore.phaseOf(c.date)]}${semesterStore.holidayOn(c.date) ? '：' + semesterStore.holidayOn(c.date)!.name : ''}`"
+          >
+            {{ semesterStore.holidayOn(c.date)?.name ?? PHASE_LABEL[semesterStore.phaseOf(c.date)] }}
           </div>
         </div>
       </div>
@@ -225,6 +261,7 @@ const title = computed(() => {
         >
           <div class="wc-head">
             <span class="wc-date">{{ d.slice(5) }}</span>
+            <span v-if="semesterStore.weekOf(d)" class="wk">第{{ semesterStore.weekOf(d) }}周</span>
             <span
               v-if="journalIndex.on(d)?.mood"
               class="wc-mood"
@@ -370,13 +407,15 @@ const title = computed(() => {
   gap: 6px;
 }
 .cell {
-  min-height: 96px;
+  min-height: 118px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface);
   padding: 6px;
   overflow: hidden;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
   transition: transform 0.15s ease, border-color 0.15s ease;
 }
 .cell:hover {
@@ -406,6 +445,39 @@ const title = computed(() => {
 .day {
   font-size: 0.82rem;
   color: var(--text-2);
+}
+.wk {
+  font-size: 0.64rem;
+  color: var(--text-3);
+  background: var(--surface-2);
+  padding: 0 4px;
+  border-radius: 5px;
+  margin-left: auto;
+  margin-right: 4px;
+}
+.phase-bar {
+  margin-top: auto;
+  height: 15px;
+  border-radius: 4px;
+  font-size: 0.62rem;
+  line-height: 15px;
+  text-align: center;
+  color: #fff;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.p-class {
+  background: rgba(217, 138, 43, 0.72);
+}
+.p-exam {
+  background: rgba(217, 80, 80, 0.8);
+}
+.p-holiday {
+  background: rgba(85, 168, 159, 0.8);
+}
+.p-out {
+  background: var(--surface-2);
+  color: var(--text-3);
 }
 .wx {
   display: inline-flex;

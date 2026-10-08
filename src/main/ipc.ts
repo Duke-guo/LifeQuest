@@ -30,6 +30,7 @@ export async function setupIpc(): Promise<void> {
   JSON_FILES.achievements = join(paths.config, 'achievements.json')
   JSON_FILES.tags = join(paths.config, 'tags.json')
   JSON_FILES.links = join(paths.config, 'links.json')
+  JSON_FILES.semester = join(paths.config, 'semester.json')
   JSON_FILES.tasks = join(paths.tasks, 'tasks.json')
   JSON_FILES.plans = join(paths.plans, 'plans.json')
   register()
@@ -42,6 +43,9 @@ const AI_PROMPT = `你是一个日程识别助手。请阅读这张图片（可�
 - weekday 表示星期几，1=周一 … 7=周日。课表类图片请务必填 weekday。
 - date 只在图片里出现具体日期时才填，否则填 null。
 - importance 取 1-5 的整数。无法确定的字段填 null。`
+
+const CALENDAR_PROMPT = ''
+void CALENDAR_PROMPT
 
 /** 单次 POST 尝试（用 Node 原生 https，走主进程自己的 socket） */
 function postJsonOnce(
@@ -124,8 +128,7 @@ async function postJson(
   throw lastError ?? new Error('请求失败')
 }
 
-function register(): void {
-  ipcMain.handle('data:root', () => dataRoot)
+function register(): void {  ipcMain.handle('data:root', () => dataRoot)
 
   ipcMain.handle('data:readJson', (_e, key: string) => {
     const file = JSON_FILES[key]
@@ -215,7 +218,9 @@ function register(): void {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${ai.apiKey}`
         },
-        reqBody
+        reqBody,
+        60000,
+        2
       )
       console.log('[ai] HTTP', status, `${((Date.now() - started) / 1000).toFixed(1)}s`)
       if (status < 200 || status >= 300) {

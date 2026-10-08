@@ -94,6 +94,22 @@ async function seedDefaults(paths: DataPaths): Promise<void> {
     [join(paths.config, 'achievements.json'), { schemaVersion: CURRENT_SCHEMA_VERSION, achievements: [] }],
     [join(paths.config, 'tags.json'), { schemaVersion: CURRENT_SCHEMA_VERSION, tags: [] }],
     [join(paths.config, 'links.json'), { schemaVersion: CURRENT_SCHEMA_VERSION, links: [] }],
+    [
+      join(paths.config, 'semester.json'),
+      {
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+        name: '2026 秋季学期',
+        start: '2026-09-07',
+        teachingEnd: '2026-12-27',
+        examStart: '2026-12-28',
+        examEnd: '2027-01-10',
+        holidays: [
+          { id: 'h-1', name: '中秋节', start: '2026-09-25', end: '2026-09-25', noClass: true },
+          { id: 'h-2', name: '国庆节', start: '2026-10-01', end: '2026-10-07', noClass: true },
+          { id: 'h-3', name: '元旦', start: '2027-01-01', end: '2027-01-01', noClass: true }
+        ]
+      }
+    ],
     [join(paths.tasks, 'tasks.json'), { schemaVersion: CURRENT_SCHEMA_VERSION, tasks: [] }],
     [join(paths.plans, 'plans.json'), { schemaVersion: CURRENT_SCHEMA_VERSION, plans: [] }]
   ]

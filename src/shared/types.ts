@@ -186,6 +186,31 @@ export interface PlansFile {
   plans: Plan[]
 }
 
+// ===================== 学期 / 校历（属于「计划」范畴） =====================
+export interface SemesterHoliday {
+  id: string
+  name: string
+  start: string
+  end: string
+  /** 是否停课（课表类重复任务在这些日期不出现） */
+  noClass: boolean
+}
+
+export interface Semester {
+  schemaVersion: number
+  name: string
+  /** 开学日（第 1 周周一） */
+  start: string
+  /** 教学最后一天（之后进入复习/考试周） */
+  teachingEnd: string
+  /** 期末考试区间 */
+  examStart: string
+  examEnd: string
+  holidays: SemesterHoliday[]
+}
+
+export type SemesterFile = Semester
+
 // ===================== 日历事件（B6 / B7 / B9 / B13） =====================
 export type CalendarEventKind = 'task' | 'schedule' | 'plan' | 'journal'
 
