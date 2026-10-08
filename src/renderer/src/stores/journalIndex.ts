@@ -10,6 +10,8 @@ export interface JournalIndexEntry {
   mood: Mood | null
   tags: string[]
   hasContent: boolean
+  /** 正文首行摘要（供首页「最近日记」用） */
+  preview: string
 }
 
 function toArr(v: unknown): string[] {
@@ -29,12 +31,17 @@ export const useJournalIndexStore = defineStore('journalIndex', () => {
       const date = f.replace(/\.md$/, '')
       const raw = await dataApi.readMarkdown(`journal/${f}`)
       const { meta, body } = parseFrontMatter(raw)
+      const firstLine = body
+        .split('\n')
+        .map((l) => l.replace(/^#+\s*/, '').trim())
+        .find((l) => l.length > 0)
       out.push({
         date,
         weather: (meta.weather as Weather) || null,
         mood: (meta.mood as Mood) || null,
         tags: toArr(meta.tags),
-        hasContent: body.trim().length > 0
+        hasContent: body.trim().length > 0,
+        preview: firstLine ? (firstLine.length > 46 ? `${firstLine.slice(0, 46)}…` : firstLine) : ''
       })
     }
     out.sort((a, b) => (a.date < b.date ? -1 : 1))

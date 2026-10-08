@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useTasksStore } from '../stores/tasks'
-import { usePlansStore } from '../stores/plans'
 import { useJournalIndexStore } from '../stores/journalIndex'
 import { useSemesterStore } from '../stores/semester'
 import { useGamificationStore } from '../stores/gamification'
@@ -16,7 +15,6 @@ import type { Task } from '../../../shared/types'
 const emit = defineEmits<{ navigate: [key: string]; openJournal: [date: string] }>()
 
 const tasksStore = useTasksStore()
-const plansStore = usePlansStore()
 const journalIndex = useJournalIndexStore()
 const semesterStore = useSemesterStore()
 const gStore = useGamificationStore()
@@ -25,7 +23,6 @@ const editing = ref<Task | null>(null)
 
 onMounted(async () => {
   if (!tasksStore.loaded) await tasksStore.load()
-  await plansStore.load()
   await journalIndex.load()
   await semesterStore.load()
   await gStore.refresh()
@@ -134,6 +131,9 @@ const weekDays = computed(() => {
 })
 
 const weekHours = computed(() => weekDays.value.reduce((s, d) => s + d.hours, 0))
+
+/** 最近写过的日记（倒序） */
+const recentJournals = computed(() => [...journalIndex.entries].reverse().slice(0, 5))
 
 /** 接下来 14 天里的重要事项 */
 const upcoming = computed(() => {
@@ -274,6 +274,29 @@ async function toggleTask(t: Task): Promise<void> {
         </section>
       </div>
     </div>
+
+    <!-- 最近日记（全宽，写得多了就自然填满页面） -->
+    <section v-if="recentJournals.length" class="card recent">
+      <div class="card-head">
+        <h3>最近日记</h3>
+        <span class="card-sub">点一条继续写</span>
+      </div>
+      <div
+        v-for="j in recentJournals"
+        :key="j.date"
+        class="jr"
+        :class="{ today: j.date === today }"
+        @click="emit('openJournal', j.date)"
+      >
+        <span class="jr-date">{{ j.date.slice(5) }}</span>
+        <span class="jr-icons">
+          <AppIcon v-if="j.weather" :name="j.weather" :size="13" />
+          <AppIcon v-if="j.mood" :name="`mood-${j.mood}`" :size="13" />
+        </span>
+        <span class="jr-text">{{ j.preview || '（还没写内容）' }}</span>
+        <span v-if="j.date === today" class="jr-flag">今天</span>
+      </div>
+    </section>
 
     <TaskEditModal v-if="editing" :task="editing" @close="editing = null" />
   </div>
@@ -475,5 +498,45 @@ async function toggleTask(t: Task): Promise<void> {
 .none {
   color: var(--text-3);
   font-size: 0.86rem;
+}
+.recent {
+  margin-top: 1.1rem;
+}
+.jr {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.42rem 0.5rem;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 0.86rem;
+}
+.jr:hover {
+  background: var(--surface-2);
+}
+.jr-date {
+  font-family: var(--font-num);
+  font-weight: 700;
+  color: var(--text-3);
+  min-width: 3.1rem;
+}
+.jr-icons {
+  display: inline-flex;
+  gap: 0.2rem;
+  color: var(--text-3);
+}
+.jr-text {
+  flex: 1;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.jr-flag {
+  font-size: 0.7rem;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 0 5px;
 }
 </style>
