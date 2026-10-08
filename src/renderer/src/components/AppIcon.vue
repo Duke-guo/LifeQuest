@@ -14,7 +14,15 @@ defineProps<{ name: string; size?: number }>()
     stroke-linejoin="round"
     aria-hidden="true"
   >
-    <template v-if="name === 'tasks'">
+    <template v-if="name === 'home'">
+      <path d="M3.5 10.5 12 3.5l8.5 7" />
+      <path d="M5.5 9.5V20.5h13V9.5" />
+      <path d="M10 20.5v-6h4v6" />
+    </template>
+    <template v-else-if="name === 'back'">
+      <path d="M15 5.5 8.5 12l6.5 6.5" />
+    </template>
+    <template v-else-if="name === 'tasks'">
       <path d="M9 5h10M9 12h10M9 19h10" />
       <path d="M4 5l1 1 1.5-1.5M4 12l1 1 1.5-1.5M4 19l1 1 1.5-1.5" />
     </template>

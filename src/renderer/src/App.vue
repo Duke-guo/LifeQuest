@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import HomeView from './views/HomeView.vue'
 import TasksView from './views/TasksView.vue'
 import CalendarView from './views/CalendarView.vue'
 import NotesView from './views/NotesView.vue'
@@ -13,12 +14,14 @@ import RadialMenu from './components/RadialMenu.vue'
 import GuideDrawer from './components/GuideDrawer.vue'
 import GuideModal from './components/GuideModal.vue'
 import ReminderBanner from './components/ReminderBanner.vue'
+import AppIcon from './components/AppIcon.vue'
 import { useTasksStore } from './stores/tasks'
 import { useSettingsStore } from './stores/settings'
 import { useJournalStore } from './stores/journal'
 import { applyTheme } from './utils/theme'
 
 type View =
+  | 'home'
   | 'tasks'
   | 'calendar'
   | 'notes'
@@ -28,7 +31,21 @@ type View =
   | 'graph'
   | 'questmap'
 
-const active = ref<View>('tasks')
+const VIEW_NAMES: Record<View, string> = {
+  home: '首页',
+  tasks: '任务',
+  calendar: '日历',
+  notes: '笔记',
+  journal: '日记',
+  plans: '计划',
+  seasons: '赛季',
+  graph: '知识地图',
+  questmap: '主线地图'
+}
+
+const active = ref<View>('home')
+/** 浏览历史，供“返回”使用；最多保留 30 步 */
+const backStack = ref<View[]>([])
 const showSettings = ref(false)
 const showGuide = ref(false)
 const focusDate = ref<string | undefined>(undefined)
@@ -37,24 +54,61 @@ const tasksStore = useTasksStore()
 const settingsStore = useSettingsStore()
 const journalStore = useJournalStore()
 
+const canGoBack = computed(() => backStack.value.length > 0)
+const backTarget = computed(() =>
+  backStack.value.length ? VIEW_NAMES[backStack.value[backStack.value.length - 1]] : ''
+)
+
 onMounted(async () => {
   await settingsStore.load()
   applyTheme(settingsStore.settings?.theme)
   await tasksStore.load()
+  window.addEventListener('keydown', onKey)
 })
 
-function switchView(key: string): void {
+onUnmounted(() => window.removeEventListener('keydown', onKey))
+
+function pushHistory(): void {
+  backStack.value.push(active.value)
+  if (backStack.value.length > 30) backStack.value.shift()
+}
+
+/** 切到某个视图；record=false 用于“返回”自身 */
+function go(key: View, record = true): void {
+  if (key === active.value) return
+  if (record) pushHistory()
   focusDate.value = undefined
-  active.value = key as View
+  active.value = key
+}
+
+function switchView(key: string): void {
+  go(key as View)
+}
+
+function goBack(): void {
+  const prev = backStack.value.pop()
+  if (!prev) return
+  focusDate.value = undefined
+  active.value = prev
+}
+
+function onKey(e: KeyboardEvent): void {
+  // Alt + ← / Ctrl + ← 返回上一页
+  if ((e.altKey || e.ctrlKey) && e.key === 'ArrowLeft') {
+    e.preventDefault()
+    goBack()
+  }
 }
 
 async function openJournal(date: string): Promise<void> {
   await journalStore.load(date)
+  if (active.value !== 'journal') pushHistory()
   focusDate.value = undefined
   active.value = 'journal'
 }
 
 function openCalendar(date: string): void {
+  if (active.value !== 'calendar') pushHistory()
   focusDate.value = date
   active.value = 'calendar'
 }
@@ -70,7 +124,19 @@ function onTeleport(date: string, target: 'journal' | 'calendar'): void {
     <GuideDrawer @open-settings="showSettings = true" @open-guide="showGuide = true" />
 
     <main class="content">
-      <TasksView v-if="active === 'tasks'" />
+      <transition name="back-fade">
+        <button v-if="canGoBack" class="back-btn" :title="`回到${backTarget}`" @click="goBack">
+          <AppIcon name="back" :size="17" />
+          <span>返回{{ backTarget }}</span>
+        </button>
+      </transition>
+
+      <HomeView
+        v-if="active === 'home'"
+        @navigate="switchView"
+        @open-journal="openJournal"
+      />
+      <TasksView v-else-if="active === 'tasks'" />
       <CalendarView
         v-else-if="active === 'calendar'"
         :focus-date="focusDate"
@@ -101,5 +167,35 @@ function onTeleport(date: string, target: 'journal' | 'calendar'): void {
   max-width: 1120px;
   margin: 0 auto;
   padding: 5rem 2rem 7rem;
+}
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-bottom: 1.1rem;
+  padding: 0.34rem 0.85rem 0.34rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    transform 0.15s;
+}
+.back-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  transform: translateX(-2px);
+}
+.back-fade-enter-active,
+.back-fade-leave-active {
+  transition: opacity 0.18s ease;
+}
+.back-fade-enter-from,
+.back-fade-leave-to {
+  opacity: 0;
 }
 </style>

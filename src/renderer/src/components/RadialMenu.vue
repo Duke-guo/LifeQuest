@@ -8,6 +8,7 @@ const open = ref(false)
 const selected = ref(0)
 
 const items = [
+  { key: 'home', label: '首页', icon: 'home' },
   { key: 'tasks', label: '任务', icon: 'tasks' },
   { key: 'calendar', label: '日历', icon: 'calendar' },
   { key: 'notes', label: '笔记', icon: 'notes' },

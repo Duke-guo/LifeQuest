@@ -57,11 +57,14 @@ function createWindow(): void {
             await new Promise((r) => setTimeout(r, 250))
           }
           if (process.env.LIFEQUEST_VIEW) {
-            const view = process.env.LIFEQUEST_VIEW
-            await mainWindow.webContents.executeJavaScript(`document.querySelector('.fab')?.click()`)
-            await new Promise((r) => setTimeout(r, 700))
-            const clickResult = await mainWindow.webContents.executeJavaScript(
-              `(async () => {
+            // 支持逗号分隔的多个视图，用于验证「切页 → 返回」链路
+            for (const view of process.env.LIFEQUEST_VIEW.split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)) {
+              await mainWindow.webContents.executeJavaScript(`document.querySelector('.fab')?.click()`)
+              await new Promise((r) => setTimeout(r, 700))
+              const clickResult = await mainWindow.webContents.executeJavaScript(
+                `(async () => {
                 const view = ${JSON.stringify(view)}
                 const core = document.querySelector('.core')
                 if (core && (core.textContent || '').includes(view)) { core.click(); return 'core' }
@@ -72,9 +75,10 @@ function createWindow(): void {
                 document.querySelector('.core')?.click()
                 return 'ring->core'
               })()`
-            )
-            console.log('navigate:', view, '->', clickResult)
-            await new Promise((r) => setTimeout(r, 900))
+              )
+              console.log('navigate:', view, '->', clickResult)
+              await new Promise((r) => setTimeout(r, 900))
+            }
           }
           if (process.env.LIFEQUEST_CLICK) {
             const labels = process.env.LIFEQUEST_CLICK.split(',').map((s) => s.trim()).filter(Boolean)
@@ -178,6 +182,15 @@ function createWindow(): void {
                 const bgs = [...new Set(cells.map((c) => getComputedStyle(c).backgroundColor))]
                 out += '[格子 ' + cells.length + ' 个，不同底色 ' + bgs.length + ' 种]\\n'
                 out += bgs.slice(0, 10).join('  ') + '\\n'
+                out +=
+                  cells
+                    .map(
+                      (c) =>
+                        (c.querySelector('.day')?.textContent || c.className.slice(0, 6)).trim() +
+                        '=' +
+                        getComputedStyle(c).backgroundColor
+                    )
+                    .join(' ') + '\\n'
               }
               out += document.body.innerText
               const tas = [...document.querySelectorAll('textarea')].map((t) => t.value).filter((v) => v)

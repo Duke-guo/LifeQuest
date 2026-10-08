@@ -3,41 +3,45 @@ import type { Mood, Weather } from '../../../shared/types'
 /**
  * 日历格子的配色算法
  *
- *   色相(Hue)        ← 忙碌程度：冷灰 → 绿 → 黄 → 橙 → 红（热力图式）
- *   饱和度(Saturation) ← 心情：好心情更鲜艳，差心情发灰
+ *   色相(Hue)        ← 忙碌程度打底（冷蓝 → 薄荷 → 琥珀 → 橙 → 红 的热力图），
+ *                       再由心情做「大幅偏移」：好心情拉向绿色，差心情拉向冷灰；
+ *                       空闲的周末另给一族淡紫，好和空闲的工作日分开
+ *   饱和度(Saturation) ← 心情：好心情更艳，差心情几乎褪成灰
  *   明度(Lightness)   ← 天气：晴更亮更暖，雨雪更冷更淡
  *
- * 三者相乘得到每天的底色，避免整月一片同色。
+ * 目标：忙但开心（偏绿）和闲但低落（灰）一眼可辨；周末不再留白。
  */
 
 interface BusyStop {
-  /** 时长上限（小时），落在第一个满足的档位 */
   max: number
   tier: string
   hue: number
   sat: number
-  /** 底色明度 */
   light: number
 }
 
 const BUSY_STOPS: BusyStop[] = [
-  { max: 0, tier: '空闲', hue: 214, sat: 14, light: 96 },
-  { max: 2.5, tier: '轻松', hue: 152, sat: 40, light: 92 },
-  { max: 4.5, tier: '一般', hue: 44, sat: 62, light: 90 },
-  { max: 7, tier: '较忙', hue: 24, sat: 74, light: 88 },
-  { max: Infinity, tier: '好忙', hue: 356, sat: 64, light: 86 }
+  { max: 0, tier: '空闲', hue: 205, sat: 34, light: 93 },
+  { max: 2.5, tier: '轻松', hue: 158, sat: 46, light: 91 },
+  { max: 4.5, tier: '一般', hue: 46, sat: 66, light: 89 },
+  { max: 7, tier: '较忙', hue: 20, sat: 78, light: 87 },
+  { max: Infinity, tier: '好忙', hue: 350, sat: 66, light: 85 }
 ]
 
-/** 心情 → 饱和度倍率 */
-const MOOD_SAT: Record<Mood, number> = {
-  great: 1.35,
-  good: 1.15,
-  ok: 0.95,
-  low: 0.7,
-  bad: 0.45
+/** 空闲周末：淡紫，和空闲工作日（淡蓝）区分开 */
+const WEEKEND_STOP: BusyStop = { max: 0, tier: '空闲', hue: 266, sat: 42, light: 93 }
+
+/** 心情：色相拉向哪里、拉多少，以及饱和度/明度调整 */
+const MOOD_ADJ: Record<Mood, { blendTo: number; blend: number; sat: number; light: number }> = {
+  // 好心情：明显偏向绿色
+  great: { blendTo: 138, blend: 0.85, sat: 1.3, light: 2 },
+  good: { blendTo: 156, blend: 0.5, sat: 1.15, light: 1 },
+  ok: { blendTo: 0, blend: 0, sat: 0.95, light: 0 },
+  // 差心情：拉向冷灰并几乎褪色
+  low: { blendTo: 216, blend: 0.45, sat: 0.55, light: -1 },
+  bad: { blendTo: 220, blend: 0.7, sat: 0.2, light: -2 }
 }
 
-/** 天气 → 色相偏移 / 饱和度倍率 / 明度偏移 */
 const WEATHER_ADJ: Record<Weather, { hue: number; sat: number; light: number }> = {
   sunny: { hue: 8, sat: 1.18, light: 2 },
   cloudy: { hue: -2, sat: 0.82, light: -2 },
@@ -49,38 +53,60 @@ const WEATHER_ADJ: Record<Weather, { hue: number; sat: number; light: number }> 
 
 export interface DayColor {
   tier: string
-  /** 格子底色（浅） */
   bg: string
-  /** 忙碌标签底色 */
   chipBg: string
-  /** 忙碌标签文字 */
   chipFg: string
-  /** 左侧/边框强调色 */
   line: string
 }
 
 const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v))
 
+/** 在色相环上走最短路径插值 */
+function mixHue(from: number, to: number, t: number): number {
+  let diff = ((to - from + 540) % 360) - 180
+  diff *= t
+  return ((from + diff) % 360 + 360) % 360
+}
+
+/** 'YYYY-MM-DD' 是周末吗（本地时间，不做时区换算） */
+export function isWeekend(date: string): boolean {
+  const [y, m, d] = date.split('-').map(Number)
+  const wd = new Date(y, m - 1, d).getDay()
+  return wd === 0 || wd === 6
+}
+
 export function computeDayColor(
+  date: string,
   hours: number,
   count: number,
   mood: Mood | null | undefined,
   weather: Weather | null | undefined
 ): DayColor {
-  const stop = BUSY_STOPS.find((s) => hours <= s.max) ?? BUSY_STOPS[BUSY_STOPS.length - 1]
-
   const idle = count === 0
-  const moodF = mood ? MOOD_SAT[mood] : 1
+  const weekend = isWeekend(date)
+  // 空闲的周末 → 淡紫；其余按实际负担着色（周末有课就照样显示忙碌色）
+  const stop =
+    idle && weekend
+      ? WEEKEND_STOP
+      : (BUSY_STOPS.find((s) => hours <= s.max) ?? BUSY_STOPS[BUSY_STOPS.length - 1])
+
+  const m = mood ? MOOD_ADJ[mood] : { blendTo: 0, blend: 0, sat: 1, light: 0 }
   const w = weather ? WEATHER_ADJ[weather] : { hue: 0, sat: 1, light: 0 }
 
-  const hue = ((stop.hue + w.hue) % 360 + 360) % 360
-  const sat = clamp(stop.sat * moodF * w.sat, idle ? 6 : 14, 92)
-  const light = clamp(stop.light + w.light, 80, 97)
+  // 1) 色相：忙碌打底 → 心情大幅偏移 → 天气微调
+  let hue = stop.hue
+  if (m.blend > 0) hue = mixHue(hue, m.blendTo, m.blend)
+  hue = ((hue + w.hue) % 360 + 360) % 360
 
-  // 标签底：同色相、更深一点；文字：再深一档保证对比
-  const chipBg = `hsl(${hue} ${clamp(sat * 0.9, 10, 88)}% ${clamp(light - 12, 62, 86)}%)`
-  const chipFg = `hsl(${hue} ${clamp(sat + 8, 12, 92)}% ${clamp(light - 58, 22, 40)}%)`
-  const line = `hsl(${hue} ${clamp(sat, 12, 90)}% ${clamp(light - 26, 45, 75)}%)`
+  // 2) 饱和度：忙碌档位 × 心情 × 天气（空闲也给一点颜色，不留成灰）
+  const sat = clamp(stop.sat * m.sat * w.sat, 14, 94)
+
+  // 3) 明度
+  const light = clamp(stop.light + m.light + w.light, 78, 97)
+
+  const chipBg = `hsl(${hue} ${clamp(sat * 0.95, 12, 90)}% ${clamp(light - 13, 60, 86)}%)`
+  const chipFg = `hsl(${hue} ${clamp(sat + 10, 14, 94)}% ${clamp(light - 58, 20, 40)}%)`
+  const line = `hsl(${hue} ${clamp(sat, 14, 92)}% ${clamp(light - 26, 42, 74)}%)`
 
   return {
     tier: idle ? '空闲' : stop.tier,

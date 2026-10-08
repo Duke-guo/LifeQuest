@@ -136,7 +136,7 @@ function busyClass(date: string): string {
 /** 每天的颜色：色相=忙碌程度，饱和度=心情，明度=天气 */
 function colorOf(date: string): DayColor {
   const j = journalIndex.on(date)
-  return computeDayColor(loadScore(date), eventsOn(date).length, j?.mood, j?.weather)
+  return computeDayColor(date, loadScore(date), eventsOn(date).length, j?.mood, j?.weather)
 }
 
 async function saveBusy(): Promise<void> {
@@ -731,7 +731,10 @@ async function toggleTask(t: Task): Promise<void> {
 .p-holiday {
   background: rgba(85, 168, 159, 0.8);
 }
-.p-weekend,
+.p-weekend {
+  background: rgba(139, 127, 212, 0.3);
+  color: #5b4fa8;
+}
 .p-out {
   background: var(--surface-2);
   color: var(--text-3);

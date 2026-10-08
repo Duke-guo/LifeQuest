@@ -21,27 +21,29 @@ const FOLDERS = ['config', 'tasks', 'journal', 'notes', 'plans', 'archive', 'ass
 // 例：0 -> 1 时若将来有结构变化，在此登记
 const migrations: Record<number, (data: Record<string, unknown>) => Record<string, unknown>> = {}
 
+/** 从 startDir 起向上找已存在的 LifeQuest-Data（最多 4 层） */
+function findExistingRoot(startDir: string): string | null {
+  let dir = startDir
+  for (let i = 0; i < 4; i++) {
+    const candidate = join(dir, 'LifeQuest-Data')
+    if (existsSync(candidate)) return candidate
+    const parent = dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  return null
+}
+
 export function defaultDataRoot(): string {
   // 便携版：数据放在便携 exe 同级目录
   if (process.env.PORTABLE_EXECUTABLE_DIR) {
     return join(process.env.PORTABLE_EXECUTABLE_DIR, 'LifeQuest-Data')
   }
-  if (app.isPackaged) {
-    const exeDir = dirname(app.getPath('exe'))
-    // 从 exe 所在目录向上找已存在的 LifeQuest-Data：
-    // 这样把程序放在工作区子目录（如 app/）时，数据仍落在工作区根目录
-    let dir = exeDir
-    for (let i = 0; i < 4; i++) {
-      const candidate = join(dir, 'LifeQuest-Data')
-      if (existsSync(candidate)) return candidate
-      const parent = dirname(dir)
-      if (parent === dir) break
-      dir = parent
-    }
-    return join(exeDir, 'LifeQuest-Data')
-  }
-  // 开发模式：放在项目目录（D 盘工作区）
-  return join(app.getAppPath(), 'LifeQuest-Data')
+  // 从程序所在目录向上找已存在的 LifeQuest-Data：
+  // 这样把程序放在工作区子目录（如 app/）时，数据仍落在工作区根目录；
+  // 开发时（electron out/main/index.js）也不会另开一份 out/main/LifeQuest-Data
+  const startDir = app.isPackaged ? dirname(app.getPath('exe')) : app.getAppPath()
+  return findExistingRoot(startDir) ?? join(startDir, 'LifeQuest-Data')
 }
 
 export function resolveDataRoot(): string {
