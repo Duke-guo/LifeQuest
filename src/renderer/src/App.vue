@@ -12,6 +12,7 @@ import SettingsView from './views/SettingsView.vue'
 import RadialMenu from './components/RadialMenu.vue'
 import GuideDrawer from './components/GuideDrawer.vue'
 import GuideModal from './components/GuideModal.vue'
+import ReminderBanner from './components/ReminderBanner.vue'
 import { useTasksStore } from './stores/tasks'
 import { useSettingsStore } from './stores/settings'
 import { useJournalStore } from './stores/journal'
@@ -84,6 +85,8 @@ function onTeleport(date: string, target: 'journal' | 'calendar'): void {
     </main>
 
     <RadialMenu @select="switchView" />
+
+    <ReminderBanner />
 
     <GuideModal v-if="showGuide" @close="showGuide = false" />
     <SettingsView v-if="showSettings" @close="showSettings = false" />
