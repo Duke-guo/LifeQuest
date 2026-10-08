@@ -22,7 +22,8 @@ const FOLDERS = ['config', 'tasks', 'journal', 'notes', 'plans', 'archive', 'ass
 const migrations: Record<number, (data: Record<string, unknown>) => Record<string, unknown>> = {}
 
 export function defaultDataRoot(): string {
-  return join(app.getPath('documents'), 'LifeQuest')
+  // 数据默认存在应用目录（D 盘工作区）下的 LifeQuest-Data 文件夹
+  return join(app.getAppPath(), 'LifeQuest-Data')
 }
 
 export function resolveDataRoot(): string {

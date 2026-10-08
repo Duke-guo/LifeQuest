@@ -3,6 +3,7 @@ out/
 dist/
 .npm-cache/
 .electron-cache/
+LifeQuest-Data/
 *.log
 .DS_Store
 Thumbs.db
