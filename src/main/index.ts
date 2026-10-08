@@ -70,7 +70,8 @@ function createWindow(): void {
           console.log('screenshot saved:', process.env.LIFEQUEST_SCREENSHOT)
           const text = await mainWindow.webContents.executeJavaScript(
             `(() => {
-              let out = document.body.innerText
+              let out = '[theme=' + document.documentElement.dataset.theme + ' bg=' + getComputedStyle(document.body).backgroundColor + ' radial=' + document.querySelectorAll('.radial-item').length + ' avatar=' + document.querySelectorAll('.avatar').length + ']\\n'
+              out += document.body.innerText
               const tas = [...document.querySelectorAll('textarea')].map((t) => t.value).filter((v) => v)
               const ins = [...document.querySelectorAll('input')].map((i) => i.value).filter((v) => v)
               if (tas.length) out += '\\n--- TEXTAREA ---\\n' + tas.join('\\n')

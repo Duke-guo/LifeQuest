@@ -65,29 +65,33 @@ async function create(): Promise<void> {
   flex-wrap: wrap;
 }
 .form-row input {
-  padding: 0.5rem 0.6rem;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
 }
 .form-row input[placeholder] {
   flex: 1;
   min-width: 200px;
 }
 .add-btn {
-  padding: 0.5rem 1rem;
+  padding: 0.55rem 1rem;
   background: var(--accent);
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   font-weight: 600;
 }
 .notes-input {
   width: 100%;
   margin-top: 0.6rem;
-  padding: 0.5rem 0.6rem;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
 }
 .plan-row {
   display: flex;
@@ -99,21 +103,21 @@ async function create(): Promise<void> {
 }
 .plan-meta {
   font-size: 0.85rem;
-  color: #888;
+  color: var(--text-2);
   margin-top: 0.2rem;
 }
 .plan-notes {
   font-size: 0.85rem;
-  color: #666;
+  color: var(--text-2);
   margin-top: 0.2rem;
 }
 .del {
   border: none;
   background: none;
-  color: #ccc;
+  color: var(--text-3);
   cursor: pointer;
 }
 .del:hover {
-  color: #ef4444;
+  color: var(--danger);
 }
 </style>

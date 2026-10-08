@@ -157,10 +157,11 @@ async function generateReview(season: Season): Promise<void> {
 
 <style scoped>
 .level {
-  font-size: 1.3rem;
+  font-size: 1.4rem;
   font-weight: 700;
   color: var(--accent);
   margin: 0.5rem 0 1rem;
+  font-family: var(--font-display);
 }
 .achievements {
   display: grid;
@@ -168,15 +169,15 @@ async function generateReview(season: Season): Promise<void> {
   gap: 0.75rem;
 }
 .badge {
-  border: 1px solid #eee;
-  border-radius: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
   padding: 0.75rem;
-  color: #bbb;
+  color: var(--text-3);
 }
 .badge.achieved {
   border-color: var(--accent);
   background: var(--accent-soft);
-  color: #92400e;
+  color: var(--accent-text);
 }
 .badge-name {
   font-weight: 600;
@@ -196,12 +197,12 @@ async function generateReview(season: Season): Promise<void> {
 }
 .season-meta {
   font-size: 0.85rem;
-  color: #888;
+  color: var(--text-2);
   margin-top: 0.2rem;
 }
 .season-cats {
   font-size: 0.8rem;
-  color: #666;
+  color: var(--text-2);
   margin-top: 0.2rem;
 }
 .season-actions {
@@ -212,23 +213,23 @@ async function generateReview(season: Season): Promise<void> {
 .review-btn {
   padding: 0.4rem 0.7rem;
   border: 1px solid var(--accent);
-  background: #fff;
+  background: var(--surface);
   color: var(--accent);
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   font-size: 0.85rem;
 }
 .del {
   border: none;
   background: none;
-  color: #ccc;
+  color: var(--text-3);
   cursor: pointer;
 }
 .del:hover {
-  color: #ef4444;
+  color: var(--danger);
 }
 .msg {
-  color: #16a34a;
+  color: var(--success);
   font-size: 0.85rem;
   margin-top: 0.5rem;
 }
@@ -241,20 +242,22 @@ async function generateReview(season: Season): Promise<void> {
 }
 .form-row input,
 .form-row select {
-  padding: 0.5rem 0.6rem;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
 }
 .form-row input[placeholder] {
   flex: 1;
   min-width: 200px;
 }
 .add-btn {
-  padding: 0.5rem 1rem;
+  padding: 0.55rem 1rem;
   background: var(--accent);
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   font-weight: 600;
 }

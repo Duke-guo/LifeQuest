@@ -66,7 +66,7 @@ async function seedDefaults(paths: DataPaths): Promise<void> {
       {
         schemaVersion: CURRENT_SCHEMA_VERSION,
         dataRoot: paths.root,
-        theme: 'default',
+        theme: 'light',
         animations: { enabled: true },
         gamification: { enabled: true, level: 'light' }
       }

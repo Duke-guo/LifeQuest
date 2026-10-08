@@ -119,11 +119,11 @@ async function remove(id: string): Promise<void> {
 
 <style scoped>
 .new-btn {
-  padding: 0.5rem 1rem;
+  padding: 0.55rem 1rem;
   background: var(--accent);
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   font-weight: 600;
 }
@@ -142,8 +142,8 @@ async function remove(id: string): Promise<void> {
 .note-row {
   position: relative;
   padding: 0.6rem 0.75rem;
-  background: #fff;
-  border-radius: 8px;
+  background: var(--surface);
+  border-radius: 10px;
   cursor: pointer;
   border: 1px solid transparent;
 }
@@ -160,13 +160,13 @@ async function remove(id: string): Promise<void> {
 }
 .note-meta {
   font-size: 0.75rem;
-  color: #999;
+  color: var(--text-2);
   margin-top: 0.2rem;
   display: flex;
   justify-content: space-between;
 }
 .stars {
-  color: #f59e0b;
+  color: var(--accent);
 }
 .del {
   position: absolute;
@@ -174,12 +174,12 @@ async function remove(id: string): Promise<void> {
   right: 0.4rem;
   border: none;
   background: none;
-  color: #ccc;
+  color: var(--text-3);
   cursor: pointer;
   font-size: 0.8rem;
 }
 .del:hover {
-  color: #ef4444;
+  color: var(--danger);
 }
 .note-editor {
   flex: 1;
@@ -190,10 +190,12 @@ async function remove(id: string): Promise<void> {
 }
 .title-input {
   padding: 0.6rem 0.75rem;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
   font-size: 1.05rem;
   font-weight: 600;
+  background: var(--surface);
+  color: var(--text);
 }
 .meta-row {
   display: flex;
@@ -202,29 +204,33 @@ async function remove(id: string): Promise<void> {
 }
 .meta-row label {
   font-size: 0.85rem;
-  color: #666;
+  color: var(--text-2);
   display: flex;
   align-items: center;
   gap: 0.4rem;
 }
 .meta-row input {
   padding: 0.4rem 0.5rem;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
 }
 .meta-row select {
   padding: 0.4rem 0.5rem;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
 }
 .content-input {
   width: 100%;
   min-height: 48vh;
   padding: 0.9rem;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
   font: inherit;
   line-height: 1.7;
   resize: vertical;
@@ -234,11 +240,11 @@ async function remove(id: string): Promise<void> {
   justify-content: flex-end;
 }
 .save-btn {
-  padding: 0.5rem 1.5rem;
+  padding: 0.55rem 1.5rem;
   background: var(--accent);
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   font-weight: 600;
 }

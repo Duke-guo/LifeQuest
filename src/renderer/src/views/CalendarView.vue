@@ -18,11 +18,7 @@ const cells = computed(() => {
     list.push({ date: '', day: 0, inMonth: false })
   }
   for (let d = 1; d <= daysInMonth; d++) {
-    list.push({
-      date: toDateStr(new Date(year.value, month.value, d)),
-      day: d,
-      inMonth: true
-    })
+    list.push({ date: toDateStr(new Date(year.value, month.value, d)), day: d, inMonth: true })
   }
   return list
 })
@@ -76,14 +72,16 @@ function next(): void {
   gap: 0.5rem;
 }
 .nav button {
-  width: 28px;
-  height: 28px;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  background: #fff;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
   cursor: pointer;
 }
 .nav .label {
+  font-family: var(--font-display);
   font-weight: 600;
 }
 .weekdays {
@@ -92,7 +90,7 @@ function next(): void {
   gap: 6px;
   margin-bottom: 6px;
   text-align: center;
-  color: #999;
+  color: var(--text-2);
   font-size: 0.8rem;
 }
 .grid {
@@ -102,9 +100,9 @@ function next(): void {
 }
 .cell {
   min-height: 92px;
-  border: 1px solid #eee;
-  border-radius: 8px;
-  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
   padding: 6px;
   overflow: hidden;
 }
@@ -118,7 +116,7 @@ function next(): void {
 }
 .day {
   font-size: 0.8rem;
-  color: #888;
+  color: var(--text-2);
 }
 .tasks {
   margin-top: 4px;
@@ -129,7 +127,7 @@ function next(): void {
 .dot {
   font-size: 0.72rem;
   background: var(--accent-soft);
-  color: #92400e;
+  color: var(--accent-text);
   border-radius: 4px;
   padding: 1px 5px;
   white-space: nowrap;

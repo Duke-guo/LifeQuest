@@ -6,10 +6,10 @@ import type { TaskType } from '../../../shared/types'
 
 const store = useTasksStore()
 
-const sections: Array<{ type: TaskType; label: string; emoji: string }> = [
-  { type: 'main', label: '主线任务', emoji: '🗡' },
-  { type: 'side', label: '支线任务', emoji: '🧭' },
-  { type: 'daily', label: '每日任务', emoji: '🔁' }
+const sections: Array<{ type: TaskType; label: string; icon: string }> = [
+  { type: 'main', label: '主线任务', icon: 'tasks' },
+  { type: 'side', label: '支线任务', icon: 'plans' },
+  { type: 'daily', label: '每日任务', icon: 'calendar' }
 ]
 </script>
 
@@ -18,14 +18,14 @@ const sections: Array<{ type: TaskType; label: string; emoji: string }> = [
     <header class="view-head">
       <div>
         <h2>任务</h2>
-        <p class="sub">主线 · 支线 · 每日 —— 重要度越高越醒目</p>
+        <p class="sub">重要度越高，宝石越醒目</p>
       </div>
     </header>
 
     <TaskForm />
 
     <section v-for="s in sections" :key="s.type" class="task-section">
-      <h3>{{ s.emoji }} {{ s.label }}</h3>
+      <h3>{{ s.label }}</h3>
       <div v-if="store.byType(s.type).length === 0" class="empty">暂无任务</div>
       <TaskItem
         v-for="t in store.byType(s.type)"
@@ -43,8 +43,8 @@ const sections: Array<{ type: TaskType; label: string; emoji: string }> = [
   margin-bottom: 1.5rem;
 }
 .task-section h3 {
-  font-size: 0.95rem;
-  color: #666;
-  margin-bottom: 0.5rem;
+  font-size: 1rem;
+  color: var(--text-2);
+  margin-bottom: 0.6rem;
 }
 </style>

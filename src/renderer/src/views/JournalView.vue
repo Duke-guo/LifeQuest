@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useJournalStore } from '../stores/journal'
 import { toDateStr } from '../utils/helpers'
 
@@ -53,29 +53,31 @@ function isToday(): boolean {
   gap: 0.5rem;
 }
 .date-nav button {
-  width: 28px;
-  height: 28px;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  background: #fff;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
   cursor: pointer;
 }
 .date-nav .today-btn {
   width: auto;
-  padding: 0 0.6rem;
+  padding: 0 0.7rem;
 }
 .date {
   font-weight: 600;
-  min-width: 120px;
+  min-width: 130px;
   text-align: center;
 }
 .journal-editor {
   width: 100%;
   min-height: 60vh;
   padding: 1rem;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
   font: inherit;
   line-height: 1.7;
   resize: vertical;
@@ -84,11 +86,11 @@ function isToday(): boolean {
   margin-top: 1rem;
 }
 .save-btn {
-  padding: 0.5rem 1.5rem;
+  padding: 0.55rem 1.5rem;
   background: var(--accent);
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   font-weight: 600;
 }
