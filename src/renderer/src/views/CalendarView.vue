@@ -33,7 +33,8 @@ onMounted(async () => {
   await journalIndex.load()
   await semesterStore.load()
   if (props.focusDate) {
-    cursor.value = new Date(props.focusDate)
+    const [fy, fm, fd] = props.focusDate.split('-').map(Number)
+    cursor.value = new Date(fy, fm - 1, fd)
     mode.value = 'day'
   }
 })
@@ -58,11 +59,12 @@ const events = computed<CalendarEvent[]>(() => {
   ]
 })
 
-/** 格子底部颜色：上课 / 考试 / 放假 / 学期外 */
+/** 格子底部颜色：上课 / 考试 / 放假 / 周末 / 学期外 */
 const PHASE_LABEL: Record<string, string> = {
   class: '上课',
   exam: '考试周',
   holiday: '放假',
+  weekend: '周末',
   before: '开学前',
   after: '学期结束',
   unknown: ''
@@ -72,9 +74,15 @@ const PHASE_CLASS: Record<string, string> = {
   class: 'p-class',
   exam: 'p-exam',
   holiday: 'p-holiday',
+  weekend: 'p-weekend',
   before: 'p-out',
   after: 'p-out',
   unknown: 'p-out'
+}
+
+/** 当天是否有实际安排（周末有课时仍算上课） */
+function dayPhase(date: string): string {
+  return semesterStore.phaseOf(date, eventsOn(date).length > 0)
 }
 
 function eventsOn(date: string): CalendarEvent[] {
@@ -159,8 +167,9 @@ function goToday(): void {
 }
 
 function drillTo(date: string): void {
-  cursor.value = new Date(date)
-  mode.value = mode.value === 'month' ? 'day' : 'day'
+  const [y, m, d] = date.split('-').map(Number)
+  cursor.value = new Date(y, m - 1, d)
+  mode.value = 'day'
 }
 
 const title = computed(() => {
@@ -234,10 +243,10 @@ const title = computed(() => {
           <div
             v-if="c.inMonth"
             class="phase-bar"
-            :class="PHASE_CLASS[semesterStore.phaseOf(c.date)]"
-            :title="`${PHASE_LABEL[semesterStore.phaseOf(c.date)]}${semesterStore.holidayOn(c.date) ? '：' + semesterStore.holidayOn(c.date)!.name : ''}`"
+            :class="PHASE_CLASS[dayPhase(c.date)]"
+            :title="`${PHASE_LABEL[dayPhase(c.date)]}${semesterStore.holidayOn(c.date) ? '：' + semesterStore.holidayOn(c.date)!.name : ''}`"
           >
-            {{ semesterStore.holidayOn(c.date)?.name ?? PHASE_LABEL[semesterStore.phaseOf(c.date)] }}
+            {{ semesterStore.holidayOn(c.date)?.name ?? PHASE_LABEL[dayPhase(c.date)] }}
           </div>
         </div>
       </div>
@@ -474,6 +483,10 @@ const title = computed(() => {
 }
 .p-holiday {
   background: rgba(85, 168, 159, 0.8);
+}
+.p-weekend {
+  background: var(--surface-2);
+  color: var(--text-3);
 }
 .p-out {
   background: var(--surface-2);

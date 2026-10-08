@@ -18,7 +18,13 @@ function emptySemester(): Semester {
 }
 
 /** 某天在学期中的角色 */
-export type DayPhase = 'before' | 'class' | 'exam' | 'holiday' | 'after' | 'unknown'
+export type DayPhase = 'before' | 'class' | 'exam' | 'holiday' | 'weekend' | 'after' | 'unknown'
+
+/** 一律按本地时区解析（new Date('2026-10-15') 会按 UTC 解析，导致差 8 小时） */
+function parseLocal(iso: string): Date {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
 
 function addDaysIso(iso: string, n: number): string {
   const [y, m, d] = iso.split('-').map(Number)
@@ -80,14 +86,20 @@ export const useSemesterStore = defineStore('semester', () => {
     return Math.floor(diffDays(date, s) / 7) + 1
   }
 
-  /** 某天的角色：开学前 / 上课 / 考试 / 放假 / 学期结束 */
-  function phaseOf(date: string): DayPhase {
+  /** 某天的角色：开学前 / 上课 / 考试 / 放假 / 周末 / 学期结束
+   *  @param hasEvents 当天是否有实际安排（周末有课时仍标为上课） */
+  function phaseOf(date: string, hasEvents = false): DayPhase {
     const sem = semester.value
     if (!sem.start) return 'unknown'
     if (date < sem.start) return 'before'
     if (noClassDates.value.has(date)) return 'holiday'
     if (sem.examStart && sem.examEnd && date >= sem.examStart && date <= sem.examEnd) return 'exam'
-    if (date <= sem.teachingEnd) return 'class'
+    if (date <= sem.teachingEnd) {
+      const wd = parseLocal(date).getDay()
+      const isWeekend = wd === 0 || wd === 6
+      if (isWeekend && !hasEvents) return 'weekend'
+      return 'class'
+    }
     if (sem.examEnd && date <= sem.examEnd) return 'exam'
     return 'after'
   }

@@ -52,9 +52,9 @@ function expandRepeat(
 ): string[] {
   const out: string[] = []
   const hardEnd = repeatUntil && repeatUntil < until ? repeatUntil : until
-  const fromDate = new Date(from)
-  const end = new Date(hardEnd)
-  let cur = new Date(first)
+  const fromDate = parseLocal(from)
+  const end = parseLocal(hardEnd)
+  let cur = parseLocal(first)
   let guard = 0
   // 先推进到区间附近，避免从很久以前开始循环
   while (cur < fromDate && guard < 4000) {
@@ -120,8 +120,8 @@ export function eventsFromPlans(plans: Plan[], maxDays = 180): CalendarEvent[] {
   const out: CalendarEvent[] = []
   for (const p of plans) {
     if (!p.start || !p.end) continue
-    let cur = new Date(p.start)
-    const end = new Date(p.end)
+    let cur = parseLocal(p.start)
+    const end = parseLocal(p.end)
     let n = 0
     while (cur <= end && n < maxDays) {
       out.push({
@@ -143,6 +143,14 @@ function toStr(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
+}
+
+/** 一律按「本地时区」解析日期字符串。
+ *  注意：new Date('2026-10-15') 是按 UTC 解析的（= 北京时间 08:00），
+ *  与本地构造的 00:00 比较会差 8 小时，导致跳过/漏掉一整个周期。 */
+function parseLocal(iso: string): Date {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d)
 }
 
 // ===================== 日程冲突检测（B15） =====================

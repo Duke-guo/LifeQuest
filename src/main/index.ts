@@ -99,6 +99,21 @@ function createWindow(): void {
                 await new Promise((res) => setTimeout(res, 1500))
                 continue
               }
+              if (label.startsWith('@day:')) {
+                const n = JSON.stringify(label.slice(5))
+                const r = await mainWindow.webContents.executeJavaScript(
+                  `(() => {
+                    const cells = [...document.querySelectorAll('.cell')]
+                    const target = cells.find((c) => (c.querySelector('.day')?.textContent || '').trim() === ${n})
+                    if (!target) return 'day not found'
+                    target.click()
+                    return 'clicked day ' + ${n}
+                  })()`
+                )
+                console.log('click day ->', r)
+                await new Promise((res) => setTimeout(res, 1200))
+                continue
+              }
               if (label.startsWith('@wait:')) {
                 const ms = Number(label.slice(6)) || 1000
                 await new Promise((res) => setTimeout(res, ms))
