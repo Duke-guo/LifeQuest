@@ -9,8 +9,11 @@ import {
   listFiles,
   exportData,
   deleteFile,
+  saveImageFile,
+  readImageFile,
   type DataPaths
 } from './dataStore'
+import type { Settings } from '../shared/types'
 
 let dataRoot = ''
 let paths: DataPaths
@@ -23,10 +26,17 @@ export async function setupIpc(): Promise<void> {
   JSON_FILES.settings = join(paths.config, 'settings.json')
   JSON_FILES.seasons = join(paths.config, 'seasons.json')
   JSON_FILES.achievements = join(paths.config, 'achievements.json')
+  JSON_FILES.tags = join(paths.config, 'tags.json')
+  JSON_FILES.links = join(paths.config, 'links.json')
   JSON_FILES.tasks = join(paths.tasks, 'tasks.json')
   JSON_FILES.plans = join(paths.plans, 'plans.json')
   register()
 }
+
+const AI_PROMPT = `你是一个日程识别助手。请阅读这张图片（可能是课表、通知、日程截图、手写便签、海报等），提取其中所有事项，只输出 JSON 数组，不要输出任何解释文字。
+每个元素格式：
+{"title":"事项标题","date":"YYYY-MM-DD 或 null","startTime":"HH:mm 或 null","endTime":"HH:mm 或 null","location":"地点或 null","importance":3}
+importance 取 1-5 的整数。无法确定的字段填 null。`
 
 function register(): void {
   ipcMain.handle('data:root', () => dataRoot)
@@ -44,21 +54,34 @@ function register(): void {
     return true
   })
 
-  ipcMain.handle('data:readMarkdown', (_e, rel: string) => {
-    return readMarkdownFile(safeResolve(rel))
-  })
+  ipcMain.handle('data:readMarkdown', (_e, rel: string) => readMarkdownFile(safeResolve(rel)))
 
   ipcMain.handle('data:writeMarkdown', async (_e, rel: string, content: string) => {
     await writeMarkdownFile(safeResolve(rel), content)
     return true
   })
 
-  ipcMain.handle('data:list', (_e, relDir: string, ext?: string) => {
-    return listFiles(safeResolve(relDir), ext)
-  })
+  ipcMain.handle('data:list', (_e, relDir: string, ext?: string) => listFiles(safeResolve(relDir), ext))
 
   ipcMain.handle('data:delete', async (_e, rel: string) => {
     await deleteFile(safeResolve(rel))
+    return true
+  })
+
+  // ---- 图片（B11）----
+  ipcMain.handle('data:saveImage', async (_e, dataUrl: string) => {
+    const m = /^data:image\/(\w+);base64,/.exec(dataUrl)
+    const raw = m ? m[1].toLowerCase() : 'png'
+    const ext = raw === 'jpeg' ? 'jpg' : raw
+    const filename = `img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+    await saveImageFile(paths.assets, filename, dataUrl)
+    return filename
+  })
+
+  ipcMain.handle('data:readImage', (_e, filename: string) => readImageFile(join(paths.assets, filename)))
+
+  ipcMain.handle('data:deleteImage', async (_e, filename: string) => {
+    await deleteFile(join(paths.assets, filename))
     return true
   })
 
@@ -72,6 +95,50 @@ function register(): void {
     const dest = join(res.filePaths[0], `LifeQuest-export-${stamp}`)
     await exportData(dataRoot, dest)
     return { canceled: false, dest }
+  })
+
+  // ---- AI 识图（B17）----
+  ipcMain.handle('ai:imageToTasks', async (_e, dataUrl: string) => {
+    const settings = await readJsonFile<Settings>(JSON_FILES.settings)
+    const ai = settings?.ai
+    if (!ai || !ai.enabled || !ai.apiKey) {
+      return { ok: false, error: '尚未配置 AI：请到「设置 → AI 识图」填写 API Key 并启用。' }
+    }
+    try {
+      const res = await fetch(`${ai.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${ai.apiKey}`
+        },
+        body: JSON.stringify({
+          model: ai.model,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: AI_PROMPT },
+                { type: 'image_url', image_url: { url: dataUrl } }
+              ]
+            }
+          ]
+        })
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        return { ok: false, error: `接口返回 ${res.status}：${text.slice(0, 300)}` }
+      }
+      const json = (await res.json()) as {
+        choices?: Array<{ message?: { content?: string } }>
+      }
+      const content = json.choices?.[0]?.message?.content ?? ''
+      const match = content.match(/\[[\s\S]*\]/)
+      if (!match) return { ok: false, error: `未能从返回中解析出任务列表：${content.slice(0, 200)}` }
+      const items = JSON.parse(match[0])
+      return { ok: true, items }
+    } catch (e) {
+      return { ok: false, error: `请求失败：${(e as Error).message}` }
+    }
   })
 }
 

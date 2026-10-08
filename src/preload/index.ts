@@ -11,7 +11,18 @@ const api = {
     ipcRenderer.invoke('data:writeMarkdown', rel, content),
   listFiles: (dir: string, ext?: string): Promise<string[]> => ipcRenderer.invoke('data:list', dir, ext),
   deleteFile: (rel: string): Promise<boolean> => ipcRenderer.invoke('data:delete', rel),
-  exportData: (): Promise<{ canceled: boolean; dest?: string }> => ipcRenderer.invoke('data:export')
+  exportData: (): Promise<{ canceled: boolean; dest?: string }> => ipcRenderer.invoke('data:export'),
+
+  // 图片
+  saveImage: (dataUrl: string): Promise<string> => ipcRenderer.invoke('data:saveImage', dataUrl),
+  readImage: (filename: string): Promise<string> => ipcRenderer.invoke('data:readImage', filename),
+  deleteImage: (filename: string): Promise<boolean> => ipcRenderer.invoke('data:deleteImage', filename),
+
+  // AI 识图
+  aiImageToTasks: (
+    dataUrl: string
+  ): Promise<{ ok: boolean; items?: unknown[]; error?: string }> =>
+    ipcRenderer.invoke('ai:imageToTasks', dataUrl)
 }
 
 contextBridge.exposeInMainWorld('api', api)

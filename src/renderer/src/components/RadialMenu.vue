@@ -13,10 +13,12 @@ const items = [
   { key: 'notes', label: '笔记', icon: 'notes' },
   { key: 'journal', label: '日记', icon: 'journal' },
   { key: 'plans', label: '计划', icon: 'plans' },
-  { key: 'seasons', label: '赛季', icon: 'seasons' }
+  { key: 'seasons', label: '赛季', icon: 'seasons' },
+  { key: 'graph', label: '知识地图', icon: 'sparkle' },
+  { key: 'questmap', label: '主线地图', icon: 'map' }
 ]
 
-const RADIUS = 140
+const RADIUS = 152
 
 const slots = computed(() => {
   const n = items.length

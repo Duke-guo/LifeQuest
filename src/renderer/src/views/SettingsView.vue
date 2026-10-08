@@ -4,17 +4,32 @@ import { useSettingsStore } from '../stores/settings'
 import { dataApi } from '../services/data'
 import { applyTheme, type Theme } from '../utils/theme'
 import AppIcon from '../components/AppIcon.vue'
+import type { Settings } from '../../../shared/types'
 
 const emit = defineEmits<{ close: [] }>()
 
 const store = useSettingsStore()
 const dataRoot = ref('')
 const exportMsg = ref('')
+const aiSaved = ref('')
 
 onMounted(async () => {
   await store.load()
   dataRoot.value = await dataApi.getRoot()
+  if (store.settings && !store.settings.ai) {
+    store.settings.ai = {
+      enabled: false,
+      baseUrl: 'https://api.deepseek.com',
+      apiKey: '',
+      model: 'deepseek-chat'
+    }
+    await store.save()
+  }
 })
+
+function ai(): NonNullable<Settings['ai']> | null {
+  return store.settings?.ai ?? null
+}
 
 async function setTheme(theme: Theme): Promise<void> {
   if (!store.settings) return
@@ -33,6 +48,19 @@ async function toggleGamification(): Promise<void> {
   if (!store.settings) return
   store.settings.gamification.enabled = !store.settings.gamification.enabled
   await store.save()
+}
+
+async function toggleAi(): Promise<void> {
+  const a = ai()
+  if (!a) return
+  a.enabled = !a.enabled
+  await store.save()
+}
+
+async function saveAi(): Promise<void> {
+  await store.save()
+  aiSaved.value = '已保存'
+  window.setTimeout(() => (aiSaved.value = ''), 2000)
 }
 
 async function doExport(): Promise<void> {
@@ -65,14 +93,6 @@ async function doExport(): Promise<void> {
       </section>
 
       <section class="card">
-        <h3>数据</h3>
-        <p class="row">数据位置：<code>{{ dataRoot }}</code></p>
-        <p class="row hint">数据即普通文件（Markdown + JSON），可随时复制、备份、迁移。</p>
-        <button class="btn" @click="doExport">导出数据（复制到指定文件夹）</button>
-        <p v-if="exportMsg" class="msg">{{ exportMsg }}</p>
-      </section>
-
-      <section class="card">
         <h3>游戏化（轻 · 不焦虑）</h3>
         <label class="toggle">
           <input
@@ -92,6 +112,55 @@ async function doExport(): Promise<void> {
         </label>
         <p class="hint">无排行榜、无连续打卡惩罚、无强制任务。</p>
       </section>
+
+      <section class="card">
+        <h3>AI 识图</h3>
+        <label class="toggle">
+          <input type="checkbox" :checked="ai()?.enabled ?? false" @change="toggleAi" />
+          启用 AI 识图（在「任务」页上传截图自动生成任务）
+        </label>
+        <div class="field">
+          <span>接口地址</span>
+          <input
+            :value="ai()?.baseUrl"
+            placeholder="https://api.deepseek.com"
+            @input="ai() && (ai()!.baseUrl = ($event.target as HTMLInputElement).value)"
+          />
+        </div>
+        <div class="field">
+          <span>API Key</span>
+          <input
+            :value="ai()?.apiKey"
+            type="password"
+            placeholder="sk-..."
+            @input="ai() && (ai()!.apiKey = ($event.target as HTMLInputElement).value)"
+          />
+        </div>
+        <div class="field">
+          <span>模型</span>
+          <input
+            :value="ai()?.model"
+            placeholder="deepseek-chat"
+            @input="ai() && (ai()!.model = ($event.target as HTMLInputElement).value)"
+          />
+        </div>
+        <p class="hint">
+          需要所用模型支持图片输入（vision）。Key 只保存在本地
+          <code>config/settings.json</code>，不会上传到其它地方。
+        </p>
+        <div class="ai-actions">
+          <button class="btn" @click="saveAi">保存 AI 设置</button>
+          <span v-if="aiSaved" class="msg">{{ aiSaved }}</span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>数据</h3>
+        <p class="row">数据位置：<code>{{ dataRoot }}</code></p>
+        <p class="row hint">数据即普通文件（Markdown + JSON + 图片），可随时复制、备份、迁移。</p>
+        <button class="btn" @click="doExport">导出数据（复制到指定文件夹）</button>
+        <p v-if="exportMsg" class="msg">{{ exportMsg }}</p>
+      </section>
     </div>
   </div>
 </template>
@@ -109,7 +178,7 @@ async function doExport(): Promise<void> {
 }
 .settings-card {
   position: relative;
-  width: min(520px, 92vw);
+  width: min(560px, 92vw);
   max-height: 88vh;
   overflow-y: auto;
   background: var(--bg);
@@ -151,6 +220,27 @@ h3 {
   color: #fff;
   border-color: var(--accent);
 }
+.field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.field span {
+  width: 74px;
+  flex-shrink: 0;
+  font-size: 0.82rem;
+  color: var(--text-2);
+}
+.field input {
+  flex: 1;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.85rem;
+}
 .row {
   margin: 0.4rem 0;
   word-break: break-all;
@@ -165,6 +255,11 @@ h3 {
   font-weight: 600;
   margin-top: 0.5rem;
 }
+.ai-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
 .msg {
   color: var(--success);
   font-size: 0.85rem;
@@ -176,10 +271,12 @@ h3 {
   gap: 0.5rem;
   padding: 0.4rem 0;
   cursor: pointer;
+  font-size: 0.9rem;
 }
 .hint {
   color: var(--text-3);
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   margin-top: 0.5rem;
+  line-height: 1.6;
 }
 </style>

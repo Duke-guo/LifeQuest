@@ -1,6 +1,6 @@
 import { app } from 'electron'
 import { promises as fs, existsSync } from 'fs'
-import { join, dirname } from 'path'
+import { join, dirname, extname } from 'path'
 
 const CURRENT_SCHEMA_VERSION = 1
 
@@ -73,11 +73,14 @@ async function seedDefaults(paths: DataPaths): Promise<void> {
         dataRoot: paths.root,
         theme: 'light',
         animations: { enabled: true },
-        gamification: { enabled: true, level: 'light' }
+        gamification: { enabled: true, level: 'light' },
+        ai: { enabled: false, baseUrl: 'https://api.deepseek.com', apiKey: '', model: 'deepseek-chat' }
       }
     ],
     [join(paths.config, 'seasons.json'), { schemaVersion: CURRENT_SCHEMA_VERSION, seasons: [] }],
     [join(paths.config, 'achievements.json'), { schemaVersion: CURRENT_SCHEMA_VERSION, achievements: [] }],
+    [join(paths.config, 'tags.json'), { schemaVersion: CURRENT_SCHEMA_VERSION, tags: [] }],
+    [join(paths.config, 'links.json'), { schemaVersion: CURRENT_SCHEMA_VERSION, links: [] }],
     [join(paths.tasks, 'tasks.json'), { schemaVersion: CURRENT_SCHEMA_VERSION, tasks: [] }],
     [join(paths.plans, 'plans.json'), { schemaVersion: CURRENT_SCHEMA_VERSION, plans: [] }]
   ]
@@ -150,4 +153,30 @@ export async function deleteFile(filePath: string): Promise<void> {
   if (existsSync(filePath)) {
     await fs.rm(filePath, { force: true })
   }
+}
+
+const MIME: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  bmp: 'image/bmp'
+}
+
+/** 保存 base64 图片到 assets，返回文件名 */
+export async function saveImageFile(assetsDir: string, filename: string, dataUrl: string): Promise<string> {
+  await fs.mkdir(assetsDir, { recursive: true })
+  const base64 = dataUrl.replace(/^data:[^;]+;base64,/, '')
+  await fs.writeFile(join(assetsDir, filename), Buffer.from(base64, 'base64'))
+  return filename
+}
+
+/** 读取图片为 data URL，供渲染进程显示 */
+export async function readImageFile(filePath: string): Promise<string> {
+  if (!existsSync(filePath)) return ''
+  const buf = await fs.readFile(filePath)
+  const ext = extname(filePath).slice(1).toLowerCase()
+  const mime = MIME[ext] ?? 'application/octet-stream'
+  return `data:${mime};base64,${buf.toString('base64')}`
 }

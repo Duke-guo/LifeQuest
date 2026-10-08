@@ -17,5 +17,11 @@ interface Window {
     listFiles: (dir: string, ext?: string) => Promise<string[]>
     deleteFile: (rel: string) => Promise<boolean>
     exportData: () => Promise<{ canceled: boolean; dest?: string }>
+    saveImage: (dataUrl: string) => Promise<string>
+    readImage: (filename: string) => Promise<string>
+    deleteImage: (filename: string) => Promise<boolean>
+    aiImageToTasks: (
+      dataUrl: string
+    ) => Promise<{ ok: boolean; items?: unknown[]; error?: string }>
   }
 }

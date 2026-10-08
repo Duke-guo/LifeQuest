@@ -1,20 +1,25 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { dataApi } from '../services/data'
-import { parseFrontMatter, serializeFrontMatter } from '../utils/frontmatter'
+import { parseFrontMatter, serializeFrontMatter, type FrontMatter } from '../utils/frontmatter'
 import { uid, toDateStr } from '../utils/helpers'
+import type { EntityRef } from '../../../shared/types'
 
 export interface Note {
   id: string
   title: string
+  category: string
   date: string
   theme: string[]
   rating: number
   tags: string[]
+  tagIds: string[]
+  images: string[]
+  links: EntityRef[]
   content: string
 }
 
-function toArray(v: unknown): string[] {
+function toArr(v: unknown): string[] {
   if (v === undefined || v === null) return []
   if (Array.isArray(v)) return v.map(String)
   return [String(v)]
@@ -26,6 +31,12 @@ export const useNotesStore = defineStore('notes', () => {
 
   const current = computed(() => notes.value.find((n) => n.id === currentId.value) ?? null)
 
+  const categories = computed(() => {
+    const set = new Set<string>()
+    for (const n of notes.value) if (n.category.trim()) set.add(n.category.trim())
+    return [...set]
+  })
+
   async function list(): Promise<void> {
     const files = await dataApi.listFiles('notes', '.md')
     const loaded: Note[] = []
@@ -36,10 +47,14 @@ export const useNotesStore = defineStore('notes', () => {
       loaded.push({
         id: f.replace(/\.md$/, ''),
         title: (meta.title as string) || firstLine || '未命名笔记',
+        category: (meta.category as string) || '',
         date: (meta.date as string) || '',
-        theme: toArray(meta.theme),
+        theme: toArr(meta.theme),
         rating: typeof meta.rating === 'number' ? meta.rating : 3,
-        tags: toArray(meta.tags),
+        tags: toArr(meta.tags),
+        tagIds: toArr(meta.tagIds),
+        images: toArr(meta.images),
+        links: [],
         content: body
       })
     }
@@ -50,10 +65,14 @@ export const useNotesStore = defineStore('notes', () => {
     const note: Note = {
       id: uid(),
       title: '未命名笔记',
+      category: '',
       date: toDateStr(new Date()),
       theme: [],
       rating: 3,
       tags: [],
+      tagIds: [],
+      images: [],
+      links: [],
       content: ''
     }
     notes.value.unshift(note)
@@ -62,15 +81,17 @@ export const useNotesStore = defineStore('notes', () => {
   }
 
   async function persist(note: Note): Promise<void> {
-    const meta = {
+    const meta: FrontMatter = {
       title: note.title,
       date: note.date,
-      theme: note.theme,
-      rating: note.rating,
-      tags: note.tags
+      rating: note.rating
     }
-    const out = serializeFrontMatter(meta, note.content)
-    await dataApi.writeMarkdown(`notes/${note.id}.md`, out)
+    if (note.category) meta.category = note.category
+    if (note.theme.length) meta.theme = note.theme
+    if (note.tags.length) meta.tags = note.tags
+    if (note.tagIds.length) meta.tagIds = note.tagIds
+    if (note.images.length) meta.images = note.images
+    await dataApi.writeMarkdown(`notes/${note.id}.md`, serializeFrontMatter(meta, note.content))
   }
 
   async function saveCurrent(patch: Partial<Note>): Promise<void> {
@@ -86,5 +107,9 @@ export const useNotesStore = defineStore('notes', () => {
     if (currentId.value === id) currentId.value = null
   }
 
-  return { notes, currentId, current, list, create, saveCurrent, remove }
+  function byId(id: string): Note | undefined {
+    return notes.value.find((n) => n.id === id)
+  }
+
+  return { notes, currentId, current, categories, list, create, persist, saveCurrent, remove, byId }
 })

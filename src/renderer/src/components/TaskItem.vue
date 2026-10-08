@@ -7,53 +7,91 @@ const props = defineProps<{ task: Task }>()
 const emit = defineEmits<{ toggle: []; remove: [] }>()
 
 const done = computed(() => props.task.status === 'done')
+const isSchedule = computed(() => props.task.kind === 'schedule')
+
+/** 指针角度：越重要越指向上方 */
+const needleAngle = computed(() => (3 - props.task.importance) * 34)
+
+const GEM_COLOR: Record<number, string> = {
+  5: 'var(--imp5)',
+  4: 'var(--imp4)',
+  3: '#d9a52b',
+  2: '#55a89f',
+  1: 'var(--text-3)'
+}
+
+const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text-3)')
 </script>
 
 <template>
-  <div class="task-item" :class="[`imp-${task.importance}`, { done }]">
-    <button class="check" @click="emit('toggle')">{{ done ? '✓' : '' }}</button>
-    <span class="gem"><span class="gem-num">{{ task.importance }}</span></span>
-    <div class="body">
-      <div class="title">{{ task.title }}</div>
-      <div v-if="task.due || task.description" class="meta">
-        <span v-if="task.due" class="due">{{ formatDate(task.due) }}</span>
-        <span v-if="task.description" class="desc">{{ task.description }}</span>
+  <div class="quest" :class="[`imp-${task.importance}`, { done, schedule: isSchedule }]">
+    <div class="inner">
+      <button class="check" @click="emit('toggle')">{{ done ? '✓' : '' }}</button>
+
+      <svg class="dial" viewBox="0 0 40 40" :style="{ '--dial': dialColor }">
+        <circle cx="20" cy="20" r="16.5" class="ring" />
+        <g :transform="`rotate(${needleAngle} 20 20)`">
+          <path d="M20 6.5 L23.4 20 L20 33.5 L16.6 20 Z" class="needle" />
+        </g>
+        <circle cx="20" cy="20" r="2.4" class="hub" />
+      </svg>
+
+      <div class="body">
+        <div class="title">{{ task.title }}</div>
+        <div class="meta">
+          <span v-if="isSchedule && task.startTime" class="pill time">
+            {{ task.startTime }}<template v-if="task.endTime">–{{ task.endTime }}</template>
+          </span>
+          <span v-else-if="task.due" class="pill">{{ formatDate(task.due) }}</span>
+          <span v-if="task.location" class="loc">{{ task.location }}</span>
+          <span v-if="task.description" class="desc">{{ task.description }}</span>
+        </div>
       </div>
+
+      <button class="remove" @click="emit('remove')" title="删除">✕</button>
     </div>
-    <button class="remove" @click="emit('remove')" title="删除">✕</button>
   </div>
 </template>
 
 <style scoped>
-.task-item {
+/* 罗盘风格的“任务旗”：右侧带尖角，非方块 */
+.quest {
+  margin-bottom: 0.5rem;
+  filter: drop-shadow(0 2px 6px rgba(30, 40, 60, 0.1));
+  transition: transform 0.16s ease;
+}
+.quest:hover {
+  transform: translateX(4px);
+}
+.inner {
   display: flex;
   align-items: center;
   gap: 0.7rem;
-  padding: 0.7rem 0.9rem;
-  border-radius: 12px;
+  padding: 0.6rem 1.5rem 0.6rem 0.9rem;
   background: var(--surface);
-  box-shadow: var(--shadow);
-  margin-bottom: 0.5rem;
-  transition: transform 0.15s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%, 7px 50%);
 }
-.task-item:hover {
-  transform: translateY(-1px);
+.quest.done {
+  opacity: 0.45;
 }
-.task-item.done {
-  opacity: 0.42;
-}
-.task-item.done .title {
+.quest.done .title {
   text-decoration: line-through;
+}
+.quest.imp-5 .inner {
+  background: linear-gradient(90deg, rgba(217, 80, 80, 0.1), var(--surface));
+}
+.quest.imp-1 {
+  opacity: 0.72;
 }
 
 .check {
-  width: 24px;
-  height: 24px;
+  width: 23px;
+  height: 23px;
   border-radius: 50%;
   border: 2px solid var(--border);
   background: none;
   color: #fff;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -61,74 +99,28 @@ const done = computed(() => props.task.status === 'done')
   flex-shrink: 0;
   padding: 0;
 }
-.task-item.done .check {
+.quest.done .check {
   background: var(--accent);
   border-color: var(--accent);
 }
 
-.gem {
-  width: 22px;
-  height: 22px;
-  border-radius: 4px;
-  transform: rotate(45deg);
-  background: var(--gem, #999);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.dial {
+  width: 30px;
+  height: 30px;
   flex-shrink: 0;
-  box-shadow: inset -2px -2px 3px rgba(0, 0, 0, 0.16), inset 2px 2px 3px rgba(255, 255, 255, 0.28);
 }
-.gem-num {
-  transform: rotate(-45deg);
-  font-size: 0.66rem;
-  font-weight: 700;
-  color: #fff;
-  line-height: 1;
+.ring {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 1.6;
 }
-
-/* 重要度 → 形状/颜色/大小/装饰 */
-.imp-5 .gem {
-  --gem: var(--imp5);
-  width: 26px;
-  height: 26px;
+.needle {
+  fill: var(--dial);
 }
-.imp-4 .gem {
-  --gem: var(--imp4);
-  width: 23px;
-  height: 23px;
-}
-.imp-3 .gem {
-  --gem: #d9a52b;
-}
-.imp-2 .gem {
-  --gem: #55a89f;
-  width: 19px;
-  height: 19px;
-}
-.imp-1 .gem {
-  --gem: var(--text-3);
-  width: 17px;
-  height: 17px;
-}
-
-.imp-5 {
-  border: 1px solid rgba(217, 80, 80, 0.35);
-  box-shadow: 0 0 0 3px rgba(217, 80, 80, 0.12), var(--shadow);
-}
-.imp-5 .title {
-  font-weight: 700;
-  font-size: 1.06rem;
-}
-.imp-4 .title {
-  font-weight: 650;
-}
-.imp-2 .title {
-  font-weight: 400;
-  color: var(--text-2);
-}
-.imp-1 .title {
-  font-weight: 400;
-  color: var(--text-3);
+.hub {
+  fill: var(--surface);
+  stroke: var(--dial);
+  stroke-width: 1.6;
 }
 
 .body {
@@ -138,19 +130,43 @@ const done = computed(() => props.task.status === 'done')
 .title {
   font-weight: 550;
 }
-.meta {
-  font-size: 0.8rem;
+.quest.imp-5 .title {
+  font-weight: 700;
+  font-size: 1.04rem;
+}
+.quest.imp-2 .title,
+.quest.imp-1 .title {
+  font-weight: 400;
   color: var(--text-2);
-  margin-top: 0.15rem;
+}
+.meta {
   display: flex;
-  gap: 0.75rem;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.15rem;
+  font-size: 0.78rem;
+  color: var(--text-2);
+  flex-wrap: wrap;
+}
+.pill {
+  background: var(--surface-2);
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+.pill.time {
+  background: rgba(91, 141, 239, 0.16);
+  color: #3f6fd0;
+  font-weight: 600;
+}
+.loc {
+  color: var(--text-3);
 }
 .remove {
   background: none;
   border: none;
   color: var(--text-3);
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 .remove:hover {
   color: var(--danger);

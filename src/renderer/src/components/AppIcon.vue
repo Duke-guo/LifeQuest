@@ -66,5 +66,70 @@ defineProps<{ name: string; size?: number }>()
       <rect x="5" y="10.5" width="14" height="9.5" rx="2.2" />
       <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" />
     </template>
+    <template v-else-if="name === 'sunny'">
+      <circle cx="12" cy="12" r="4" />
+      <path
+        d="M12 2.5v2.5M12 19v2.5M2.5 12h2.5M19 12h2.5M5.2 5.2l1.8 1.8M17 17l1.8 1.8M18.8 5.2L17 7M7 17l-1.8 1.8"
+      />
+    </template>
+    <template v-else-if="name === 'cloudy'">
+      <path d="M7.5 18h9a3.5 3.5 0 0 0 .3-7 5 5 0 0 0-9.6-1.2A3.4 3.4 0 0 0 7.5 18z" />
+    </template>
+    <template v-else-if="name === 'rain'">
+      <path d="M7.5 15h9a3.5 3.5 0 0 0 .3-7 5 5 0 0 0-9.6-1.2A3.4 3.4 0 0 0 7.5 15z" />
+      <path d="M9 18l-1 2.5M13 18l-1 2.5M17 18l-1 2.5" />
+    </template>
+    <template v-else-if="name === 'snow'">
+      <path d="M7.5 15h9a3.5 3.5 0 0 0 .3-7 5 5 0 0 0-9.6-1.2A3.4 3.4 0 0 0 7.5 15z" />
+      <path d="M9 18.5v.01M13 19.8v.01M17 18.5v.01" />
+    </template>
+    <template v-else-if="name === 'wind'">
+      <path d="M3.5 9h10a2.5 2.5 0 1 0-2.5-2.5M3.5 13h14a2.5 2.5 0 1 1-2.5 2.5M3.5 17h7" />
+    </template>
+    <template v-else-if="name === 'fog'">
+      <path d="M4 9h16M5.5 13h13M4 17h16" />
+    </template>
+    <template v-else-if="name === 'mood-great'">
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M8.6 13.4c.9 2 2 3 3.4 3s2.5-1 3.4-3z" />
+      <path d="M9.5 9.8v.01M14.5 9.8v.01" />
+    </template>
+    <template v-else-if="name === 'mood-good'">
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M9 13.8c.7 1.3 1.7 1.9 3 1.9s2.3-.6 3-1.9" />
+      <path d="M9.5 9.8v.01M14.5 9.8v.01" />
+    </template>
+    <template v-else-if="name === 'mood-ok'">
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M9.5 14.4h5" />
+      <path d="M9.5 9.8v.01M14.5 9.8v.01" />
+    </template>
+    <template v-else-if="name === 'mood-low'">
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M9 15c.7-1.3 1.7-1.9 3-1.9s2.3.6 3 1.9" />
+      <path d="M9.5 9.8v.01M14.5 9.8v.01" />
+    </template>
+    <template v-else-if="name === 'mood-bad'">
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M8.6 15.4c.9-2 2-3 3.4-3s2.5 1 3.4 3z" />
+      <path d="M9.5 9.8v.01M14.5 9.8v.01" />
+    </template>
+    <template v-else-if="name === 'sparkle'">
+      <path d="M12 3.5l1.7 4.3 4.3 1.7-4.3 1.7L12 15.5l-1.7-4.3L6 9.5l4.3-1.7z" />
+      <path d="M18.5 16l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" />
+    </template>
+    <template v-else-if="name === 'map'">
+      <path d="M3.5 6.5l6-2 5 2 6-2v13l-6 2-5-2-6 2z" />
+      <path d="M9.5 4.5v13M14.5 6.5v13" />
+    </template>
+    <template v-else-if="name === 'image'">
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+      <path d="M3.5 15l4.5-4.5 4 4 3-2.5 5 4.5" />
+      <circle cx="9" cy="9" r="1.4" />
+    </template>
+    <template v-else-if="name === 'camera'">
+      <path d="M4 8.5h3l1.5-2h7L17 8.5h3v10H4z" />
+      <circle cx="12" cy="13" r="3.2" />
+    </template>
   </svg>
 </template>
