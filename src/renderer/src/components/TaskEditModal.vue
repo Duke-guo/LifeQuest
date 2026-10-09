@@ -18,7 +18,8 @@ const seasonsStore = useSeasonsStore()
 const tagsStore = useTagsStore()
 
 const title = ref(props.task.title)
-const kind = ref<TaskKind>(props.task.kind)
+/** 形式由「有没有填时间段」自动决定：填了就按日程处理 */
+const kind = computed<TaskKind>(() => (startTime.value ? 'schedule' : 'task'))
 const type = ref<TaskType>(props.task.type)
 const importance = ref(props.task.importance)
 const due = ref(props.task.due ?? '')
@@ -115,8 +116,8 @@ function removeTag(id: string): void {
       <button class="close" @click="emit('close')"><AppIcon name="close" :size="20" /></button>
       <header class="view-head">
         <div>
-          <h2>编辑{{ kind === 'schedule' ? '日程' : '任务' }}</h2>
-          <p class="sub">改完点保存即可，时间冲突会提前提示</p>
+          <h2>编辑事项</h2>
+          <p class="sub">填了时间段就是「日程」（精确到几点），只填日期就是「任务」（粗略）</p>
         </div>
       </header>
 
@@ -126,13 +127,6 @@ function removeTag(id: string): void {
       </label>
 
       <div class="grid">
-        <label class="field">
-          <span>形式</span>
-          <select v-model="kind">
-            <option value="task">任务（粗略）</option>
-            <option value="schedule">日程（精确时段）</option>
-          </select>
-        </label>
         <label class="field">
           <span>分类</span>
           <select v-model="type">
@@ -165,31 +159,36 @@ function removeTag(id: string): void {
           <span>{{ kind === 'schedule' ? '日期' : '截止日期' }}</span>
           <input v-model="due" type="date" />
         </label>
-        <template v-if="kind === 'schedule'">
-          <label class="field">
-            <span>开始</span>
-            <input v-model="startTime" type="time" />
-          </label>
-          <label class="field">
-            <span>结束</span>
-            <input v-model="endTime" type="time" />
-          </label>
-          <label class="field">
-            <span>地点</span>
-            <input v-model="location" />
-          </label>
-          <label class="field">
-            <span>提前提醒</span>
-            <select v-model.number="remindMinutes">
-              <option :value="0">不提醒</option>
-              <option :value="5">5 分钟</option>
-              <option :value="15">15 分钟</option>
-              <option :value="30">30 分钟</option>
-              <option :value="60">1 小时</option>
-            </select>
-          </label>
-        </template>
+        <label class="field">
+          <span>开始时间</span>
+          <input v-model="startTime" type="time" />
+        </label>
+        <label class="field">
+          <span>结束时间</span>
+          <input v-model="endTime" type="time" />
+        </label>
+        <label class="field">
+          <span>地点</span>
+          <input v-model="location" placeholder="可选" />
+        </label>
+        <label class="field">
+          <span>提前提醒</span>
+          <select v-model.number="remindMinutes">
+            <option :value="0">不提醒</option>
+            <option :value="5">5 分钟</option>
+            <option :value="15">15 分钟</option>
+            <option :value="30">30 分钟</option>
+            <option :value="60">1 小时</option>
+          </select>
+        </label>
       </div>
+      <p class="kind-hint">
+        {{
+          kind === 'schedule'
+            ? '已填时间段，这条会作为「日程」精确排在日历上。清空开始时间就退回「任务」。'
+            : '只填日期就是「任务」（粗略）；填上开始时间会自动变成「日程」，精确到几点到几点。'
+        }}
+      </p>
 
       <div class="grid">
         <label class="field">
@@ -306,6 +305,12 @@ h2 {
   flex-direction: row;
   align-items: center;
   flex-wrap: wrap;
+}
+.kind-hint {
+  margin: -0.3rem 0 0;
+  font-size: 0.74rem;
+  color: var(--text-3);
+  line-height: 1.6;
 }
 .tag-chip {
   display: inline-flex;

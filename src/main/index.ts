@@ -202,11 +202,12 @@ function createWindow(): void {
                   const sel = '${label}'
                   if (sel.startsWith('.')) {
                     const el = document.querySelector(sel)
-                    // 用 dispatchEvent 而不是 el.click()：SVG 元素没有 click() 方法
                     if (el) {
-                      el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
-                      // 合成事件不会触发「聚焦」这个默认行为，需要显式补上，
-                      // 否则点完输入框再 @type: 会找不到焦点
+                      // HTML 元素用 el.click()：合成事件不会触发「提交表单」这类默认行为；
+                      // SVG 元素没有 click()，退回 dispatchEvent
+                      if (typeof el.click === 'function') el.click()
+                      else el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+                      // 合成点击也不会聚焦，需要显式补上，否则后面 @type: 找不到焦点
                       if (typeof el.focus === 'function') el.focus()
                       return 'clicked(sel)'
                     }

@@ -538,6 +538,11 @@ async function removeTask(t: Task): Promise<void> {
         </div>
       </div>
 
+      <p class="month-tip">
+        滚轮翻周 · 点任意一列进入<b>日视图</b>：可以改<b>这一天的性质</b>（上课 / 周末 / 放假停课 / 考试 / 空白）、
+        增删当天安排、给每件事填上几点到几点，还能一键写这天的日记。
+      </p>
+
       <!-- 横向的日记葡萄藤：串起本周每天的日记，滚轮切到周记 -->
       <JournalVine
         :week-start="weekSummary.start"

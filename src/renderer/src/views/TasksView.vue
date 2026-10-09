@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useTasksStore } from '../stores/tasks'
 import { useSeasonsStore } from '../stores/seasons'
@@ -25,12 +25,13 @@ const confirm = useConfirmStore()
 
 const title = ref('')
 const type = ref<TaskType>('main')
-const kind = ref<TaskKind>('task')
 const importance = ref(3)
 const due = ref(toDateStr(new Date()))
-const startTime = ref('09:00')
-const endTime = ref('10:00')
+const startTime = ref('')
+const endTime = ref('')
 const location = ref('')
+/** 形式由「有没有填开始时间」自动决定：填了就是日程 */
+const kind = computed<TaskKind>(() => (startTime.value ? 'schedule' : 'task'))
 const seasonId = ref('')
 const tagInput = ref('')
 const tagIds = ref<string[]>([])
@@ -189,10 +190,6 @@ async function removeTask(t: Task): Promise<void> {
       </div>
 
       <div class="row">
-        <div class="seg">
-          <button type="button" :class="{ on: kind === 'task' }" @click="kind = 'task'">任务</button>
-          <button type="button" :class="{ on: kind === 'schedule' }" @click="kind = 'schedule'">日程</button>
-        </div>
         <div class="seg type-seg">
           <button
             v-for="(t, key) in ({ main: '主线', side: '支线', daily: '每日' } as Record<TaskType, string>)"
@@ -213,17 +210,18 @@ async function removeTask(t: Task): Promise<void> {
           <option :value="1">1 · 低</option>
         </select>
         <input v-model="due" type="date" :title="kind === 'schedule' ? '日期' : '截止日期'" />
-        <template v-if="kind === 'schedule'">
-          <input v-model="startTime" type="time" title="开始" />
-          <span class="dash">–</span>
-          <input v-model="endTime" type="time" title="结束" />
-          <input v-model="location" class="loc-input" placeholder="地点" />
-        </template>
+        <input v-model="startTime" type="time" :title="kind === 'schedule' ? '开始时间' : '填开始时间即成为日程'" />
+        <span class="dash">–</span>
+        <input v-model="endTime" type="time" title="结束时间" />
+        <input v-model="location" class="loc-input" placeholder="地点（可选）" />
         <select v-model="seasonId">
           <option value="">无赛季</option>
           <option v-for="s in seasonsStore.seasons" :key="s.id" :value="s.id">{{ s.name }}</option>
         </select>
       </div>
+      <p class="form-hint">
+        {{ kind === 'schedule' ? '已填时间 → 会作为「日程」精确排在日历上' : '不填时间就是「任务」（粗略）；填上开始时间会自动变成「日程」' }}
+      </p>
 
       <div class="row repeat-row">
         <label class="inline-field">
@@ -395,6 +393,11 @@ input[type='time'] {
 }
 .tags-row {
   gap: 0.4rem;
+}
+.form-hint {
+  margin: 0.45rem 0 0;
+  font-size: 0.74rem;
+  color: var(--text-3);
 }
 .repeat-row {
   gap: 0.7rem;
