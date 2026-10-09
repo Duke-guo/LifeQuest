@@ -31,11 +31,13 @@ const BUSY_STOPS: BusyStop[] = [
 /**
  * 忙碌档位的唯一判定处（日历格子、周横幅、首页都用它，避免阈值漂移）
  * 刻度参考真实课表：3 节课 ≈ 5.5h → 适中；5 节课 ≈ 9.2h → 较忙。
+ * bump 用于「临近截止还没完成」时把当天档位抬高一档。
  */
-export function busyTier(hours: number, count: number): string {
-  if (count === 0) return '空闲'
-  const stop = BUSY_STOPS.find((s) => hours <= s.max) ?? BUSY_STOPS[BUSY_STOPS.length - 1]
-  return stop.tier
+export function busyTier(hours: number, count: number, bump = 0): string {
+  if (count === 0 && bump === 0) return '空闲'
+  const idx = BUSY_STOPS.findIndex((s) => hours <= s.max)
+  const i = Math.min(BUSY_STOPS.length - 1, (idx < 0 ? BUSY_STOPS.length - 1 : idx) + bump)
+  return BUSY_STOPS[i].tier
 }
 
 /** 空闲周末：淡紫，和空闲工作日（淡蓝）区分开 */
@@ -90,15 +92,21 @@ export function computeDayColor(
   hours: number,
   count: number,
   mood: Mood | null | undefined,
-  weather: Weather | null | undefined
+  weather: Weather | null | undefined,
+  bump = 0
 ): DayColor {
-  const idle = count === 0
+  const idle = count === 0 && bump === 0
   const weekend = isWeekend(date)
+  const baseIdx = BUSY_STOPS.findIndex((s) => hours <= s.max)
+  const idx = Math.min(
+    BUSY_STOPS.length - 1,
+    (baseIdx < 0 ? BUSY_STOPS.length - 1 : baseIdx) + bump
+  )
   // 空闲的周末 → 淡紫；其余按实际负担着色（周末有课就照样显示忙碌色）
   const stop =
     idle && weekend
       ? WEEKEND_STOP
-      : (BUSY_STOPS.find((s) => hours <= s.max) ?? BUSY_STOPS[BUSY_STOPS.length - 1])
+      : BUSY_STOPS[idx]
 
   const m = mood ? MOOD_ADJ[mood] : { blendTo: 0, blend: 0, sat: 1, light: 0 }
   const w = weather ? WEATHER_ADJ[weather] : { hue: 0, sat: 1, light: 0 }

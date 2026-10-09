@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useJournalIndexStore } from '../stores/journalIndex'
 import { useNotesStore } from '../stores/notes'
@@ -132,24 +132,38 @@ interface WeekNode {
   label: string
   short: string
   noteId: string | null
+  /** 相对本周的位置：0 = 本周，-2/-1 过去，+1/+2 将来 */
+  offset: number
 }
 
+/** 以当前周为中心：左两周边（过去）→ 本周 → 右两周（将来），时间向右延伸 */
 const weekNodes = computed<WeekNode[]>(() => {
   const out: WeekNode[] = []
-  for (let i = 0; i < 6; i++) {
-    const start = shiftDate(props.weekStart, -7 * i)
-    const end = shiftDate(props.weekEnd, -7 * i)
+  for (let off = -2; off <= 2; off++) {
+    const start = shiftDate(props.weekStart, 7 * off)
+    const end = shiftDate(props.weekEnd, 7 * off)
     const wk = semesterStore.weekOf(start)
     out.push({
       start,
       end,
-      label: wk ? `第 ${wk} 周` : `${start.slice(5)} 起`,
+      offset: off,
+      label: off === 0 ? `本周 · 第 ${wk ?? '—'} 周` : wk ? `第 ${wk} 周` : `${start.slice(5)} 起`,
       short: wk ? String(wk) : '＋',
       noteId: weeklyNoteOf(start, end)
     })
   }
   return out
 })
+
+/** 离本周越远越小越淡 */
+function nodeScale(offset: number): number {
+  const d = Math.abs(offset)
+  return d === 0 ? 1.32 : d === 1 ? 1 : 0.82
+}
+function nodeOpacity(offset: number): number {
+  const d = Math.abs(offset)
+  return d === 0 ? 1 : d === 1 ? 0.78 : 0.5
+}
 
 function onWheel(e: WheelEvent): void {
   e.preventDefault()
@@ -271,8 +285,8 @@ async function openWeek(w: WeekNode): Promise<void> {
         <div v-for="w in weekNodes" :key="w.start" class="jv-cell">
           <button
             class="jv-node vine-fruit"
-            :class="{ empty: !w.noteId, on: selKey === w.start }"
-            :style="{ '--tilt': tilt(w.start) }"
+            :class="{ empty: !w.noteId, on: selKey === w.start, current: w.offset === 0 }"
+            :style="{ '--tilt': tilt(w.start), '--scale': nodeScale(w.offset), opacity: nodeOpacity(w.offset) }"
             :title="`${w.start} ~ ${w.end}`"
             @click="pick(w.start)"
           >
@@ -380,7 +394,7 @@ async function openWeek(w: WeekNode): Promise<void> {
   font-family: var(--font-num);
   font-weight: 700;
   font-size: 0.92rem;
-  transform: rotate(var(--tilt, 0deg));
+  transform: rotate(var(--tilt, 0deg)) scale(var(--scale, 1));
 }
 /* 没写的：淡虚线圈 + 加号 */
 .jv-node.empty {

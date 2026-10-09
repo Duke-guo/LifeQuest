@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useTasksStore } from '../stores/tasks'
 import { useSeasonsStore } from '../stores/seasons'
@@ -18,7 +18,7 @@ import type { TaskType, TaskKind, Task, RepeatMode, TaskOccurrence } from '../..
 
 const emit = defineEmits<{
   openNote: [id: string]
-  openCalendar: [date: string, mode?: 'day' | 'week']
+  openCalendar: [date: string, mode?: 'day' | 'week', taskId?: string]
 }>()
 
 const store = useTasksStore()
@@ -40,6 +40,7 @@ const seasonId = ref('')
 const tagInput = ref('')
 const tagIds = ref<string[]>([])
 const remindMinutes = ref(0)
+const dueTime = ref('')
 const description = ref('')
 const repeat = ref<RepeatMode>('none')
 const repeatUntil = ref('')
@@ -88,6 +89,7 @@ function buildCandidate(): Partial<Task> {
     id: 'new',
     kind: kind.value,
     due: due.value || null,
+    dueTime: kind.value === 'task' && dueTime.value ? dueTime.value : null,
     startTime: kind.value === 'schedule' ? startTime.value : null,
     endTime: kind.value === 'schedule' ? endTime.value : null
   }
@@ -112,6 +114,7 @@ async function submit(force = false): Promise<void> {
     kind: kind.value,
     importance: importance.value,
     due: due.value || null,
+    dueTime: kind.value === 'task' && dueTime.value ? dueTime.value : null,
     startTime: kind.value === 'schedule' ? startTime.value : null,
     endTime: kind.value === 'schedule' ? endTime.value : null,
     location: location.value.trim() || null,
@@ -175,7 +178,7 @@ async function removeTask(t: Task): Promise<void> {
 /** 跳去日历，定位到这件事所在的（或将来最近的）那一周 */
 function locate(t: Task): void {
   const date = nextOccurrence(t, todayStr, semesterStore.noClassDates) ?? t.due
-  if (date) emit('openCalendar', date, 'week')
+  if (date) emit('openCalendar', date, 'week', t.id)
 }
 </script>
 
@@ -233,6 +236,10 @@ function locate(t: Task): void {
         <input v-model="startTime" type="time" :title="kind === 'schedule' ? '开始时间' : '填开始时间即成为日程'" />
         <span class="dash">–</span>
         <input v-model="endTime" type="time" title="结束时间" />
+        <label v-if="kind === 'task'" class="inline-field" title="只有截止时间的事项：日历上会插一面小旗，留空＝当天 24:00">
+          <span>截止时刻</span>
+          <input v-model="dueTime" type="time" />
+        </label>
         <input v-model="location" class="loc-input" placeholder="地点（可选）" />
         <label class="inline-field">
           <span>提前提醒</span>

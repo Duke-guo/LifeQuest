@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useTasksStore } from '../stores/tasks'
 import { usePlansStore } from '../stores/plans'
 import { useJournalIndexStore } from '../stores/journalIndex'
@@ -17,7 +17,7 @@ import {
 import { toDateStr } from '../utils/helpers'
 import { computeDayColor, busyTier, type DayColor } from '../utils/dayColor'
 import { noteFromTask } from '../utils/noteActions'
-import { nextOccurrence } from '../utils/schedule'
+import { nextOccurrence, deadlinePressure, deadlineTimeOf } from '../utils/schedule'
 import { computeDayGrade, GRADE_TITLE, type DayGrade } from '../utils/dayGrade'
 import AppIcon from '../components/AppIcon.vue'
 import TaskItem from '../components/TaskItem.vue'
@@ -26,8 +26,12 @@ import TaskEditModal from '../components/TaskEditModal.vue'
 import AddHistory from '../components/AddHistory.vue'
 import type { CalendarEvent, Task, DayPhaseOverride } from '../../../shared/types'
 
-const emit = defineEmits<{ openJournal: [date: string]; openNote: [id: string]; openCalendar: [date: string, mode?: 'day' | 'week'] }>()
-const props = defineProps<{ focusDate?: string; focusMode?: 'day' | 'week' }>()
+const emit = defineEmits<{ openJournal: [date: string]; openNote: [id: string]; openCalendar: [date: string, mode?: 'day' | 'week', taskId?: string] }>()
+const props = defineProps<{ focusDate?: string; focusMode?: 'day' | 'week'; focusTaskId?: string }>()
+
+/** 定位过来的那条任务高亮几秒 */
+const flashId = ref<string | null>(null)
+let flashTimer = 0
 
 const tasksStore = useTasksStore()
 const plansStore = usePlansStore()
@@ -61,7 +65,13 @@ onMounted(async () => {
     cursor.value = new Date(fy, fm - 1, fd)
     mode.value = props.focusMode ?? 'day'
   }
+  if (props.focusTaskId) {
+    flashId.value = props.focusTaskId
+    flashTimer = window.setTimeout(() => (flashId.value = null), 4200)
+  }
 })
+
+onUnmounted(() => window.clearTimeout(flashTimer))
 
 const today = toDateStr(new Date())
 const year = computed(() => cursor.value.getFullYear())
@@ -125,7 +135,47 @@ function loadScore(date: string): number {
 
 /** 算法默认档位（按当天安排的总时长；阈值统一在 utils/dayColor.ts） */
 function autoLabel(date: string): string {
-  return busyTier(loadScore(date), eventsOn(date).length)
+  return busyTier(loadScore(date), eventsOn(date).length, deadlinePressure(eventsOn(date), today))
+}
+
+/** 这一天的截止型事项（画成插入旗标） */
+interface DeadlineFlag {
+  id: string
+  title: string
+  /** 落点时刻 HH:mm（24:00 = 当天结束） */
+  time: string
+  done: boolean
+  /** 落点在柱状里的比例 0..1 */
+  pos: number
+}
+
+function toMin(t: string): number {
+  const [h, m] = t.split(':').map(Number)
+  return (h || 0) * 60 + (m || 0)
+}
+
+function flagsOn(date: string): DeadlineFlag[] {
+  const out: DeadlineFlag[] = []
+  for (const e of eventsOn(date)) {
+    if (!e.meta?.deadline) continue
+    const t = tasksStore.tasks.find((x) => x.id === e.refId)
+    const time = deadlineTimeOf(e, t)
+    // 06:00–24:00 映射到列的可用高度
+    const frac = (toMin(time) / 60 - 6) / 18
+    out.push({
+      id: e.id,
+      title: e.title,
+      time,
+      done: e.meta.status === 'done',
+      pos: Math.max(0.04, Math.min(0.97, frac))
+    })
+  }
+  out.sort((a, b) => a.pos - b.pos)
+  // 落点太近就往下错开，避免旗标叠在一起
+  for (let i = 1; i < out.length; i++) {
+    if (out[i].pos - out[i - 1].pos < 0.07) out[i].pos = Math.min(0.98, out[i - 1].pos + 0.07)
+  }
+  return out
 }
 
 /** 显示用的标签：用户写过就用用户的 */
@@ -425,7 +475,7 @@ async function removeTask(t: Task): Promise<void> {
 /** 从日视图里的条目跳到它所在的那一周 */
 function locate(t: Task): void {
   const date = nextOccurrence(t, today, skipDates.value) ?? t.due
-  if (date) emit('openCalendar', date, 'week')
+  if (date) emit('openCalendar', date, 'week', t.id)
 }
 </script>
 
@@ -597,11 +647,25 @@ function locate(t: Task): void {
           </div>
 
           <div class="wc-events">
-            <span v-for="e in eventsOn(d).slice(0, 5)" :key="e.id" class="dot" :class="`k-${e.kind}`">
+            <span v-for="e in eventsOn(d).slice(0, 5)" :key="e.id" class="dot"
+              :class="[`k-${e.kind}`, { flash: flashId && e.refId === flashId }]">
               {{ e.time ? e.time + ' ' : '' }}{{ e.title }}
             </span>
             <span v-if="eventsOn(d).length > 5" class="more">+{{ eventsOn(d).length - 5 }}</span>
           </div>
+
+          <!-- 截止旗标：按落点时刻插在列的对应高度 -->
+          <span
+            v-for="f in flagsOn(d)"
+            :key="f.id"
+            class="flag"
+            :class="{ done: f.done }"
+            :style="{ top: f.pos * 100 + '%' }"
+            :title="`${f.done ? '已完成 · ' : '截止 '}${f.time === '24:00' ? '当天 24:00' : f.time} · ${f.title}`"
+          >
+            <i class="flag-pin"></i>
+            <em class="flag-text">{{ f.done ? '已完成' : f.time === '24:00' ? '24:00' : f.time }}</em>
+          </span>
         </div>
       </div>
 
@@ -632,11 +696,25 @@ function locate(t: Task): void {
             v-for="e in daySchedules"
             :key="e.id"
             class="sched-block"
+            :class="{ flash: flashId && e.refId === flashId }"
             :style="{ top: topOf(e.time!) + 'px', height: heightOf(e.time!, e.endTime ?? e.time!) + 'px' }"
           >
             <strong>{{ e.time }}–{{ e.endTime }}</strong> {{ e.title }}
             <em v-if="e.meta?.location">{{ e.meta.location }}</em>
           </div>
+
+          <!-- 截止旗标：日中截止就挪到对应时刻 -->
+          <span
+            v-for="f in flagsOn(cursorIso)"
+            :key="f.id"
+            class="flag on-timeline"
+            :class="{ done: f.done }"
+            :style="{ top: topOf(f.time === '24:00' ? '23:59' : f.time) + 'px' }"
+            :title="`${f.done ? '已完成 · ' : '截止 '}${f.time === '24:00' ? '当天 24:00' : f.time} · ${f.title}`"
+          >
+            <i class="flag-pin"></i>
+            <em class="flag-text">{{ f.done ? '已完成' : f.title }}</em>
+          </span>
         </div>
 
         <aside class="day-side">
@@ -701,6 +779,7 @@ function locate(t: Task): void {
               v-for="t in dayTasks"
               :key="t.id"
               :task="t"
+              :flash="flashId === t.id"
               @toggle="toggleTask(t)"
               @edit="editing = t"
               @remove="removeTask(t)"
@@ -981,7 +1060,67 @@ function locate(t: Task): void {
   background: rgba(120, 140, 170, 0.22);
   color: #4a5a72;
 }
-/* 每天的等级评价（S/A/B/C/D），落在格子左上角 */
+/* 定位过来的那条：闪几下 */
+.dot.flash,
+.sched-block.flash {
+  animation: dotFlash 1.2s ease-in-out 3;
+}
+@keyframes dotFlash {
+  0%,
+  100% {
+    transform: none;
+    box-shadow: none;
+  }
+  35% {
+    transform: scale(1.06);
+    box-shadow: 0 0 0 3px rgba(207, 74, 60, 0.3);
+  }
+}
+/* 截止旗标：一个小三角插在时间轴上，位置＝落点时刻 */
+.flag {
+  position: absolute;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  transform: translateY(-6px);
+  pointer-events: auto;
+  z-index: 3;
+}
+.week-col .flag {
+  right: 0;
+  left: auto;
+  padding-right: 6px;
+  flex-direction: row-reverse;
+}
+.flag-pin {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 9px solid #c9584f;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18));
+  flex-shrink: 0;
+}
+.flag.done .flag-pin {
+  border-top-color: var(--success);
+}
+.flag-text {
+  font-family: var(--font-num);
+  font-size: 0.62rem;
+  font-style: normal;
+  color: #c9584f;
+  background: var(--surface);
+  border-radius: 4px;
+  padding: 0 3px;
+  white-space: nowrap;
+}
+.flag.done .flag-text {
+  color: var(--success);
+}
+.flag.on-timeline {
+  left: 52px;
+}
 .grade {
   position: absolute;
   top: 5px;

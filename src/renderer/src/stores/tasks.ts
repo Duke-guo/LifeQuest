@@ -19,6 +19,10 @@ export interface NewTaskInput {
   kind?: TaskKind
   importance: number
   due: string | null
+  /** 只有截止、没有时段时可给个具体时刻（HH:mm） */
+  dueTime?: string | null
+  /** 挂在哪个主线任务下面 */
+  parentId?: string | null
   startTime?: string | null
   endTime?: string | null
   location?: string | null
@@ -47,6 +51,8 @@ export const useTasksStore = defineStore('tasks', () => {
       remindMinutes: t.remindMinutes ?? null,
       repeat: t.repeat ?? 'none',
       repeatUntil: t.repeatUntil ?? null,
+      dueTime: t.dueTime ?? null,
+      parentId: t.parentId ?? null,
       occurrences: t.occurrences ?? [],
       tagIds: t.tagIds ?? [],
       linkedNoteIds: t.linkedNoteIds ?? []
@@ -69,8 +75,9 @@ export const useTasksStore = defineStore('tasks', () => {
       importance: input.importance,
       status: 'todo',
       seasonId: input.seasonId ?? null,
-      parentId: null,
       due: input.due,
+      dueTime: input.dueTime ?? null,
+      parentId: input.parentId ?? null,
       startTime: input.startTime ?? null,
       endTime: input.endTime ?? null,
       location: input.location ?? null,

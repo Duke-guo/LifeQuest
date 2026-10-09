@@ -5,7 +5,7 @@ import { formatDate } from '../utils/helpers'
 import { REPEAT_LABELS } from '../utils/schedule'
 import AppIcon from './AppIcon.vue'
 
-const props = defineProps<{ task: Task }>()
+const props = defineProps<{ task: Task; flash?: boolean }>()
 const emit = defineEmits<{ toggle: []; remove: []; edit: []; note: []; locate: [] }>()
 
 const done = computed(() => props.task.status === 'done')
@@ -28,7 +28,7 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
 </script>
 
 <template>
-  <div class="quest" :class="[`imp-${task.importance}`, { done, schedule: isSchedule }]">
+  <div class="quest" :class="[`imp-${task.importance}`, { done, schedule: isSchedule, flash }]">
     <div class="inner">
       <button class="check" @click="emit('toggle')">{{ done ? '✓' : '' }}</button>
 
@@ -96,6 +96,35 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
 }
 .quest:hover {
   transform: translateX(4px);
+}
+/* 从任务定位过来的那条：闪几下并放大，几秒后自己停 */
+.quest.flash {
+  animation: questFlash 1.2s ease-in-out 3;
+  z-index: 2;
+  position: relative;
+}
+@keyframes questFlash {
+  0%,
+  100% {
+    transform: none;
+    filter: none;
+  }
+  35% {
+    transform: translateX(6px) scale(1.02);
+    filter: drop-shadow(0 0 10px rgba(207, 74, 60, 0.45));
+  }
+}
+.quest.flash .inner {
+  animation: questFlashBg 1.2s ease-in-out 3;
+}
+@keyframes questFlashBg {
+  0%,
+  100% {
+    background-color: var(--surface);
+  }
+  35% {
+    background-color: var(--accent-soft);
+  }
 }
 .inner {
   display: flex;

@@ -64,6 +64,8 @@ export interface Task {
   parentId: string | null
   /** 截止 / 发生日期 YYYY-MM-DD */
   due: string | null
+  /** 只有截止、没有时段时，可给个具体时刻（HH:mm）；空 = 当天 24:00 */
+  dueTime?: string | null
   /** 日程时间段 HH:mm（仅 kind=schedule） */
   startTime: string | null
   endTime: string | null
@@ -275,5 +277,7 @@ export interface CalendarEvent {
     mood?: Mood | null
     tags?: string[]
     location?: string | null
+    /** 只有截止时间、没有时段的「截止型」事件，日历上画成插入旗标 */
+    deadline?: boolean
   }
 }

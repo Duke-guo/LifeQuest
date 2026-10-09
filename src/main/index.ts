@@ -346,6 +346,17 @@ function createWindow(): void {
                   ' 行数限制=' + (getComputedStyle(desc).webkitLineClamp || '无') +
                   ' 展开键=' + (document.querySelector('.desc-toggle') ? '有' : '无') + ']\\n'
               }
+              // 截止旗标 + 定位高亮体检
+              const flags = document.querySelectorAll('.flag')
+              if (flags.length) {
+                out +=
+                  '[截止旗标 ' + flags.length + ' 个: ' +
+                  [...flags]
+                    .map((f) => (f.getAttribute('title') || '').slice(0, 14) + '@' + f.style.top)
+                    .join(' | ') + ']\\n'
+              }
+              const flashed = document.querySelectorAll('.quest.flash, .dot.flash, .sched-block.flash')
+              out += '[定位高亮 ' + flashed.length + ' 个（任务条目/周格事件/时间轴）]\\n'
               out += document.body.innerText
               const tas = [...document.querySelectorAll('textarea')].map((t) => t.value).filter((v) => v)
               const ins = [...document.querySelectorAll('input')].map((i) => i.value).filter((v) => v)

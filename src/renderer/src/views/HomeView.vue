@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useTasksStore } from '../stores/tasks'
 import { useJournalIndexStore } from '../stores/journalIndex'
@@ -18,7 +18,7 @@ const emit = defineEmits<{
   navigate: [key: string]
   openJournal: [date: string]
   openNote: [id: string]
-  openCalendar: [date: string]
+  openCalendar: [date: string, mode?: 'day' | 'week', taskId?: string]
 }>()
 
 const tasksStore = useTasksStore()
@@ -184,7 +184,7 @@ async function removeTask(t: Task): Promise<void> {
 /** 跳去日历，定位到这件事所在的（或将来最近的）那一周 */
 function locate(t: Task): void {
   const date = nextOccurrence(t, today, semesterStore.noClassDates) ?? t.due
-  if (date) emit('openCalendar', date)
+  if (date) emit('openCalendar', date, 'week', t.id)
 }
 </script>
 

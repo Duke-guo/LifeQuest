@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useTasksStore } from '../stores/tasks'
 import { useSeasonsStore } from '../stores/seasons'
@@ -26,6 +26,7 @@ const importance = ref(props.task.importance)
 const due = ref(props.task.due ?? '')
 const startTime = ref(props.task.startTime ?? '')
 const endTime = ref(props.task.endTime ?? '')
+const dueTime = ref(props.task.dueTime ?? '')
 const location = ref(props.task.location ?? '')
 const remindMinutes = ref(props.task.remindMinutes ?? 0)
 const repeat = ref<RepeatMode>(props.task.repeat ?? 'none')
@@ -54,6 +55,7 @@ function candidate(): Task {
     type: type.value,
     importance: importance.value,
     due: due.value || null,
+    dueTime: kind.value === 'task' && dueTime.value ? dueTime.value : null,
     startTime: kind.value === 'schedule' ? startTime.value || null : null,
     endTime: kind.value === 'schedule' ? endTime.value || null : null,
     location: location.value.trim() || null,
@@ -169,6 +171,10 @@ function removeTag(id: string): void {
         <label class="field">
           <span>结束时间</span>
           <input v-model="endTime" type="time" />
+        </label>
+        <label v-if="kind === 'task'" class="field" title="留空 = 当天 24:00；日历上会插一面小旗">
+          <span>截止时刻</span>
+          <input v-model="dueTime" type="time" />
         </label>
         <label class="field">
           <span>地点</span>

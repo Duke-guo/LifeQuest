@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import HomeView from './views/HomeView.vue'
 import TasksView from './views/TasksView.vue'
@@ -54,6 +54,8 @@ const showGuide = ref(false)
 const focusDate = ref<string | undefined>(undefined)
 /** 跳到日历时落在哪个视图：任务定位看周、日记/地图传送看天 */
 const focusMode = ref<'day' | 'week'>('week')
+/** 定位过去后要高亮闪几下的任务 */
+const focusTaskId = ref<string | undefined>(undefined)
 
 const tasksStore = useTasksStore()
 const settingsStore = useSettingsStore()
@@ -113,10 +115,11 @@ async function openJournal(date: string): Promise<void> {
   active.value = 'journal'
 }
 
-function openCalendar(date: string, mode: 'day' | 'week' = 'day'): void {
+function openCalendar(date: string, mode: 'day' | 'week' = 'day', taskId?: string): void {
   if (active.value !== 'calendar') pushHistory()
   focusDate.value = date
   focusMode.value = mode
+  focusTaskId.value = taskId
   active.value = 'calendar'
 }
 
@@ -161,6 +164,7 @@ function onTeleport(date: string, target: 'journal' | 'calendar'): void {
         v-else-if="active === 'calendar'"
         :focus-date="focusDate"
         :focus-mode="focusMode"
+        :focus-task-id="focusTaskId"
         @open-journal="openJournal"
         @open-note="openNote"
         @open-calendar="openCalendar"

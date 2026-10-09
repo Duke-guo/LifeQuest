@@ -140,6 +140,8 @@ function makeEvent(
 ): CalendarEvent {
   const start = override?.startTime ?? t.startTime
   const end = override?.endTime ?? t.endTime
+  // 只有截止、没有时段的「任务」在日历上是一个插入旗标，不是时间块
+  const isDeadline = t.kind !== 'schedule' && !start
   return {
     id: `task-${t.id}${suffix}`,
     date,
@@ -148,8 +150,20 @@ function makeEvent(
     time: start ?? undefined,
     endTime: end ?? undefined,
     refId: t.id,
-    meta: { importance: t.importance, status: t.status, location: t.location }
+    meta: {
+      importance: t.importance,
+      status: t.status,
+      location: t.location,
+      deadline: isDeadline
+    }
   }
+}
+
+/** 截止型事项的「落点时刻」：有时刻用它，否则算当天 24:00，用于日历上的定位 */
+export function deadlineTimeOf(e: CalendarEvent, t?: Task): string {
+  if (e.time) return e.time
+  const dt = t?.dueTime
+  return dt && /^\d{2}:\d{2}$/.test(dt) ? dt : '24:00'
 }
 
 /**
@@ -302,12 +316,29 @@ export interface WeekSummary {
 const EXAM_HINTS = ['考', '试', '期末', '期中', '测验']
 const HOLIDAY_HINTS = ['假', '放假', '旅行', '旅游', '春假', '寒假', '暑假']
 
-/** 单个事件占用的时长（小时） */
+/** 单个事件占用的时长（小时）
+ *  没有时段的「截止型」事项不占时间，也就不会抬高当天的忙碌程度 */
 export function eventHours(e: CalendarEvent): number {
-  if (!e.time || !e.endTime) return 1
+  if (e.meta?.deadline) return 0
+  if (!e.time || !e.endTime) return 0
   const [sh, sm] = e.time.split(':').map(Number)
   const [eh, em] = e.endTime.split(':').map(Number)
   return Math.max(0.5, (eh * 60 + (em || 0) - sh * 60 - (sm || 0)) / 60)
+}
+
+/** 这一天的「截止压力」：有未完成、且已进入截止前 3 天（或已逾期）的截止型事项时为 1 */
+export function deadlinePressure(events: CalendarEvent[], today: string): number {
+  for (const e of events) {
+    if (!e.meta?.deadline) continue
+    if (e.meta.status === 'done' || e.meta.status === 'archived') continue
+    const [y, m, d] = e.date.split('-').map(Number)
+    const due = new Date(y, m - 1, d)
+    const [ty, tm, td] = today.split('-').map(Number)
+    const now = new Date(ty, tm - 1, td)
+    const daysLeft = Math.round((due.getTime() - now.getTime()) / 86400000)
+    if (daysLeft <= 3) return 1
+  }
+  return 0
 }
 
 /** 按任务/日程密度与关键词概括一周
