@@ -138,15 +138,25 @@ function autoLabel(date: string): string {
   return busyTier(loadScore(date), eventsOn(date).length, deadlinePressure(eventsOn(date), today))
 }
 
-/** 周视图列高：以今天为峰、往两边沿平滑曲线落下（钟形函数，不是线性台阶） */
-const WEEK_BASE_H = 196
-const WEEK_PEAK_H = 108
-function weekColHeight(i: number): number {
-  const ti = weekDays.value.indexOf(today)
-  const center = ti < 0 ? 3 : ti
-  const k = (i - center) / 3.6
-  return Math.round(WEEK_BASE_H + WEEK_PEAK_H * Math.exp(-k * k))
+/** 周视图：所有列等高，整块用同一条曲线裁出下缘 —— 上缘平直、下缘是一条连续曲线 */
+const WEEK_COL_H = 312
+/** 曲线在 0..1 高度里的取值：以今天为峰，往两边平滑落下 */
+function weekCurveY(x: number, center: number): number {
+  const k = (x - center) / 0.34
+  const w = Math.exp(-k * k)
+  return 0.72 + 0.28 * w
 }
+/** 生成整块网格的裁剪路径（objectBoundingBox 坐标） */
+const weekClipPath = computed(() => {
+  const ti = weekDays.value.indexOf(today)
+  const center = ((ti < 0 ? 3 : ti) + 0.5) / 7
+  const N = 56
+  const y = (x: number): string => weekCurveY(x, center).toFixed(4)
+  const pts: string[] = [`M 0 -0.4`, `L 1 -0.4`, `L 1 ${y(1)}`]
+  for (let i = N - 1; i >= 0; i--) pts.push(`L ${(i / N).toFixed(4)} ${y(i / N)}`)
+  pts.push('Z')
+  return pts.join(' ')
+})
 
 /** 这一天的截止型事项（画成插入旗标） */
 interface DeadlineFlag {
@@ -598,13 +608,14 @@ function locate(t: Task): void {
           {{ weekSummary.hours }} 小时 · 重要度合计 {{ weekSummary.score }}
         </span>
       </div>
+      <svg class="week-clip-defs" aria-hidden="true"><defs><clipPath id="weekCurve" clipPathUnits="objectBoundingBox"><path :d="weekClipPath" /></clipPath></defs></svg>
       <div class="week-grid" :key="`w${animKey}`" :class="slideClass" @wheel.prevent="onWheel">
         <div
           v-for="(d, i) in weekDays"
           :key="d"
           class="week-col"
           :class="{ today: d === today }"
-          :style="{ background: colorMap[d]?.bg, '--h': weekColHeight(i) }"
+          :style="{ background: colorMap[d]?.bg }"
           :title="`点这里进日视图：可改这一天的性质、忙碌程度，并增删当天的安排`"
           @click="drillTo(d)"
         >
@@ -1240,35 +1251,45 @@ function locate(t: Task): void {
   color: #7d52b8;
 }
 .week-grid {
-  align-items: start;
+  align-items: stretch;
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  /* 整块共用同一条曲线裁下缘：下边界是一条连续曲线 */
+  clip-path: url(#weekCurve);
+}
+.week-clip-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
 }
 .week-col {
-  height: calc(var(--h, 200) * 1px);
-  /* 底缘做成大弧度浅穹顶：一排看过去是一条曲线，不是台阶 */
-  border-radius: 12px 12px 46% 46% / 12px 12px 26px 26px;
-  align-self: start;
-  border: 1px solid var(--border);
+  height: 312px;
+  position: relative;
+  border: none;
+  border-left: 1px solid var(--border);
   background: var(--surface);
   padding: 8px;
   cursor: pointer;
   transition:
-    height 0.24s cubic-bezier(0.22, 0.9, 0.3, 1),
-    box-shadow 0.16s ease,
-    border-color 0.16s ease;
+    transform 0.24s cubic-bezier(0.22, 0.9, 0.3, 1),
+    box-shadow 0.16s ease;
 }
-/* 悬停也突出：这根往上长高，露出更多内容 */
+.week-col:first-child {
+  border-left: none;
+}
+/* 悬停也突出：这一列整体抬起来，顶边比别的列高一截 */
 .week-col:hover {
-  height: calc(var(--h, 200) * 1px + 52px);
-  box-shadow: var(--shadow);
-  border-color: var(--accent);
+  transform: translateY(-16px);
+  box-shadow: var(--shadow-lg);
   z-index: 3;
 }
 .week-col.today {
-  border-color: var(--accent);
   background: var(--accent-soft);
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
 .wc-head {
   position: relative;

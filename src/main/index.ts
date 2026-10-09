@@ -355,6 +355,11 @@ function createWindow(): void {
                     .map((f) => (f.getAttribute('title') || '').slice(0, 14) + '@' + f.style.top)
                     .join(' | ') + ']\\n'
               }
+              const wg = document.querySelector('.week-grid')
+              if (wg) {
+                const cp = getComputedStyle(wg).clipPath
+                out += '[周网格 裁剪=' + (cp && cp !== 'none' ? cp.slice(0, 24) : '无') + ' 列数=' + wg.children.length + ']\\n'
+              }
               const flashed = document.querySelectorAll('.quest.flash, .dot.flash, .sched-block.flash')
               out += '[定位高亮 ' + flashed.length + ' 个（任务条目/周格事件/时间轴）]\\n'
               out += document.body.innerText
