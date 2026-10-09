@@ -28,7 +28,8 @@ const savedHint = ref('')
 
 onMounted(async () => {
   await tagsStore.load()
-  await store.load(toDateStr(new Date()))
+  // 从日历/日记葡萄藤跳进来时，store 里已经是目标日期了，别覆盖成今天
+  if (!store.loaded) await store.load(store.date || toDateStr(new Date()))
 })
 
 async function shift(days: number): Promise<void> {

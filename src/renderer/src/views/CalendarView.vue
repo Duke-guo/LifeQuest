@@ -530,6 +530,7 @@ async function writeNote(t: Task): Promise<void> {
         :week-start="weekSummary.start"
         :week-end="weekSummary.end"
         :days="weekDays"
+        :colors="colorMap"
         @open-journal="(v: string) => emit('openJournal', v)"
         @open-note="(v: string) => emit('openNote', v)"
       />

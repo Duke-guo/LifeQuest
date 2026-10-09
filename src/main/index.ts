@@ -272,6 +272,21 @@ function createWindow(): void {
                   '[性质条 ' + bars.length + ' 个: ' +
                   Object.entries(cnt).map(([k, v]) => k + '×' + v).join(' ') + ']\\n'
               }
+              // 日记葡萄藤体检：果实颜色、果实顶端与果柄末端是否对齐
+              const jv = document.querySelector('.jv-track')
+              if (jv) {
+                const tr = jv.getBoundingClientRect()
+                const fruits = [...jv.querySelectorAll('.jv-node')]
+                const stems = [...jv.querySelectorAll('.jv-stem')]
+                out +=
+                  '[日记藤 果实=' + fruits.length +
+                  ' 顶端=' + fruits.map((f) => Math.round(f.getBoundingClientRect().top - tr.top)).join(',') +
+                  ' 底色=' + fruits.map((f) => getComputedStyle(f).backgroundColor).join(' ') + ']\\n'
+                out +=
+                  '[果柄=' + stems.length + ' 末y=' +
+                  stems.map((s) => Math.round(Number(s.getAttribute('y2')))).join(',') +
+                  ' 入口=' + jv.querySelectorAll('.jv-entry').length + ']\\n'
+              }
               out += document.body.innerText
               const tas = [...document.querySelectorAll('textarea')].map((t) => t.value).filter((v) => v)
               const ins = [...document.querySelectorAll('input')].map((i) => i.value).filter((v) => v)
