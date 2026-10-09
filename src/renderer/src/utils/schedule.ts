@@ -37,6 +37,11 @@ export function eventsFromTasks(
     }
 
     if (t.repeatUntil && t.due > t.repeatUntil) continue
+    // 单次事项也要落在请求区间内才返回：
+    // 否则调用方只要「某一天的时长/件数」，就会被别的日子的单次事项污染
+    if (rangeStart && t.due < rangeStart) continue
+    if (rangeEnd && t.due > rangeEnd) continue
+    if (skipDates?.has(t.due)) continue
     out.push(makeEvent(t, t.due, ''))
   }
   return out

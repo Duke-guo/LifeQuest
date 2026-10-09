@@ -34,6 +34,24 @@ export const useDayNotesStore = defineStore('dayNotes', () => {
     return p && p !== 'auto' ? p : undefined
   }
 
+  /** 这一天的自定义名字（phase=custom 时的显示文字） */
+  function customLabelOf(date: string): string | undefined {
+    const n = on(date)
+    return n?.phase === 'custom' ? n.phaseLabel?.trim() || undefined : undefined
+  }
+
+  async function setPhaseLabel(date: string, label: string): Promise<void> {
+    const found = on(date)
+    const v = label.trim()
+    if (found) {
+      found.phase = v ? 'custom' : 'auto'
+      found.phaseLabel = v || undefined
+    } else {
+      days.value.push({ date, phase: v ? 'custom' : 'auto', phaseLabel: v || undefined })
+    }
+    await persist()
+  }
+
   /** 被手动标成「放假」的日子：这些天不排课 */
   function manualHolidays(): Set<string> {
     return new Set(
@@ -79,9 +97,11 @@ export const useDayNotesStore = defineStore('dayNotes', () => {
     on,
     busyOf,
     phaseOf,
+    customLabelOf,
     manualHolidays,
     setBusy,
     setPhase,
+    setPhaseLabel,
     setNote
   }
 })

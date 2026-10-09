@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useTasksStore } from '../stores/tasks'
 import { usePlansStore } from '../stores/plans'
 import { useJournalIndexStore } from '../stores/journalIndex'
@@ -155,13 +155,14 @@ async function useAutoBusy(): Promise<void> {
 
 const PHASE_LABEL: Record<string, string> = {
   class: '上课',
-  exam: '考试周',
+  exam: '考试',
   holiday: '放假',
   weekend: '周末',
   // 学期外的日期不写死结论，留一个空白位，等排好下一学期再定
   before: '',
   after: '',
   none: '',
+  custom: '',
   unknown: ''
 }
 
@@ -173,28 +174,56 @@ const PHASE_CLASS: Record<string, string> = {
   before: 'p-blank',
   after: 'p-blank',
   none: 'p-blank',
+  custom: 'p-custom',
   unknown: 'p-blank'
 }
 
 /** 手动指定的性质优先，其次按校历推算 */
 function dayPhase(date: string): string {
   const manual = dayNotes.phaseOf(date)
-  if (manual) return manual
+  if (manual && manual !== 'custom') return manual
+  if (manual === 'custom') return 'custom'
   return semesterStore.phaseOf(date, eventsOn(date).length > 0)
 }
 
-/** 这天性质的选择项（日视图里可改） */
+/** 格子里显示的性质文字：自定义 > 校历假期名 > 内置名 */
+function phaseText(date: string): string {
+  return dayNotes.customLabelOf(date) ?? semesterStore.holidayOn(date)?.name ?? PHASE_LABEL[dayPhase(date)]
+}
+
+/** 这天性质的选择项（日视图里可改；最后一格是自定义） */
 const PHASE_OPTIONS: Array<{ key: DayPhaseOverride; label: string }> = [
   { key: 'auto', label: '自动' },
   { key: 'class', label: '上课' },
   { key: 'weekend', label: '周末' },
   { key: 'holiday', label: '放假（停课）' },
-  { key: 'exam', label: '考试周' },
-  { key: 'none', label: '空白' }
+  { key: 'exam', label: '考试' },
+  { key: 'none', label: '空白' },
+  { key: 'custom', label: '自定义…' }
 ]
 
+const customPhase = ref('')
+/** 「自定义…」被点开后，显示输入框 */
+const showCustomPhase = ref(false)
+const customInput = ref<HTMLInputElement | null>(null)
+
 async function setPhase(p: DayPhaseOverride): Promise<void> {
+  if (p === 'custom') {
+    // 打开输入框，等用户敲字
+    customPhase.value = dayNotes.customLabelOf(cursorIso.value) ?? ''
+    showCustomPhase.value = true
+    await nextTick()
+    customInput.value?.focus()
+    return
+  }
+  showCustomPhase.value = false
   await dayNotes.setPhase(cursorIso.value, p)
+  await tasksStore.load()
+}
+
+async function saveCustomPhase(): Promise<void> {
+  await dayNotes.setPhaseLabel(cursorIso.value, customPhase.value)
+  showCustomPhase.value = false
   await tasksStore.load()
 }
 
@@ -456,7 +485,7 @@ async function removeTask(t: Task): Promise<void> {
               </span>
             </div>
             <div class="phase-bar" :class="PHASE_CLASS[dayPhase(c.date)]">
-              {{ semesterStore.holidayOn(c.date)?.name ?? PHASE_LABEL[dayPhase(c.date)] }}
+              {{ phaseText(c.date) }}
             </div>
           </template>
         </div>
@@ -527,7 +556,7 @@ async function removeTask(t: Task): Promise<void> {
           </div>
 
           <div class="wc-phase" :class="PHASE_CLASS[dayPhase(d)]">
-            {{ semesterStore.holidayOn(d)?.name ?? PHASE_LABEL[dayPhase(d)] }}
+            {{ phaseText(d) }}
           </div>
 
           <div class="wc-events">
@@ -597,9 +626,26 @@ async function removeTask(t: Task): Promise<void> {
                 </button>
               </div>
               <span class="be-hint">
-                现在：{{ dayNotes.phaseOf(cursorIso) ? '手动指定' : '按校历自动' }} ·
-                「放假（停课）」当天不会排课
+                现在：{{
+                  dayNotes.customLabelOf(cursorIso)
+                    ? `自定义「${dayNotes.customLabelOf(cursorIso)}」`
+                    : dayNotes.phaseOf(cursorIso)
+                      ? '手动指定'
+                      : '按校历自动'
+                }}
+                · 「放假（停课）」当天不会排课
               </span>
+              <div v-if="showCustomPhase" class="custom-phase">
+                <input
+                  ref="customInput"
+                  v-model="customPhase"
+                  class="be-input"
+                  placeholder="这天的性质，比如：实习 / 运动会 / 回家"
+                  @keyup.enter="saveCustomPhase"
+                />
+                <button class="be-clear" @click="saveCustomPhase">用这个名字</button>
+                <button class="be-clear" @click="showCustomPhase = false">取消</button>
+              </div>
             </div>
 
             <div class="busy-edit">
@@ -891,6 +937,16 @@ async function removeTask(t: Task): Promise<void> {
   border: 1px dashed var(--border);
   color: var(--text-3);
   line-height: 13px;
+}
+/* 自定义性质：中性灰蓝，不跟内置几种抢色 */
+.p-custom {
+  background: rgba(120, 140, 170, 0.22);
+  color: #4a5a72;
+}
+.custom-phase {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
 }
 .month-tip {
   margin-top: 0.8rem;
