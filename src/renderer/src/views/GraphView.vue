@@ -11,6 +11,8 @@ const tasksStore = useTasksStore()
 const tagsStore = useTagsStore()
 const linksStore = useLinksStore()
 
+const emit = defineEmits<{ openNote: [id: string] }>()
+
 interface GNode {
   id: string
   kind: 'note' | 'task' | 'tag'
@@ -187,6 +189,29 @@ function refresh(): void {
   loading.value = true
   build().then(() => (loading.value = false))
 }
+
+/** 选中的节点（用来弹「进入笔记」等操作） */
+const selNode = computed(() => nodes.value.find((n) => n.id === selected.value) ?? null)
+
+const KIND_NAME: Record<string, string> = { note: '笔记', task: '任务', tag: '标签' }
+
+/** 选中的是笔记 → 进入这篇笔记 */
+function openSelNote(): void {
+  const n = selNode.value
+  if (!n || n.kind !== 'note') return
+  emit('openNote', n.id.slice('note:'.length))
+}
+
+/** 与选中节点直接相连的其它节点 */
+const selNeighbors = computed(() => {
+  const id = selected.value
+  if (!id) return []
+  return edges.value
+    .filter((e) => e.a === id || e.b === id)
+    .map((e) => nodeById.value.get(e.a === id ? e.b : e.a))
+    .filter((n): n is GNode => !!n)
+    .slice(0, 8)
+})
 </script>
 
 <template>
@@ -211,32 +236,61 @@ function refresh(): void {
       还没有可展示的关联。去「笔记」给笔记加标签、或把笔记「关联」到任务试试。
     </div>
 
-    <svg v-else class="canvas" :viewBox="`0 0 ${W} ${H}`" @click="selected = null">
-      <line
-        v-for="(e, i) in edges"
-        :key="i"
-        :x1="nodeById.get(e.a)?.x ?? 0"
-        :y1="nodeById.get(e.a)?.y ?? 0"
-        :x2="nodeById.get(e.b)?.x ?? 0"
-        :y2="nodeById.get(e.b)?.y ?? 0"
-        :class="['edge', e.kind, { dim: isDimmed(e) }]"
-      />
-      <g
-        v-for="node in nodes"
-        :key="node.id"
-        :class="['node', { dim: isDimmedNode(node), sel: selected === node.id }]"
-        :transform="`translate(${node.x} ${node.y})`"
-        @click.stop="selected = selected === node.id ? null : node.id"
-      >
-        <circle :r="node.kind === 'tag' ? 9 : 13" :fill="node.color" />
-        <text :y="node.kind === 'tag' ? -16 : -20" text-anchor="middle">{{ node.label }}</text>
-        <text v-if="degree(node.id) > 1" :y="node.kind === 'tag' ? 20 : 25" text-anchor="middle" class="deg">
-          {{ degree(node.id) }}
-        </text>
-      </g>
-    </svg>
+    <div v-else class="canvas-wrap">
+      <svg class="canvas" :viewBox="`0 0 ${W} ${H}`" @click="selected = null">
+        <line
+          v-for="(e, i) in edges"
+          :key="i"
+          :x1="nodeById.get(e.a)?.x ?? 0"
+          :y1="nodeById.get(e.a)?.y ?? 0"
+          :x2="nodeById.get(e.b)?.x ?? 0"
+          :y2="nodeById.get(e.b)?.y ?? 0"
+          :class="['edge', e.kind, { dim: isDimmed(e) }]"
+        />
+        <g
+          v-for="node in nodes"
+          :key="node.id"
+          :class="['node', { dim: isDimmedNode(node), sel: selected === node.id }]"
+          :transform="`translate(${node.x} ${node.y})`"
+          @click.stop="selected = selected === node.id ? null : node.id"
+          @dblclick.stop="node.kind === 'note' && emit('openNote', node.id.slice(5))"
+        >
+          <circle :r="node.kind === 'tag' ? 9 : 13" :fill="node.color" />
+          <text :y="node.kind === 'tag' ? -16 : -20" text-anchor="middle">{{ node.label }}</text>
+          <text v-if="degree(node.id) > 1" :y="node.kind === 'tag' ? 20 : 25" text-anchor="middle" class="deg">
+            {{ degree(node.id) }}
+          </text>
+        </g>
+      </svg>
 
-    <p class="tip"><AppIcon name="guide" :size="14" /> 关联越多的节点会自动聚得越近；点击节点可高亮它的关系网。</p>
+      <!-- 点中节点后的操作面板 -->
+      <transition name="fade">
+        <div v-if="selNode" class="node-panel">
+          <button class="np-close" title="关闭" @click="selected = null">✕</button>
+          <div class="np-head">
+            <span class="np-kind" :class="selNode.kind">{{ KIND_NAME[selNode.kind] }}</span>
+            <span class="np-label">{{ selNode.label }}</span>
+          </div>
+          <div class="np-deg">{{ degree(selNode.id) }} 条关联</div>
+
+          <button v-if="selNode.kind === 'note'" class="np-btn" @click="openSelNote">
+            <AppIcon name="notes" :size="15" /> 进入这篇笔记
+          </button>
+          <p v-else class="np-hint">标签用来把笔记串在一起，点下面的节点可以跳过去。</p>
+
+          <div v-if="selNeighbors.length" class="np-nb">
+            <span class="np-nb-title">相连</span>
+            <button v-for="n in selNeighbors" :key="n.id" class="np-chip" @click="selected = n.id">
+              {{ n.label }}
+            </button>
+          </div>
+        </div>
+      </transition>
+    </div>
+
+    <p class="tip">
+      <AppIcon name="guide" :size="14" /> 关联越多的节点会自动聚得越近；点节点看它的关系网，笔记节点可直接「进入这篇笔记」（或双击）。
+    </p>
   </div>
 </template>
 
@@ -280,6 +334,124 @@ function refresh(): void {
   border-radius: 14px;
   box-shadow: var(--shadow);
   cursor: default;
+  display: block;
+}
+.canvas-wrap {
+  position: relative;
+}
+/* 点中节点后的操作面板 */
+.node-panel {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 232px;
+  padding: 0.75rem 0.85rem 0.85rem;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.np-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  border: none;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+.np-close:hover {
+  color: var(--accent);
+}
+.np-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding-right: 1rem;
+}
+.np-kind {
+  font-size: 0.68rem;
+  color: #fff;
+  background: var(--text-3);
+  border-radius: 6px;
+  padding: 1px 6px;
+  align-self: flex-start;
+}
+.np-kind.note {
+  background: #c9564a;
+}
+.np-kind.task {
+  background: #5b8def;
+}
+.np-kind.tag {
+  background: #55a89f;
+}
+.np-label {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  line-height: 1.3;
+  word-break: break-word;
+}
+.np-deg {
+  font-size: 0.74rem;
+  color: var(--text-3);
+}
+.np-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  padding: 0.34rem 0.8rem;
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 3px 0 var(--accent-soft);
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+}
+.np-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 0 var(--accent-soft);
+}
+.np-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.np-nb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.np-nb-title {
+  font-size: 0.7rem;
+  color: var(--text-3);
+}
+.np-chip {
+  font-size: 0.72rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  padding: 1px 8px;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.np-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .edge {
   stroke: var(--border);

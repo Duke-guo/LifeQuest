@@ -22,11 +22,21 @@ interface BusyStop {
 
 const BUSY_STOPS: BusyStop[] = [
   { max: 0, tier: '空闲', hue: 205, sat: 34, light: 93 },
-  { max: 2.5, tier: '轻松', hue: 158, sat: 46, light: 91 },
-  { max: 4.5, tier: '一般', hue: 46, sat: 66, light: 89 },
-  { max: 7, tier: '较忙', hue: 20, sat: 78, light: 87 },
+  { max: 3.5, tier: '轻松', hue: 158, sat: 46, light: 91 },
+  { max: 7.5, tier: '适中', hue: 46, sat: 66, light: 89 },
+  { max: 9.5, tier: '较忙', hue: 20, sat: 78, light: 87 },
   { max: Infinity, tier: '好忙', hue: 350, sat: 66, light: 85 }
 ]
+
+/**
+ * 忙碌档位的唯一判定处（日历格子、周横幅、首页都用它，避免阈值漂移）
+ * 刻度参考真实课表：3 节课 ≈ 5.5h → 适中；5 节课 ≈ 9.2h → 较忙。
+ */
+export function busyTier(hours: number, count: number): string {
+  if (count === 0) return '空闲'
+  const stop = BUSY_STOPS.find((s) => hours <= s.max) ?? BUSY_STOPS[BUSY_STOPS.length - 1]
+  return stop.tier
+}
 
 /** 空闲周末：淡紫，和空闲工作日（淡蓝）区分开 */
 const WEEKEND_STOP: BusyStop = { max: 0, tier: '空闲', hue: 266, sat: 42, light: 93 }

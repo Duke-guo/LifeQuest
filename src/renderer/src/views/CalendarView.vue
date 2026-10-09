@@ -14,13 +14,13 @@ import {
   MOOD_META
 } from '../utils/schedule'
 import { toDateStr } from '../utils/helpers'
-import { computeDayColor, type DayColor } from '../utils/dayColor'
+import { computeDayColor, busyTier, type DayColor } from '../utils/dayColor'
 import { noteFromTask } from '../utils/noteActions'
 import AppIcon from '../components/AppIcon.vue'
 import TaskItem from '../components/TaskItem.vue'
 import TaskEditModal from '../components/TaskEditModal.vue'
 import AddHistory from '../components/AddHistory.vue'
-import type { CalendarEvent, Task } from '../../../shared/types'
+import type { CalendarEvent, Task, DayPhaseOverride } from '../../../shared/types'
 
 const emit = defineEmits<{ openJournal: [date: string]; openNote: [id: string] }>()
 const props = defineProps<{ focusDate?: string }>()
@@ -32,7 +32,7 @@ const semesterStore = useSemesterStore()
 const dayNotes = useDayNotesStore()
 
 type Mode = 'day' | 'week' | 'month'
-const mode = ref<Mode>('month')
+const mode = ref<Mode>('week')
 const cursor = ref(new Date())
 const editing = ref<Task | null>(null)
 
@@ -80,10 +80,17 @@ const visibleRange = computed<[string, string]>(() => {
   return [first, last]
 })
 
+/** 手动标成「放假」的日子也参与停课 */
+const skipDates = computed(() => {
+  const s = new Set<string>(semesterStore.noClassDates)
+  for (const d of dayNotes.manualHolidays()) s.add(d)
+  return s
+})
+
 const events = computed<CalendarEvent[]>(() => {
   const [s, e] = visibleRange.value
   return [
-    ...eventsFromTasks(tasksStore.tasks, s, e, semesterStore.noClassDates),
+    ...eventsFromTasks(tasksStore.tasks, s, e, skipDates.value),
     ...eventsFromPlans(plansStore.plans)
   ]
 })
@@ -111,15 +118,9 @@ function loadScore(date: string): number {
   return eventsOn(date).reduce((s, e) => s + eventHours(e), 0)
 }
 
-/** 算法默认档位（按当天安排的总时长） */
+/** 算法默认档位（按当天安排的总时长；阈值统一在 utils/dayColor.ts） */
 function autoLabel(date: string): string {
-  const n = eventsOn(date).length
-  if (n === 0) return '空闲'
-  const h = loadScore(date)
-  if (h >= 7) return '好忙'
-  if (h >= 4.5) return '较忙'
-  if (h >= 2.5) return '一般'
-  return '轻松'
+  return busyTier(loadScore(date), eventsOn(date).length)
 }
 
 /** 显示用的标签：用户写过就用用户的 */
@@ -154,8 +155,10 @@ const PHASE_LABEL: Record<string, string> = {
   exam: '考试周',
   holiday: '放假',
   weekend: '周末',
-  before: '开学前',
-  after: '学期结束',
+  // 学期外的日期不写死结论，留一个空白位，等排好下一学期再定
+  before: '',
+  after: '',
+  none: '',
   unknown: ''
 }
 
@@ -164,14 +167,44 @@ const PHASE_CLASS: Record<string, string> = {
   exam: 'p-exam',
   holiday: 'p-holiday',
   weekend: 'p-weekend',
-  before: 'p-out',
-  after: 'p-out',
-  unknown: 'p-out'
+  before: 'p-blank',
+  after: 'p-blank',
+  none: 'p-blank',
+  unknown: 'p-blank'
 }
 
+/** 手动指定的性质优先，其次按校历推算 */
 function dayPhase(date: string): string {
+  const manual = dayNotes.phaseOf(date)
+  if (manual) return manual
   return semesterStore.phaseOf(date, eventsOn(date).length > 0)
 }
+
+/** 这天性质的选择项（日视图里可改） */
+const PHASE_OPTIONS: Array<{ key: DayPhaseOverride; label: string }> = [
+  { key: 'auto', label: '自动' },
+  { key: 'class', label: '上课' },
+  { key: 'weekend', label: '周末' },
+  { key: 'holiday', label: '放假（停课）' },
+  { key: 'exam', label: '考试周' },
+  { key: 'none', label: '空白' }
+]
+
+async function setPhase(p: DayPhaseOverride): Promise<void> {
+  await dayNotes.setPhase(cursorIso.value, p)
+  await tasksStore.load()
+}
+
+/** 周横幅底色：取本周 7 天的配色做渐变，改心情/天气会跟着变 */
+const weekGradient = computed(() => {
+  const days = weekDays.value
+  if (!days.length) return ''
+  const cols = days.map((d) => colorOf(d).bg)
+  const stops = cols
+    .map((c, i) => `${c} ${Math.round((i / Math.max(1, cols.length - 1)) * 100)}%`)
+    .join(', ')
+  return `linear-gradient(90deg, ${stops})`
+})
 
 /** 当前视图内每天的颜色，按日期索引（避免模板里重复计算） */
 const colorMap = computed<Record<string, DayColor>>(() => {
@@ -212,7 +245,7 @@ const weekDays = computed(() =>
 )
 
 const weekSummary = computed(() =>
-  summarizeWeek(tasksStore.tasks, weekStart.value, semesterStore.noClassDates)
+  summarizeWeek(tasksStore.tasks, weekStart.value, skipDates.value)
 )
 
 const TAG_CLASS: Record<string, string> = {
@@ -423,7 +456,7 @@ async function writeNote(t: Task): Promise<void> {
 
     <!-- ========== 周视图 ========== -->
     <template v-else-if="mode === 'week'">
-      <div class="week-banner" :class="TAG_CLASS[weekSummary.tag]">
+      <div class="week-banner" :class="TAG_CLASS[weekSummary.tag]" :style="{ background: weekGradient }">
         <span class="wb-tag">{{ weekSummary.tag }}</span>
         <span v-if="semesterStore.weekOf(weekSummary.start)" class="wb-week">
           第 {{ semesterStore.weekOf(weekSummary.start) }} 周
@@ -527,6 +560,23 @@ async function writeNote(t: Task): Promise<void> {
                 @change="saveBusy"
               />
               <button v-if="dayNotes.busyOf(cursorIso)" class="be-clear" @click="useAutoBusy">用默认</button>
+            </div>
+
+            <!-- 这天性质：可手动指定，放假还会自动停课 -->
+            <div class="phase-edit">
+              <span class="be-label">这天的性质</span>
+              <div class="phase-opts">
+                <button
+                  v-for="o in PHASE_OPTIONS"
+                  :key="o.key"
+                  type="button"
+                  class="phase-opt"
+                  :class="{ on: (dayNotes.phaseOf(cursorIso) ?? 'auto') === o.key }"
+                  @click="setPhase(o.key)"
+                >
+                  {{ o.label }}
+                </button>
+              </div>
             </div>
 
             <div v-if="dayTasks.length === 0" class="none">这天还没有安排</div>
@@ -801,6 +851,13 @@ async function writeNote(t: Task): Promise<void> {
   background: var(--surface-2);
   color: var(--text-3);
 }
+/* 学期外的日子：不写死结论，留一个空白位等以后填 */
+.p-blank {
+  background: transparent;
+  border: 1px dashed var(--border);
+  color: var(--text-3);
+  line-height: 13px;
+}
 .month-tip {
   margin-top: 0.8rem;
   font-size: 0.8rem;
@@ -825,7 +882,8 @@ async function writeNote(t: Task): Promise<void> {
   font-size: 1.05rem;
 }
 .wb-meta {
-  color: var(--text-2);
+  color: var(--text);
+  opacity: 0.78;
   font-size: 0.85rem;
 }
 .tag-exam {
@@ -1101,6 +1159,44 @@ async function writeNote(t: Task): Promise<void> {
 .be-clear:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+/* 当天性质选择 */
+.phase-edit {
+  margin-bottom: 0.6rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px dashed var(--border);
+}
+.phase-edit .be-label {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+.phase-opts {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.phase-opt {
+  font-family: var(--font-display);
+  font-size: 0.76rem;
+  padding: 0.16rem 0.6rem;
+  border: 1.5px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+  transition:
+    border-color 0.14s ease,
+    color 0.14s ease,
+    background-color 0.14s ease;
+}
+.phase-opt:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.phase-opt.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
 }
 h4 {
   margin: 0 0 0.5rem;

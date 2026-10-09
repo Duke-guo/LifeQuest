@@ -169,7 +169,11 @@ function createWindow(): void {
                   const sel = '${label}'
                   if (sel.startsWith('.')) {
                     const el = document.querySelector(sel)
-                    if (el) { el.click(); return 'clicked(sel)' }
+                    // 用 dispatchEvent 而不是 el.click()：SVG 元素没有 click() 方法
+                    if (el) {
+                      el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+                      return 'clicked(sel)'
+                    }
                     return 'not found(sel)'
                   }
                   const btns = [...document.querySelectorAll('button')]
@@ -248,6 +252,25 @@ function createWindow(): void {
                   '[标题栏 高=' + Math.round(r.height) + ' 窗口键=' + wbs.length +
                   ' 键位=' + wbs.map((b) => Math.round(b.getBoundingClientRect().width)).join(',') +
                   ' 拖拽区=' + (getComputedStyle(tb).webkitAppRegion || '无') + ']\\n'
+              }
+              // 周横幅渐变体检
+              const wb = document.querySelector('.week-banner')
+              if (wb) {
+                const bg = getComputedStyle(wb).backgroundImage
+                out += '[周横幅 渐变=' + (bg.includes('gradient') ? '有' : '无') + ' 色标数=' + (bg.match(/rgb/g) || []).length + ']\\n'
+              }
+              // 性质条体检：空白占位 / 各类性质
+              const bars = [...document.querySelectorAll('.phase-bar, .wc-phase')]
+              if (bars.length) {
+                const cnt = {}
+                for (const b of bars) {
+                  for (const c of b.classList) {
+                    if (c.startsWith('p-')) cnt[c] = (cnt[c] || 0) + 1
+                  }
+                }
+                out +=
+                  '[性质条 ' + bars.length + ' 个: ' +
+                  Object.entries(cnt).map(([k, v]) => k + '×' + v).join(' ') + ']\\n'
               }
               out += document.body.innerText
               const tas = [...document.querySelectorAll('textarea')].map((t) => t.value).filter((v) => v)

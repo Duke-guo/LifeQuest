@@ -212,10 +212,15 @@ export interface Semester {
 export type SemesterFile = Semester
 
 // ===================== 每日标签（用户自己写的忙碌程度 / 备注） =====================
+/** 某天的性质；auto/未设置时按校历推算 */
+export type DayPhaseOverride = 'auto' | 'class' | 'weekend' | 'holiday' | 'exam' | 'none'
+
 export interface DayNote {
   date: string
   /** 用户自定义的忙碌标签；为空则用算法算出的默认值 */
   busy?: string
+  /** 用户手动指定的当天性质（上课/周末/放假/考试/空白）；auto 表示按校历 */
+  phase?: DayPhaseOverride
   /** 备注 */
   note?: string
 }

@@ -158,7 +158,7 @@ function onTeleport(date: string, target: 'journal' | 'calendar'): void {
       <JournalView v-else-if="active === 'journal'" />
       <PlansView v-else-if="active === 'plans'" />
       <SeasonsView v-else-if="active === 'seasons'" />
-      <GraphView v-else-if="active === 'graph'" />
+      <GraphView v-else-if="active === 'graph'" @open-note="openNote" />
       <QuestMapView v-else @teleport="onTeleport" />
     </main>
 
