@@ -140,28 +140,48 @@ function autoLabel(date: string): string {
 
 /** 周视图：所有列等高，整块用同一条曲线裁出下缘 —— 上缘平直、下缘是一条连续曲线 */
 const WEEK_COL_H = 312
-/** 曲线在 0..1 高度里的取值：以今天为峰，往两边平滑落下 */
-function weekCurveY(x: number, center: number): number {
+/** 曲线在 0..1 高度里的取值：没悬停时是平的，悬停时最低点落到那一天 */
+const WEEK_FLAT = 0.84
+function weekCurveY(x: number, center: number | null): number {
+  if (center === null) return WEEK_FLAT
   const k = (x - center) / 0.34
-  const w = Math.exp(-k * k)
-  return 0.72 + 0.28 * w
+  return WEEK_FLAT + (1 - WEEK_FLAT) * Math.exp(-k * k)
 }
-/** 鼠标停在哪一天，曲线的最低点就跟到哪一天；没停就回到今天 */
+
+/** 鼠标停在哪一天，曲线最低点就跟到哪一天；没停就是一条平直的下边 */
 const hoverDay = ref<number | null>(null)
 const curveCenter = computed(() => {
   const h = hoverDay.value
-  if (h !== null) return h
-  const ti = weekDays.value.indexOf(today)
-  return ti < 0 ? 3 : ti
+  if (h === null) return null
+  return (h + 0.5) / 7
 })
 
-/** 整块网格的裁剪路径：以 curveCenter 为最低点，往两边平滑抬起 */
+/** 旗标纵向位置：夹在「这一列实际露出的范围内」，永远不会被曲线切掉 */
+const WEEK_COL_PX = 312
+function flagTop(f: DeadlineFlag, i: number): string {
+  const limit = visibleRatio(i) * WEEK_COL_PX - 20
+  const wanted = f.pos * WEEK_COL_PX
+  return Math.round(Math.min(wanted, limit)) + 'px'
+}
+
+/** 某根列实际露出的高度比例（旗标要靠它来定位，避免被裁掉） */
+function visibleRatio(i: number): number {
+  const y = weekCurveY((i + 0.5) / 7, curveCenter.value)
+  return y
+}
+
+/** 整块网格的裁剪路径 */
 const weekClipPath = computed(() => {
-  const center = (curveCenter.value + 0.5) / 7
+  const center = curveCenter.value
   const N = 56
   const y = (x: number): string => weekCurveY(x, center).toFixed(4)
-  const pts: string[] = [`M 0 -0.4`, `L 1 -0.4`, `L 1 ${y(1)}`]
-  for (let i = N - 1; i >= 0; i--) pts.push(`L ${(i / N).toFixed(4)} ${y(i / N)}`)
+  const pts: string[] = [`M 0 -0.4`, `L 1 -0.4`]
+  if (center === null) {
+    pts.push(`L 1 ${WEEK_FLAT}`, `L 0 ${WEEK_FLAT}`)
+  } else {
+    pts.push(`L 1 ${y(1)}`)
+    for (let i = N - 1; i >= 0; i--) pts.push(`L ${(i / N).toFixed(4)} ${y(i / N)}`)
+  }
   pts.push('Z')
   return pts.join(' ')
 })
@@ -617,12 +637,13 @@ function locate(t: Task): void {
         </span>
       </div>
       <svg class="week-clip-defs" aria-hidden="true"><defs><clipPath id="weekCurve" clipPathUnits="objectBoundingBox"><path class="week-curve" :d="weekClipPath" :style="{ d: `path('${weekClipPath}')` }" /></clipPath></defs></svg>
+      <div class="week-wrap">
       <div class="week-grid" :key="`w${animKey}`" :class="slideClass" @wheel.prevent="onWheel">
         <div
           v-for="(d, i) in weekDays"
           :key="d"
           class="week-col"
-          :class="{ today: d === today, 'curve-peak': curveCenter === i }"
+          :class="{ today: d === today, 'curve-peak': hoverDay === i }"
           :style="{ background: colorMap[d]?.bg }"
           :title="`点这里进日视图：可改这一天的性质、忙碌程度，并增删当天的安排`"
           @mouseenter="hoverDay = i"
@@ -679,29 +700,34 @@ function locate(t: Task): void {
 
           <div class="wc-events">
             <span
-              v-for="e in eventsOn(d).slice(0, curveCenter === i ? 12 : 5)"
+              v-for="e in eventsOn(d).slice(0, hoverDay === i ? 12 : 5)"
               :key="e.id"
               class="dot"
               :class="[`k-${e.kind}`, { flash: flashId && e.refId === flashId }]"
             >
               {{ e.time ? e.time + ' ' : '' }}{{ e.title }}
             </span>
-            <span v-if="eventsOn(d).length > (curveCenter === i ? 12 : 5)" class="more">+{{ eventsOn(d).length - (curveCenter === i ? 12 : 5) }}</span>
+            <span v-if="eventsOn(d).length > (hoverDay === i ? 12 : 5)" class="more">+{{ eventsOn(d).length - (hoverDay === i ? 12 : 5) }}</span>
           </div>
+        </div>
+      </div>
 
-          <!-- 截止旗标：按落点时刻插在列的对应高度 -->
+      <!-- 截止旗标单独一层：不受裁剪影响，绝不会被曲线切掉 -->
+      <div class="week-flag-layer">
+        <div v-for="(d, i) in weekDays" :key="`f${d}`" class="flag-col">
           <span
             v-for="f in flagsOn(d)"
             :key="f.id"
             class="flag"
             :class="{ done: f.done }"
-            :style="{ top: f.pos * 100 + '%' }"
+            :style="{ top: flagTop(f, i) }"
             :title="`${f.done ? '已完成 · ' : '截止 '}${f.time === '24:00' ? '当天 24:00' : f.time} · ${f.title}`"
           >
             <i class="flag-pin"></i>
             <em class="flag-text">{{ f.done ? '已完成' : f.time === '24:00' ? '24:00' : f.time }}</em>
           </span>
         </div>
+      </div>
       </div>
 
       <p class="month-tip">
@@ -1275,6 +1301,23 @@ function locate(t: Task): void {
   /* 整块共用同一条曲线裁下缘：下边界是一条连续曲线 */
   clip-path: url(#weekCurve);
 }
+.week-wrap {
+  position: relative;
+}
+.week-flag-layer {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  pointer-events: none;
+  z-index: 4;
+}
+.flag-col {
+  position: relative;
+}
+.week-flag-layer .flag {
+  transition: top 0.34s cubic-bezier(0.22, 0.9, 0.3, 1);
+}
 .week-clip-defs {
   position: absolute;
   width: 0;
@@ -1395,27 +1438,28 @@ function locate(t: Task): void {
   gap: 3px;
 }
 .dot {
-  font-size: 0.7rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
   border-radius: 4px;
-  padding: 1px 5px;
+  padding: 0 1px;
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* 不再用蓝/红/绿衬色，只靠颜色轻重和粗细分 */
 .k-schedule {
-  background: rgba(91, 141, 239, 0.16);
-  color: #3f6fd0;
+  color: var(--text);
 }
 .k-task {
-  background: var(--accent-soft);
-  color: var(--accent-text);
+  color: var(--text);
+  font-weight: 600;
 }
 .k-plan {
-  background: rgba(85, 168, 159, 0.16);
-  color: #3d827a;
+  color: var(--text-2);
 }
 .more {
-  font-size: 0.68rem;
+  font-size: 0.74rem;
   color: var(--text-3);
 }
 
