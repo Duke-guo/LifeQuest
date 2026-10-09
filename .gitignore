@@ -6,6 +6,7 @@ release/
 /LifeQuest.exe
 .shot*.png
 .shots/
+.scratch/
 .screenshot*.png
 .pkgdump.txt
 .npm-cache/

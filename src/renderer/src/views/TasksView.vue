@@ -11,7 +11,10 @@ import TaskEditModal from '../components/TaskEditModal.vue'
 import AddHistory from '../components/AddHistory.vue'
 import AiImportPanel from '../components/AiImportPanel.vue'
 import AppIcon from '../components/AppIcon.vue'
+import { noteFromTask } from '../utils/noteActions'
 import type { TaskType, TaskKind, Task, RepeatMode } from '../../../shared/types'
+
+const emit = defineEmits<{ openNote: [id: string] }>()
 
 const store = useTasksStore()
 const seasonsStore = useSeasonsStore()
@@ -132,6 +135,12 @@ function removeTag(id: string): void {
 async function onAiImported(): Promise<void> {
   await store.load()
   showAi.value = false
+}
+
+/** 一键为这件事/这节课写笔记 */
+async function writeNote(t: Task): Promise<void> {
+  const id = await noteFromTask(t)
+  emit('openNote', id)
 }
 </script>
 
@@ -262,6 +271,7 @@ async function onAiImported(): Promise<void> {
         @toggle="store.setStatus(t.id, t.status === 'done' ? 'todo' : 'done')"
         @remove="store.removeTask(t.id)"
         @edit="editing = t"
+        @note="writeNote(t)"
       />
     </section>
 
@@ -276,6 +286,7 @@ async function onAiImported(): Promise<void> {
           @toggle="store.setStatus(t.id, t.status === 'done' ? 'todo' : 'done')"
           @remove="store.removeTask(t.id)"
           @edit="editing = t"
+          @note="writeNote(t)"
         />
       </section>
     </template>

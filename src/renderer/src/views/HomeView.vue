@@ -6,13 +6,18 @@ import { useSemesterStore } from '../stores/semester'
 import { useGamificationStore } from '../stores/gamification'
 import { eventsFromTasks, eventHours, WEATHER_META, MOOD_META } from '../utils/schedule'
 import { computeDayColor } from '../utils/dayColor'
+import { noteFromTask } from '../utils/noteActions'
 import { toDateStr } from '../utils/helpers'
 import AppIcon from '../components/AppIcon.vue'
 import TaskItem from '../components/TaskItem.vue'
 import TaskEditModal from '../components/TaskEditModal.vue'
 import type { Task } from '../../../shared/types'
 
-const emit = defineEmits<{ navigate: [key: string]; openJournal: [date: string] }>()
+const emit = defineEmits<{
+  navigate: [key: string]
+  openJournal: [date: string]
+  openNote: [id: string]
+}>()
 
 const tasksStore = useTasksStore()
 const journalIndex = useJournalIndexStore()
@@ -155,6 +160,12 @@ const upcoming = computed(() => {
 async function toggleTask(t: Task): Promise<void> {
   await tasksStore.setStatus(t.id, t.status === 'done' ? 'todo' : 'done')
 }
+
+/** 一键为今天这节课写笔记 */
+async function writeNote(t: Task): Promise<void> {
+  const id = await noteFromTask(t)
+  emit('openNote', id)
+}
 </script>
 
 <template>
@@ -210,6 +221,7 @@ async function toggleTask(t: Task): Promise<void> {
           @toggle="toggleTask(t)"
           @edit="editing = t"
           @remove="tasksStore.removeTask(t.id)"
+          @note="writeNote(t)"
         />
       </section>
 

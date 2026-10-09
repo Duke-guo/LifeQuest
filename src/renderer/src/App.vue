@@ -19,6 +19,7 @@ import AppIcon from './components/AppIcon.vue'
 import { useTasksStore } from './stores/tasks'
 import { useSettingsStore } from './stores/settings'
 import { useJournalStore } from './stores/journal'
+import { useNotesStore } from './stores/notes'
 import { applyTheme } from './utils/theme'
 
 type View =
@@ -54,6 +55,7 @@ const focusDate = ref<string | undefined>(undefined)
 const tasksStore = useTasksStore()
 const settingsStore = useSettingsStore()
 const journalStore = useJournalStore()
+const notesStore = useNotesStore()
 
 const canGoBack = computed(() => backStack.value.length > 0)
 const backTarget = computed(() =>
@@ -114,6 +116,12 @@ function openCalendar(date: string): void {
   active.value = 'calendar'
 }
 
+/** 从任务/日历/首页一键写笔记后跳到笔记页并选中这篇 */
+function openNote(noteId: string): void {
+  notesStore.currentId = noteId
+  go('notes')
+}
+
 function onTeleport(date: string, target: 'journal' | 'calendar'): void {
   if (target === 'journal') void openJournal(date)
   else openCalendar(date)
@@ -137,12 +145,14 @@ function onTeleport(date: string, target: 'journal' | 'calendar'): void {
         v-if="active === 'home'"
         @navigate="switchView"
         @open-journal="openJournal"
+        @open-note="openNote"
       />
-      <TasksView v-else-if="active === 'tasks'" />
+      <TasksView v-else-if="active === 'tasks'" @open-note="openNote" />
       <CalendarView
         v-else-if="active === 'calendar'"
         :focus-date="focusDate"
         @open-journal="openJournal"
+        @open-note="openNote"
       />
       <NotesView v-else-if="active === 'notes'" />
       <JournalView v-else-if="active === 'journal'" />

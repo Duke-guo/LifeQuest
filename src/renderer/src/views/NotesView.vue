@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, nextTick } from 'vue'
 import { useNotesStore, type Note } from '../stores/notes'
 import { useTasksStore } from '../stores/tasks'
 import { useTagsStore } from '../stores/tags'
@@ -9,6 +9,7 @@ import { dataApi } from '../services/data'
 import { eventsFromTasks } from '../utils/schedule'
 import { subjectOfNote } from '../utils/noteSubject'
 import { renderMarkdown } from '../utils/markdown'
+import { extendNote } from '../utils/noteActions'
 import { toDateStr } from '../utils/helpers'
 import AppIcon from '../components/AppIcon.vue'
 import NotesVine from '../components/NotesVine.vue'
@@ -111,13 +112,21 @@ const noteGroups = computed<NoteGroup[]>(() => {
 
 const categoryOptions = computed(() => store.categories)
 
+/** 标题输入框（一键延伸后自动聚焦，直接开写） */
+const titleInput = ref<HTMLInputElement | null>(null)
+
 onMounted(async () => {
   await tagsStore.load()
   await linksStore.load()
   if (!tasksStore.loaded) await tasksStore.load()
   await semesterStore.load()
   await store.list()
-  if (store.notes.length > 0) select(store.notes[0].id)
+  // 从任务/日历/葡萄藤跳过来时，currentId 已经被指到目标笔记
+  const wanted =
+    store.currentId && store.notes.some((n) => n.id === store.currentId)
+      ? store.currentId
+      : store.notes[0]?.id
+  if (wanted) await select(wanted)
 })
 
 async function select(id: string): Promise<void> {
@@ -181,6 +190,37 @@ async function create(): Promise<void> {
 async function openFromVine(noteId: string): Promise<void> {
   viewMode.value = 'list'
   await select(noteId)
+}
+
+/** 在某个学科 / 某一天下面「延伸」一篇新笔记：继承分类与标签，并直接开写 */
+async function extendUnder(opts: { subject?: string; date?: string; tags?: string[] }): Promise<void> {
+  const id = await extendNote({
+    category: opts.subject,
+    date: opts.date,
+    tags: opts.tags
+  })
+  await store.list()
+  viewMode.value = 'list'
+  await select(id)
+  await nextTick()
+  titleInput.value?.focus()
+  titleInput.value?.select()
+}
+
+/** 列表「内容 / 时间」分组标题上的 ＋ */
+function extendFromGroup(g: NoteGroup): void {
+  const tags = [...new Set(g.notes.flatMap((n) => n.tags))].slice(0, 6)
+  const isDate = /^\d{4}-\d{2}-\d{2}$/.test(g.key)
+  void extendUnder(isDate ? { date: g.key, tags } : { subject: g.key, tags })
+}
+
+/** 葡萄藤上某根藤的 ＋ */
+function extendFromVine(payload: { label: string; date?: string; tags: string[] }): void {
+  void extendUnder({
+    subject: payload.date ? undefined : payload.label,
+    date: payload.date,
+    tags: payload.tags
+  })
 }
 
 async function remove(id: string): Promise<void> {
@@ -345,7 +385,7 @@ function onEditorClick(): void {
       </div>
     </header>
 
-    <NotesVine v-if="viewMode === 'vine'" @open="openFromVine" />
+    <NotesVine v-if="viewMode === 'vine'" @open="openFromVine" @extend="extendFromVine" />
 
     <div v-else class="notes-layout">
       <aside class="note-list">
@@ -359,6 +399,13 @@ function onEditorClick(): void {
           <div v-if="g.label" class="group-head">
             <span class="gh-label">{{ g.label }}</span>
             <span class="gh-sub">{{ g.sub }}</span>
+            <button
+              class="gh-add"
+              :title="listMode === 'time' ? '在这天新建笔记（继承标签）' : '在这个学科下新建笔记（继承分类与标签）'"
+              @click.stop="extendFromGroup(g)"
+            >
+              ＋ 延伸
+            </button>
           </div>
           <div
             v-for="n in g.notes"
@@ -387,7 +434,7 @@ function onEditorClick(): void {
       <section v-if="store.current" class="note-editor">
         <!-- 标题（始终可见） -->
         <div class="sec">
-          <input v-model="title" class="title-input" placeholder="笔记标题" />
+          <input ref="titleInput" v-model="title" class="title-input" placeholder="笔记标题" />
         </div>
 
         <!-- 正文：主区域（始终可见） -->
@@ -658,6 +705,24 @@ function onEditorClick(): void {
 .gh-sub {
   font-size: 0.7rem;
   color: var(--text-3);
+}
+.gh-add {
+  margin-left: auto;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  padding: 1px 7px;
+  border: 1.5px solid var(--accent);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--accent);
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+.gh-add:hover {
+  opacity: 1;
+  background: var(--accent);
+  color: #fff;
 }
 .note-row {
   position: relative;

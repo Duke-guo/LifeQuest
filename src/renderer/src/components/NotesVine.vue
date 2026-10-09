@@ -7,7 +7,10 @@ import { subjectOfNote } from '../utils/noteSubject'
 import { renderMarkdown } from '../utils/markdown'
 import AppIcon from './AppIcon.vue'
 
-const emit = defineEmits<{ open: [noteId: string] }>()
+const emit = defineEmits<{
+  open: [noteId: string]
+  extend: [payload: { label: string; date?: string; tags: string[] }]
+}>()
 
 const notesStore = useNotesStore()
 const tasksStore = useTasksStore()
@@ -61,6 +64,7 @@ interface VineNode {
   date: string
   rating: number
   images: number
+  tags: string[]
   x: number
   y: number
 }
@@ -81,8 +85,32 @@ function subjectOf(noteId: string, fallback: string): string {
   return subjectOfNote(noteId, fallback, linksStore.links, tasksStore.tasks)
 }
 
-function toNode(n: { id: string; title: string; date: string; rating: number; images: string[] }): VineNode {
-  return { id: n.id, title: n.title, date: n.date, rating: n.rating, images: n.images.length, x: CX, y: TOP }
+function toNode(n: { id: string; title: string; date: string; rating: number; images: string[]; tags: string[] }): VineNode {
+  return {
+    id: n.id,
+    title: n.title,
+    date: n.date,
+    rating: n.rating,
+    images: n.images.length,
+    tags: n.tags,
+    x: CX,
+    y: TOP
+  }
+}
+
+/** 这根藤上出现过的标签，用于「延伸」时继承 */
+function tagsOf(col: VineColumn): string[] {
+  return [...new Set(col.nodes.flatMap((n) => n.tags))].slice(0, 6)
+}
+
+/** 在某个分支下延伸一篇新笔记 */
+function extend(col: VineColumn): void {
+  const isDate = /^\d{4}-\d{2}-\d{2}$/.test(col.id)
+  emit('extend', {
+    label: col.id,
+    date: isDate ? col.id : undefined,
+    tags: tagsOf(col)
+  })
 }
 
 /** 给一列节点分配「葡萄」位置：从藤的顶端往下挂，节点之间固定间距 */
@@ -250,6 +278,9 @@ function openNode(n: VineNode): void {
             <span class="root-dot"></span>
             <span class="root-label">{{ col.label }}</span>
             <span v-if="col.sub" class="root-sub">{{ col.sub }}</span>
+            <button class="root-add" title="在这根藤上再挂一篇笔记（继承分类与标签）" @click.stop="extend(col)">
+              ＋
+            </button>
           </div>
 
           <!-- 藤蔓 + 果柄 -->
@@ -543,6 +574,32 @@ function openNode(n: VineNode): void {
 .root-sub {
   font-size: 0.7rem;
   color: var(--text-3);
+}
+.root-add {
+  pointer-events: auto;
+  margin-left: 2px;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--accent);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 0.75rem;
+  line-height: 1;
+  opacity: 0.7;
+  transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+.column.on .root-add {
+  opacity: 1;
+}
+.root-add:hover {
+  background: var(--accent);
+  color: #fff;
+  opacity: 1;
 }
 .vine-svg {
   position: absolute;

@@ -61,7 +61,7 @@ export const useNotesStore = defineStore('notes', () => {
     notes.value = loaded.sort((a, b) => (a.date < b.date ? 1 : -1))
   }
 
-  async function create(): Promise<void> {
+  async function create(patch: Partial<Note> = {}): Promise<string> {
     const note: Note = {
       id: uid(),
       title: '未命名笔记',
@@ -73,11 +73,13 @@ export const useNotesStore = defineStore('notes', () => {
       tagIds: [],
       images: [],
       links: [],
-      content: ''
+      content: '',
+      ...patch
     }
     notes.value.unshift(note)
     currentId.value = note.id
     await persist(note)
+    return note.id
   }
 
   async function persist(note: Note): Promise<void> {

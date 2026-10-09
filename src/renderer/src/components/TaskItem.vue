@@ -5,7 +5,7 @@ import { formatDate } from '../utils/helpers'
 import { REPEAT_LABELS } from '../utils/schedule'
 
 const props = defineProps<{ task: Task }>()
-const emit = defineEmits<{ toggle: []; remove: []; edit: [] }>()
+const emit = defineEmits<{ toggle: []; remove: []; edit: []; note: [] }>()
 
 const done = computed(() => props.task.status === 'done')
 const isSchedule = computed(() => props.task.kind === 'schedule')
@@ -52,6 +52,19 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
           <span v-if="task.description" class="desc">{{ task.description }}</span>
         </div>
       </div>
+
+      <button class="take-note" title="为这件事写一篇笔记" @click.stop="emit('note')">
+        <svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true">
+          <path
+            d="M5 3.2h7.2L15 6v10.8H5z"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linejoin="round"
+          />
+          <path d="M12 3.2V6h2.8M7.4 9.6h5.2M7.4 12.8h5.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" />
+        </svg>
+      </button>
 
       <button class="remove" @click="emit('remove')" title="删除">✕</button>
     </div>
@@ -174,6 +187,25 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
 }
 .loc {
   color: var(--text-3);
+}
+.take-note {
+  background: none;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: 6px;
+  opacity: 0.55;
+  transition: opacity 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+.quest:hover .take-note {
+  opacity: 1;
+}
+.take-note:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 .remove {
   background: none;

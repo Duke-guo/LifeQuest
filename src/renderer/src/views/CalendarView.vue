@@ -15,13 +15,14 @@ import {
 } from '../utils/schedule'
 import { toDateStr } from '../utils/helpers'
 import { computeDayColor, type DayColor } from '../utils/dayColor'
+import { noteFromTask } from '../utils/noteActions'
 import AppIcon from '../components/AppIcon.vue'
 import TaskItem from '../components/TaskItem.vue'
 import TaskEditModal from '../components/TaskEditModal.vue'
 import AddHistory from '../components/AddHistory.vue'
 import type { CalendarEvent, Task } from '../../../shared/types'
 
-const emit = defineEmits<{ openJournal: [date: string] }>()
+const emit = defineEmits<{ openJournal: [date: string]; openNote: [id: string] }>()
 const props = defineProps<{ focusDate?: string }>()
 
 const tasksStore = useTasksStore()
@@ -323,6 +324,12 @@ async function quickAdd(): Promise<void> {
 async function toggleTask(t: Task): Promise<void> {
   await tasksStore.setStatus(t.id, t.status === 'done' ? 'todo' : 'done')
 }
+
+/** 一键为这天的这节课写笔记（会自动关联，并出现在葡萄藤对应学科上） */
+async function writeNote(t: Task): Promise<void> {
+  const id = await noteFromTask(t, cursorIso.value)
+  emit('openNote', id)
+}
 </script>
 
 <template>
@@ -530,6 +537,7 @@ async function toggleTask(t: Task): Promise<void> {
               @toggle="toggleTask(t)"
               @edit="editing = t"
               @remove="tasksStore.removeTask(t.id)"
+              @note="writeNote(t)"
             />
 
             <div class="quick-add">
