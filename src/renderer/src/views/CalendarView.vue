@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useTasksStore } from '../stores/tasks'
 import { usePlansStore } from '../stores/plans'
@@ -138,13 +138,14 @@ function autoLabel(date: string): string {
   return busyTier(loadScore(date), eventsOn(date).length, deadlinePressure(eventsOn(date), today))
 }
 
-/** 周视图列高：今天最高，往两边递减 —— 上缘平齐、下缘鼓出来一条弧 */
-const WEEK_BASE_H = 190
+/** 周视图列高：以今天为峰、往两边沿平滑曲线落下（钟形函数，不是线性台阶） */
+const WEEK_BASE_H = 196
+const WEEK_PEAK_H = 108
 function weekColHeight(i: number): number {
   const ti = weekDays.value.indexOf(today)
-  const d = ti < 0 ? 3 : Math.abs(i - ti)
-  const extra = [96, 56, 26, 8][Math.min(d, 3)]
-  return WEEK_BASE_H + extra
+  const center = ti < 0 ? 3 : ti
+  const k = (i - center) / 3.6
+  return Math.round(WEEK_BASE_H + WEEK_PEAK_H * Math.exp(-k * k))
 }
 
 /** 这一天的截止型事项（画成插入旗标） */
@@ -603,7 +604,7 @@ function locate(t: Task): void {
           :key="d"
           class="week-col"
           :class="{ today: d === today }"
-          :style="{ background: colorMap[d]?.bg, height: weekColHeight(i) + 'px' }"
+          :style="{ background: colorMap[d]?.bg, '--h': weekColHeight(i) }"
           :title="`点这里进日视图：可改这一天的性质、忙碌程度，并增删当天的安排`"
           @click="drillTo(d)"
         >
@@ -1086,14 +1087,14 @@ function locate(t: Task): void {
     box-shadow: 0 0 0 3px rgba(207, 74, 60, 0.3);
   }
 }
-/* 截止旗标：一个小三角插在时间轴上，位置＝落点时刻 */
+/* 截止旗标：一面插在时间轴上的小旗子，位置＝落点时刻 */
 .flag {
   position: absolute;
   left: 0;
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  transform: translateY(-6px);
+  gap: 3px;
+  transform: translateY(-8px);
   pointer-events: auto;
   z-index: 3;
 }
@@ -1103,30 +1104,44 @@ function locate(t: Task): void {
   padding-right: 6px;
   flex-direction: row-reverse;
 }
+/* 旗杆 */
+.flag::before {
+  content: '';
+  width: 2px;
+  height: 16px;
+  border-radius: 2px;
+  background: #c9584f;
+  flex-shrink: 0;
+}
+.flag.done::before {
+  background: var(--success);
+}
 .flag-pin {
   width: 0;
   height: 0;
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
-  border-top: 9px solid #c9584f;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18));
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-left: 13px solid #c9584f;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.22));
   flex-shrink: 0;
 }
 .flag.done .flag-pin {
-  border-top-color: var(--success);
+  border-left-color: var(--success);
 }
 .flag-text {
   font-family: var(--font-num);
-  font-size: 0.62rem;
+  font-size: 0.74rem;
+  font-weight: 700;
   font-style: normal;
-  color: #c9584f;
-  background: var(--surface);
-  border-radius: 4px;
-  padding: 0 3px;
+  color: #fff;
+  background: #c9584f;
+  border-radius: 5px;
+  padding: 1px 5px;
   white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
 }
 .flag.done .flag-text {
-  color: var(--success);
+  background: var(--success);
 }
 .flag.on-timeline {
   left: 52px;
@@ -1231,18 +1246,25 @@ function locate(t: Task): void {
   gap: 6px;
 }
 .week-col {
-  min-height: 150px;
+  height: calc(var(--h, 200) * 1px);
+  /* 底缘做成大弧度浅穹顶：一排看过去是一条曲线，不是台阶 */
+  border-radius: 12px 12px 46% 46% / 12px 12px 26px 26px;
   align-self: start;
   border: 1px solid var(--border);
-  border-radius: 10px;
   background: var(--surface);
   padding: 8px;
   cursor: pointer;
-  transition: transform 0.15s ease, border-color 0.15s ease;
+  transition:
+    height 0.24s cubic-bezier(0.22, 0.9, 0.3, 1),
+    box-shadow 0.16s ease,
+    border-color 0.16s ease;
 }
+/* 悬停也突出：这根往上长高，露出更多内容 */
 .week-col:hover {
-  transform: translateY(-2px);
+  height: calc(var(--h, 200) * 1px + 52px);
+  box-shadow: var(--shadow);
   border-color: var(--accent);
+  z-index: 3;
 }
 .week-col.today {
   border-color: var(--accent);
