@@ -282,10 +282,17 @@ function createWindow(): void {
                   '[日记藤 果实=' + fruits.length +
                   ' 顶端=' + fruits.map((f) => Math.round(f.getBoundingClientRect().top - tr.top)).join(',') +
                   ' 底色=' + fruits.map((f) => getComputedStyle(f).backgroundColor).join(' ') + ']\\n'
+                const visibleStems = stems.filter((s) => getComputedStyle(s).display !== 'none')
                 out +=
-                  '[果柄=' + stems.length + ' 末y=' +
-                  stems.map((s) => Math.round(Number(s.getAttribute('y2')))).join(',') +
-                  ' 入口=' + jv.querySelectorAll('.jv-entry').length + ']\\n'
+                  '[果柄=' + visibleStems.length + ' 末端y=' +
+                  visibleStems
+                    .map((s) => {
+                      const d = s.getAttribute('d') || ''
+                      const nums = d.match(/-?\\d+(\\.\\d+)?/g) || []
+                      return nums.length ? Math.round(Number(nums[nums.length - 1])) : '?'
+                    })
+                    .join(',') +
+                  ' 入口=' + visibleStems.filter((s) => s.classList.contains('entry')).length + ']\\n'
               }
               out += document.body.innerText
               const tas = [...document.querySelectorAll('textarea')].map((t) => t.value).filter((v) => v)

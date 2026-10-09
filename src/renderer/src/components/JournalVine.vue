@@ -32,24 +32,24 @@ const row = ref(0)
 const selKey = ref<string | null>(null)
 let lock = 0
 
-// ---------- 藤与果实的几何（同一套坐标，保证接得上、对得齐） ----------
-const VW = 700 // viewBox 宽（横向拉伸到真实宽度，等分列）
-const VINE_BASE = 16
-const VINE_AMP = 6
-const FRUIT_TOP = 64 // 果实顶端（px，与单元格 padding-top 一致）
-const FRUIT_SIZE = 36
-const ENTRY_TOP = FRUIT_TOP + FRUIT_SIZE + 12
-const ENTRY_SIZE = 30
-const TRACK_H = ENTRY_TOP + ENTRY_SIZE + 4
+// ---------- 藤、果柄、果实共用一套坐标 ----------
+const VW = 700
+const VINE_BASE = 13
+const VINE_AMP = 5
+const FRUIT_TOP = 44 // 果实顶端；离藤很近
+const FRUIT_SIZE = 34
+const ENTRY_TOP = 84
+const ENTRY_SIZE = 26
+const TRACK_H = ENTRY_TOP + ENTRY_SIZE + 6
 
+/** 主藤的走势 */
 function vineY(x: number): number {
   return VINE_BASE + VINE_AMP * Math.sin((x / VW) * Math.PI * 4)
 }
 
-/** 藤本身：按同一函数采样，所以果柄起点一定落在藤上 */
 const vinePath = computed(() => {
   const pts: string[] = []
-  for (let x = 0; x <= VW; x += 8) pts.push(`${x} ${vineY(x).toFixed(1)}`)
+  for (let x = 0; x <= VW; x += 6) pts.push(`${x} ${vineY(x).toFixed(1)}`)
   return `M ${pts.join(' L ')}`
 })
 
@@ -57,20 +57,33 @@ function colX(i: number, n: number): number {
   return Math.round(((i + 0.5) * VW) / n)
 }
 
-/** 果柄：藤 → 果实顶端 */
-function stems(n: number): Array<{ key: number; x: number; y1: number; y2: number }> {
-  const out: Array<{ key: number; x: number; y1: number; y2: number }> = []
+/** 果柄：一条微微打弯的小枝（左右交替，乱中有序），从藤上垂到果实顶 */
+function tendril(x: number, y1: number, y2: number, dir: number): string {
+  const drop = y2 - y1
+  const bow = dir * Math.min(9, drop * 0.42)
+  return `M ${x} ${y1.toFixed(1)} C ${(x + bow).toFixed(1)} ${(y1 + drop * 0.4).toFixed(1)}, ${(
+    x - bow * 0.7
+  ).toFixed(1)} ${(y1 + drop * 0.75).toFixed(1)}, ${x} ${y2}`
+}
+
+interface StemPath {
+  key: number
+  d: string
+}
+function stems(n: number): StemPath[] {
+  const out: StemPath[] = []
   for (let i = 0; i < n; i++) {
     const x = colX(i, n)
-    out.push({ key: i, x, y1: Number(vineY(x).toFixed(1)), y2: FRUIT_TOP })
+    out.push({ key: i, d: tendril(x, vineY(x), FRUIT_TOP, i % 2 === 0 ? -1 : 1) })
   }
   return out
 }
 
-/** 入口果实的短柄：果实底 → 入口果实顶端 */
-function entryStem(i: number, n: number): { x: number; y1: number; y2: number } {
+/** 入口果实的小枝：从果实底部垂下来 */
+function entryTendril(i: number, n: number): string {
   const x = colX(i, n)
-  return { x, y1: FRUIT_TOP + FRUIT_SIZE, y2: ENTRY_TOP }
+  const dir = i % 2 === 0 ? 1 : -1
+  return tendril(x, FRUIT_TOP + FRUIT_SIZE, ENTRY_TOP, dir)
 }
 
 onMounted(async () => {
@@ -106,7 +119,6 @@ const dayNodes = computed<DayNode[]>(() =>
   })
 )
 
-/** 周记 = 分类为「周记」的笔记，日期落在这一周里 */
 function weeklyNoteOf(start: string, end: string): string | null {
   const found = notesStore.notes.find(
     (n) => n.category.trim() === '周记' && n.date >= start && n.date <= end
@@ -122,7 +134,6 @@ interface WeekNode {
   noteId: string | null
 }
 
-/** 本周 + 往前 5 周，凑成一条周记藤 */
 const weekNodes = computed<WeekNode[]>(() => {
   const out: WeekNode[] = []
   for (let i = 0; i < 6; i++) {
@@ -153,11 +164,17 @@ function pick(key: string): void {
   selKey.value = selKey.value === key ? null : key
 }
 
-/** 果实颜色与日历格子同源 */
+/** 果实用当天配色（和上面日历同源） */
 function fruitStyle(date: string): Record<string, string> | undefined {
   const c = props.colors?.[date]
   if (!c) return undefined
-  return { background: c.chipBg, borderColor: c.line, color: c.chipFg }
+  return { background: c.chipBg, color: c.chipFg, boxShadow: `0 0 0 2px ${c.line}` }
+}
+/** 入口果实：同色系再深一档，像同一串上的第二颗 */
+function entryStyle(date: string): Record<string, string> {
+  const c = props.colors?.[date]
+  if (!c) return { background: 'var(--accent)', color: '#fff' }
+  return { background: c.line, color: '#fff' }
 }
 
 function openDay(date: string): void {
@@ -183,40 +200,24 @@ async function openWeek(w: WeekNode): Promise<void> {
   <section class="jvine" @wheel="onWheel">
     <div class="jv-bar">
       <button class="jv-tab" :class="{ on: row === 0 }" @click="row = 0">每日日记</button>
-      <button
-        class="jv-tab"
-        :class="{ on: row === 1 }"
-        @click="row = 1"
-      >
-        周记
-      </button>
-      <span class="jv-hint">滚轮在这两条藤之间切换 · 点果实长出入口</span>
+      <button class="jv-tab" :class="{ on: row === 1 }" @click="row = 1">周记</button>
+      <span class="jv-hint">滚轮换藤 · 点果实长出入口</span>
     </div>
 
     <transition name="jv-fade" mode="out-in">
       <!-- 每日日记 -->
       <div v-if="row === 0" key="day" class="jv-track" :style="{ '--n': dayNodes.length }">
         <svg class="jv-svg" :viewBox="`0 0 ${VW} ${TRACK_H}`" preserveAspectRatio="none">
+          <path class="jv-vine-under" :d="vinePath" />
           <path class="jv-vine" :d="vinePath" />
-          <line
-            v-for="s in stems(dayNodes.length)"
-            :key="`s${s.key}`"
-            class="jv-stem"
-            :x1="s.x"
-            :y1="s.y1"
-            :x2="s.x"
-            :y2="s.y2"
+          <path v-for="s in stems(dayNodes.length)" :key="`s${s.key}`" class="jv-stem" :d="s.d" />
+          <path
+            v-for="(d, i) in dayNodes"
+            v-show="selKey === d.date"
+            :key="`e${d.date}`"
+            class="jv-stem entry"
+            :d="entryTendril(i, dayNodes.length)"
           />
-          <template v-for="(d, i) in dayNodes" :key="`e${d.date}`">
-            <line
-              v-if="selKey === d.date"
-              class="jv-stem entry"
-              :x1="entryStem(i, dayNodes.length).x"
-              :y1="entryStem(i, dayNodes.length).y1"
-              :x2="entryStem(i, dayNodes.length).x"
-              :y2="entryStem(i, dayNodes.length).y2"
-            />
-          </template>
         </svg>
 
         <div v-for="d in dayNodes" :key="d.date" class="jv-cell">
@@ -235,10 +236,11 @@ async function openWeek(w: WeekNode): Promise<void> {
             <button
               v-if="selKey === d.date"
               class="jv-entry"
+              :style="d.has ? entryStyle(d.date) : undefined"
               :title="d.has ? '进入这天的日记' : '写这天的日记'"
               @click="openDay(d.date)"
             >
-              <AppIcon name="journal" :size="15" />
+              <AppIcon name="journal" :size="13" />
             </button>
           </div>
 
@@ -249,26 +251,16 @@ async function openWeek(w: WeekNode): Promise<void> {
       <!-- 周记 -->
       <div v-else key="week" class="jv-track" :style="{ '--n': weekNodes.length }">
         <svg class="jv-svg" :viewBox="`0 0 ${VW} ${TRACK_H}`" preserveAspectRatio="none">
+          <path class="jv-vine-under" :d="vinePath" />
           <path class="jv-vine" :d="vinePath" />
-          <line
-            v-for="s in stems(weekNodes.length)"
-            :key="`s${s.key}`"
-            class="jv-stem"
-            :x1="s.x"
-            :y1="s.y1"
-            :x2="s.x"
-            :y2="s.y2"
+          <path v-for="s in stems(weekNodes.length)" :key="`s${s.key}`" class="jv-stem" :d="s.d" />
+          <path
+            v-for="(w, i) in weekNodes"
+            v-show="selKey === w.start"
+            :key="`e${w.start}`"
+            class="jv-stem entry"
+            :d="entryTendril(i, weekNodes.length)"
           />
-          <template v-for="(w, i) in weekNodes" :key="`e${w.start}`">
-            <line
-              v-if="selKey === w.start"
-              class="jv-stem entry"
-              :x1="entryStem(i, weekNodes.length).x"
-              :y1="entryStem(i, weekNodes.length).y1"
-              :x2="entryStem(i, weekNodes.length).x"
-              :y2="entryStem(i, weekNodes.length).y2"
-            />
-          </template>
         </svg>
 
         <div v-for="w in weekNodes" :key="w.start" class="jv-cell">
@@ -289,7 +281,7 @@ async function openWeek(w: WeekNode): Promise<void> {
               :title="w.noteId ? '打开这周的周记' : '写这周的周记'"
               @click="openWeek(w)"
             >
-              <AppIcon name="notes" :size="15" />
+              <AppIcon name="notes" :size="13" />
             </button>
           </div>
 
@@ -303,7 +295,7 @@ async function openWeek(w: WeekNode): Promise<void> {
 <style scoped>
 .jvine {
   margin-top: 0.9rem;
-  padding: 0.7rem 0.9rem 0.7rem;
+  padding: 0.7rem 0.9rem 0.55rem;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -312,7 +304,7 @@ async function openWeek(w: WeekNode): Promise<void> {
   display: flex;
   align-items: center;
   gap: 5px;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.1rem;
 }
 .jv-tab {
   font-family: var(--font-display);
@@ -347,7 +339,7 @@ async function openWeek(w: WeekNode): Promise<void> {
   margin-left: 0.2rem;
 }
 
-/* 藤与果实共用的坐标层 */
+/* 藤 / 果柄 / 果实共用一层坐标 */
 .jv-track {
   position: relative;
   display: grid;
@@ -358,25 +350,38 @@ async function openWeek(w: WeekNode): Promise<void> {
   top: 0;
   left: 0;
   width: 100%;
-  height: 140px;
+  height: 116px;
+  overflow: visible;
   pointer-events: none;
+}
+/* 主藤：深色一层 + 上面压一层浅色，做出枝条的圆润感 */
+.jv-vine-under {
+  fill: none;
+  stroke: rgba(96, 140, 106, 0.9);
+  stroke-width: 4.5;
+  stroke-linecap: round;
+  transform: translateY(1.6px);
+  vector-effect: non-scaling-stroke;
 }
 .jv-vine {
   fill: none;
-  stroke: rgba(110, 155, 120, 0.75);
-  stroke-width: 2.5;
+  stroke: rgba(150, 196, 158, 0.95);
+  stroke-width: 3;
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
 }
+/* 果柄：打弯的小枝 */
 .jv-stem {
-  stroke: rgba(110, 155, 120, 0.65);
-  stroke-width: 2;
+  fill: none;
+  stroke: rgba(126, 168, 134, 0.9);
+  stroke-width: 1.8;
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
 }
 .jv-stem.entry {
   stroke: var(--accent);
-  stroke-dasharray: 4 3;
+  stroke-width: 1.6;
+  stroke-dasharray: 3.5 3;
 }
 
 .jv-cell {
@@ -384,22 +389,29 @@ async function openWeek(w: WeekNode): Promise<void> {
   flex-direction: column;
   align-items: center;
   /* 与 SVG 的 FRUIT_TOP 对齐 */
-  padding-top: 64px;
+  padding-top: 44px;
 }
+/* 葡萄：底色来自当天配色，加一层左上高光做出球感 */
 .jv-node {
-  width: 36px;
-  height: 36px;
+  position: relative;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid var(--accent);
-  background: var(--surface);
-  color: var(--accent);
+  border: none;
+  background: var(--surface-2);
+  color: var(--text-3);
   cursor: pointer;
   font-family: var(--font-num);
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
+  background-image: radial-gradient(
+    circle at 34% 26%,
+    rgba(255, 255, 255, 0.72),
+    rgba(255, 255, 255, 0) 58%
+  );
   transition: transform 0.16s ease, box-shadow 0.16s ease;
 }
 .jv-node:hover {
@@ -407,55 +419,60 @@ async function openWeek(w: WeekNode): Promise<void> {
 }
 .jv-node.on {
   transform: scale(1.12);
-  box-shadow: 0 0 0 4px var(--accent-soft);
 }
-/* 没写的：虚线圈 + 加号 */
+/* 没写的：淡虚线圈 + 加号 */
 .jv-node.empty {
-  border-style: dashed;
-  border-color: var(--text-3);
-  color: var(--text-3);
   background: transparent;
+  background-image: none;
+  border: 1.5px dashed var(--border);
+  color: var(--text-3);
 }
 .jv-node.empty:hover {
   border-color: var(--accent);
   color: var(--accent);
 }
 .jv-plus {
-  font-size: 1.05rem;
+  font-size: 0.95rem;
   line-height: 1;
+  opacity: 0.8;
 }
 .jv-num.sm {
-  font-size: 0.84rem;
+  font-size: 0.8rem;
 }
 
-/* 入口果实的固定槽位（不显示时也占位，避免标签跳动） */
+/* 入口果实：藏在果实下方，同一串上的第二颗 */
 .jv-entry-slot {
-  height: 42px;
+  height: 40px;
   display: flex;
   align-items: flex-start;
-  padding-top: 12px;
+  padding-top: 6px;
 }
 .jv-entry {
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid var(--accent);
+  border: none;
   background: var(--accent);
   color: #fff;
   cursor: pointer;
-  box-shadow: 0 3px 8px rgba(207, 74, 60, 0.28);
-  animation: jvPop 0.2s ease;
+  background-image: radial-gradient(
+    circle at 34% 26%,
+    rgba(255, 255, 255, 0.55),
+    rgba(255, 255, 255, 0) 58%
+  );
+  box-shadow: 0 2px 6px rgba(60, 30, 25, 0.18);
+  animation: jvPop 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
   transition: transform 0.16s ease;
 }
 .jv-entry:hover {
-  transform: translateY(-2px) scale(1.06);
+  transform: translateY(-2px) scale(1.08);
 }
 @keyframes jvPop {
   from {
-    transform: scale(0.5);
+    transform: scale(0.4);
     opacity: 0;
   }
 }
