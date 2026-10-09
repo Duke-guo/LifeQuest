@@ -4,6 +4,7 @@ import { useNotesStore } from '../stores/notes'
 import { useTasksStore } from '../stores/tasks'
 import { useLinksStore } from '../stores/links'
 import { subjectOfNote } from '../utils/noteSubject'
+import { renderMarkdown } from '../utils/markdown'
 import AppIcon from './AppIcon.vue'
 
 const emit = defineEmits<{ open: [noteId: string] }>()
@@ -147,6 +148,10 @@ const activeNote = computed(() => {
   const a = active.value
   return a ? notesStore.byId(a.id) ?? null : null
 })
+/** 预览里也渲染 Markdown */
+const renderedContent = computed(() =>
+  activeNote.value ? renderMarkdown(activeNote.value.content) : ''
+)
 
 function clampCol(i: number): void {
   activeCol.value = Math.max(0, Math.min(colCount.value - 1, i))
@@ -305,7 +310,8 @@ function openNode(n: VineNode): void {
       <div class="pv-stars">
         <AppIcon v-for="i in activeNote.rating" :key="i" name="star" :size="12" />
       </div>
-      <pre class="pv-body">{{ activeNote.content || '（这篇还没有正文）' }}</pre>
+      <div v-if="activeNote.content" class="pv-body md" v-html="renderedContent"></div>
+      <pre v-else class="pv-body">（这篇还没有正文）</pre>
     </aside>
     </div>
   </div>
@@ -451,6 +457,46 @@ function openNode(n: VineNode): void {
   word-break: break-word;
   overflow-y: auto;
   color: var(--text-2);
+}
+.pv-body.md {
+  white-space: normal;
+}
+.pv-body.md :deep(h1),
+.pv-body.md :deep(h2),
+.pv-body.md :deep(h3),
+.pv-body.md :deep(h4) {
+  margin: 0.6rem 0 0.3rem;
+  font-size: 0.98rem;
+  color: var(--text);
+}
+.pv-body.md :deep(p) {
+  margin: 0.35rem 0;
+}
+.pv-body.md :deep(ul),
+.pv-body.md :deep(ol) {
+  margin: 0.35rem 0;
+  padding-left: 1.2rem;
+}
+.pv-body.md :deep(code) {
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 0.85em;
+  background: var(--surface-2);
+  border-radius: 5px;
+  padding: 1px 4px;
+}
+.pv-body.md :deep(blockquote) {
+  margin: 0.4rem 0;
+  padding: 0.25rem 0.7rem;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 0 8px 8px 0;
+}
+.pv-body.md :deep(img) {
+  max-width: 100%;
+  border-radius: 8px;
+}
+.pv-body.md :deep(strong) {
+  color: var(--text);
 }
 .track {
   position: relative;

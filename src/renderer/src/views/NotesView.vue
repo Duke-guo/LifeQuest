@@ -8,6 +8,7 @@ import { useSemesterStore } from '../stores/semester'
 import { dataApi } from '../services/data'
 import { eventsFromTasks } from '../utils/schedule'
 import { subjectOfNote } from '../utils/noteSubject'
+import { renderMarkdown } from '../utils/markdown'
 import { toDateStr } from '../utils/helpers'
 import AppIcon from '../components/AppIcon.vue'
 import NotesVine from '../components/NotesVine.vue'
@@ -39,6 +40,26 @@ const show = reactive({ meta: false, tags: false, images: false, links: false })
 function toggle(key: keyof typeof show): void {
   show[key] = !show[key]
 }
+
+/** 正文：编辑 / 预览（Markdown 渲染） */
+const bodyMode = ref<'edit' | 'preview'>('edit')
+
+const renderedBody = computed(() =>
+  renderMarkdown(content.value, (name) => imageSrcs.value[name])
+)
+
+/** 有改动但还没保存（避免「以为自动存了」而丢内容） */
+const dirty = computed(() => {
+  const n = store.current
+  if (!n) return false
+  return (
+    title.value !== n.title ||
+    content.value !== n.content ||
+    category.value !== n.category ||
+    rating.value !== n.rating ||
+    tagList.value.join('\u0001') !== n.tags.join('\u0001')
+  )
+})
 
 /** 左侧列表的三种排布：总列表 / 按时间 / 按内容（学科） */
 type ListMode = 'all' | 'time' | 'subject'
@@ -371,12 +392,21 @@ function onEditorClick(): void {
 
         <!-- 正文：主区域（始终可见） -->
         <div class="sec body-sec">
+          <div class="body-head">
+            <span class="sec-label">正文 · 支持 Markdown</span>
+            <div class="body-modes">
+              <button :class="{ on: bodyMode === 'edit' }" @click="bodyMode = 'edit'">编辑</button>
+              <button :class="{ on: bodyMode === 'preview' }" @click="bodyMode = 'preview'">预览</button>
+            </div>
+          </div>
           <textarea
+            v-if="bodyMode === 'edit'"
             v-model="content"
             class="content-input"
-            placeholder="笔记正文（支持 Markdown）…"
+            placeholder="笔记正文（支持 Markdown：**粗体**、# 标题、- 列表、`代码`）…"
             @click="onEditorClick"
           ></textarea>
+          <div v-else class="md-view" v-html="renderedBody"></div>
         </div>
 
         <!-- 工具条：其余信息用按钮召唤 -->
@@ -396,8 +426,11 @@ function onEditorClick(): void {
             <AppIcon name="map" :size="14" /> 关联
           </button>
           <span class="tools-spacer"></span>
-          <span v-if="linkHint" class="saved">{{ linkHint }}</span>
-          <button class="save-btn" :disabled="saving" @click="save">{{ saving ? '保存中…' : '保存' }}</button>
+          <span v-if="dirty" class="dirty-hint">● 有改动未保存</span>
+          <span v-else-if="linkHint" class="saved">{{ linkHint }}</span>
+          <button class="save-btn" :class="{ dirty }" :disabled="saving" @click="save">
+            {{ saving ? '保存中…' : dirty ? '保存 *' : '保存' }}
+          </button>
         </div>
 
         <!-- 分类 / 信息 -->
@@ -935,6 +968,131 @@ function onEditorClick(): void {
   line-height: 1.7;
   resize: vertical;
 }
+/* 正文头部：模式切换 */
+.body-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+.body-modes {
+  display: flex;
+  gap: 4px;
+}
+.body-modes button {
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  padding: 0.18rem 0.7rem;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+  box-shadow: 0 2px 0 var(--surface-2);
+  transition:
+    transform 0.14s ease,
+    box-shadow 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease,
+    background-color 0.14s ease;
+}
+.body-modes button:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.body-modes button.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 0 var(--accent-soft);
+}
+
+/* Markdown 渲染结果 */
+.md-view {
+  min-height: 34vh;
+  margin-top: 0.5rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  line-height: 1.75;
+  font-size: 0.92rem;
+  overflow-wrap: break-word;
+}
+.md-view :deep(h1),
+.md-view :deep(h2),
+.md-view :deep(h3),
+.md-view :deep(h4),
+.md-view :deep(h5),
+.md-view :deep(h6) {
+  margin: 1rem 0 0.5rem;
+  line-height: 1.35;
+}
+.md-view :deep(h1) {
+  font-size: 1.5rem;
+}
+.md-view :deep(h2) {
+  font-size: 1.25rem;
+}
+.md-view :deep(h3) {
+  font-size: 1.08rem;
+}
+.md-view :deep(p) {
+  margin: 0.5rem 0;
+}
+.md-view :deep(ul),
+.md-view :deep(ol) {
+  margin: 0.5rem 0;
+  padding-left: 1.4rem;
+}
+.md-view :deep(li) {
+  margin: 0.15rem 0;
+}
+.md-view :deep(code) {
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 0.86em;
+  background: var(--surface-2);
+  border-radius: 5px;
+  padding: 1px 5px;
+  color: var(--accent-text);
+}
+.md-view :deep(.md-code) {
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 0.7rem 0.9rem;
+  overflow-x: auto;
+  margin: 0.6rem 0;
+}
+.md-view :deep(.md-code code) {
+  background: none;
+  padding: 0;
+  color: var(--text);
+}
+.md-view :deep(blockquote) {
+  margin: 0.6rem 0;
+  padding: 0.35rem 0.9rem;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 0 8px 8px 0;
+  color: var(--text-2);
+}
+.md-view :deep(hr) {
+  border: none;
+  border-top: 1px dashed var(--border);
+  margin: 1rem 0;
+}
+.md-view :deep(a) {
+  color: var(--accent);
+}
+.md-view :deep(img) {
+  max-width: 100%;
+  border-radius: 10px;
+  margin: 0.4rem 0;
+}
+.md-view :deep(strong) {
+  color: var(--text);
+}
 .actions {
   display: flex;
   align-items: center;
@@ -944,6 +1102,13 @@ function onEditorClick(): void {
 .saved {
   color: var(--success);
   font-size: 0.85rem;
+}
+.dirty-hint {
+  color: var(--accent);
+  font-size: 0.8rem;
+}
+.save-btn.dirty {
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .save-btn {
   padding: 0.55rem 1.5rem;
