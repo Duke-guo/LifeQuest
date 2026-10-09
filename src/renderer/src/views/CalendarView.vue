@@ -146,10 +146,18 @@ function weekCurveY(x: number, center: number): number {
   const w = Math.exp(-k * k)
   return 0.72 + 0.28 * w
 }
-/** 生成整块网格的裁剪路径（objectBoundingBox 坐标） */
-const weekClipPath = computed(() => {
+/** 鼠标停在哪一天，曲线的最低点就跟到哪一天；没停就回到今天 */
+const hoverDay = ref<number | null>(null)
+const curveCenter = computed(() => {
+  const h = hoverDay.value
+  if (h !== null) return h
   const ti = weekDays.value.indexOf(today)
-  const center = ((ti < 0 ? 3 : ti) + 0.5) / 7
+  return ti < 0 ? 3 : ti
+})
+
+/** 整块网格的裁剪路径：以 curveCenter 为最低点，往两边平滑抬起 */
+const weekClipPath = computed(() => {
+  const center = (curveCenter.value + 0.5) / 7
   const N = 56
   const y = (x: number): string => weekCurveY(x, center).toFixed(4)
   const pts: string[] = [`M 0 -0.4`, `L 1 -0.4`, `L 1 ${y(1)}`]
@@ -608,15 +616,17 @@ function locate(t: Task): void {
           {{ weekSummary.hours }} 小时 · 重要度合计 {{ weekSummary.score }}
         </span>
       </div>
-      <svg class="week-clip-defs" aria-hidden="true"><defs><clipPath id="weekCurve" clipPathUnits="objectBoundingBox"><path :d="weekClipPath" /></clipPath></defs></svg>
+      <svg class="week-clip-defs" aria-hidden="true"><defs><clipPath id="weekCurve" clipPathUnits="objectBoundingBox"><path class="week-curve" :d="weekClipPath" :style="{ d: `path('${weekClipPath}')` }" /></clipPath></defs></svg>
       <div class="week-grid" :key="`w${animKey}`" :class="slideClass" @wheel.prevent="onWheel">
         <div
           v-for="(d, i) in weekDays"
           :key="d"
           class="week-col"
-          :class="{ today: d === today }"
+          :class="{ today: d === today, 'curve-peak': curveCenter === i }"
           :style="{ background: colorMap[d]?.bg }"
           :title="`点这里进日视图：可改这一天的性质、忙碌程度，并增删当天的安排`"
+          @mouseenter="hoverDay = i"
+          @mouseleave="hoverDay = null"
           @click="drillTo(d)"
         >
           <span
@@ -668,11 +678,15 @@ function locate(t: Task): void {
           </div>
 
           <div class="wc-events">
-            <span v-for="e in eventsOn(d).slice(0, 5)" :key="e.id" class="dot"
-              :class="[`k-${e.kind}`, { flash: flashId && e.refId === flashId }]">
+            <span
+              v-for="e in eventsOn(d).slice(0, curveCenter === i ? 12 : 5)"
+              :key="e.id"
+              class="dot"
+              :class="[`k-${e.kind}`, { flash: flashId && e.refId === flashId }]"
+            >
               {{ e.time ? e.time + ' ' : '' }}{{ e.title }}
             </span>
-            <span v-if="eventsOn(d).length > 5" class="more">+{{ eventsOn(d).length - 5 }}</span>
+            <span v-if="eventsOn(d).length > (curveCenter === i ? 12 : 5)" class="more">+{{ eventsOn(d).length - (curveCenter === i ? 12 : 5) }}</span>
           </div>
 
           <!-- 截止旗标：按落点时刻插在列的对应高度 -->
@@ -1266,6 +1280,10 @@ function locate(t: Task): void {
   width: 0;
   height: 0;
 }
+/* 曲线用 CSS d 属性驱动：hover 换最低点时能平滑过渡 */
+.week-curve {
+  transition: d 0.34s cubic-bezier(0.22, 0.9, 0.3, 1);
+}
 .week-col {
   height: 312px;
   position: relative;
@@ -1281,10 +1299,8 @@ function locate(t: Task): void {
 .week-col:first-child {
   border-left: none;
 }
-/* 悬停也突出：这一列整体抬起来，顶边比别的列高一截 */
+/* 悬停：曲线最低点挪到这一天，这一列自然露出更多内容（不再整体上抬） */
 .week-col:hover {
-  transform: translateY(-16px);
-  box-shadow: var(--shadow-lg);
   z-index: 3;
 }
 .week-col.today {
