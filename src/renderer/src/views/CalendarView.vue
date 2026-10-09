@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useTasksStore } from '../stores/tasks'
 import { usePlansStore } from '../stores/plans'
@@ -148,12 +148,13 @@ function weekCurveY(x: number, center: number | null): number {
   return WEEK_FLAT + (1 - WEEK_FLAT) * Math.exp(-k * k)
 }
 
-/** 鼠标停在哪一天，曲线最低点就跟到哪一天；没停就是一条平直的下边 */
+/** 曲线最低点：默认就是「今天」，鼠标停在哪天就跟到哪天 */
 const hoverDay = ref<number | null>(null)
 const curveCenter = computed(() => {
   const h = hoverDay.value
-  if (h === null) return null
-  return (h + 0.5) / 7
+  if (h !== null) return (h + 0.5) / 7
+  const ti = weekDays.value.indexOf(today)
+  return ((ti < 0 ? 3 : ti) + 0.5) / 7
 })
 
 /** 旗标纵向位置：夹在「这一列实际露出的范围内」，永远不会被曲线切掉 */

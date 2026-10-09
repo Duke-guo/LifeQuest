@@ -150,6 +150,28 @@ function createWindow(): void {
                 await new Promise((res) => setTimeout(res, 700))
                 continue
               }
+              if (label.startsWith('@drag:')) {
+                // 把第一条 .quest 拖到指定选择器的元素上：@drag:<selector>
+                const sel = JSON.stringify(label.slice(6))
+                const r = await mainWindow.webContents.executeJavaScript(
+                  `(() => {
+                    const from = document.querySelector('.quest')
+                    const to = document.querySelector(${sel})
+                    if (!from || !to) return 'not found'
+                    const dt = new DataTransfer()
+                    const fire = (el, type) =>
+                      el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }))
+                    fire(from, 'dragstart')
+                    fire(to, 'dragover')
+                    fire(to, 'drop')
+                    fire(from, 'dragend')
+                    return 'dragged'
+                  })()`
+                )
+                console.log('drag ->', r)
+                await new Promise((res) => setTimeout(res, 900))
+                continue
+              }
               if (label.startsWith('@type:')) {
                 const text = JSON.stringify(label.slice(6))
                 const r = await mainWindow.webContents.executeJavaScript(

@@ -1,9 +1,10 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, ref, nextTick } from 'vue'
 import type { Task } from '../../../shared/types'
 import { formatDate } from '../utils/helpers'
 import { REPEAT_LABELS } from '../utils/schedule'
 import { useTasksStore } from '../stores/tasks'
+import { draggingTaskId, dropTargetId, clearDrag } from '../utils/taskDrag'
 import AppIcon from './AppIcon.vue'
 
 const props = defineProps<{ task: Task; flash?: boolean }>()
@@ -55,6 +56,57 @@ async function toggleChild(c: Task): Promise<void> {
   await store.setStatus(c.id, c.status === 'done' ? 'todo' : 'done')
 }
 
+// ---------- 拖拽：把一条任务拖到另一条上，它就变成那条的支线 ----------
+const dragging = computed(() => draggingTaskId.value === props.task.id)
+const dropHere = computed(() => dropTargetId.value === props.task.id)
+
+/** 不能拖到自己身上，也不能拖到自己的后代上（防止成环） */
+function isDescendant(candidateId: string, ancestorId: string): boolean {
+  let cur = store.tasks.find((t) => t.id === candidateId)
+  let guard = 0
+  while (cur?.parentId && guard < 20) {
+    if (cur.parentId === ancestorId) return true
+    cur = store.tasks.find((t) => t.id === cur!.parentId)
+    guard++
+  }
+  return false
+}
+
+function onDragStart(e: DragEvent): void {
+  draggingTaskId.value = props.task.id
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', props.task.id)
+  }
+}
+
+function onDragOver(e: DragEvent): void {
+  const from = draggingTaskId.value
+  if (!from || from === props.task.id) return
+  if (isDescendant(props.task.id, from)) return
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+  dropTargetId.value = props.task.id
+}
+
+function onDragLeave(): void {
+  if (dropTargetId.value === props.task.id) dropTargetId.value = null
+}
+
+async function onDrop(e: DragEvent): Promise<void> {
+  e.preventDefault()
+  const from = draggingTaskId.value
+  clearDrag()
+  if (!from || from === props.task.id) return
+  if (isDescendant(props.task.id, from)) return
+  await store.updateTask(from, { parentId: props.task.id, type: 'side' })
+}
+
+/** 把这条支线从主线上摘下来 */
+async function detach(): Promise<void> {
+  await store.updateTask(props.task.id, { parentId: null })
+}
+
 const done = computed(() => props.task.status === 'done')
 const isSchedule = computed(() => props.task.kind === 'schedule')
 /** 详情默认收成一行，长内容不撑高列表 */
@@ -75,7 +127,16 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
 </script>
 
 <template>
-  <div class="quest" :class="[`imp-${task.importance}`, { done, schedule: isSchedule, flash }]">
+  <div
+    class="quest"
+    :class="[`imp-${task.importance}`, { done, schedule: isSchedule, flash, dragging, 'drop-here': dropHere }]"
+    draggable="true"
+    @dragstart="onDragStart"
+    @dragover="onDragOver"
+    @dragleave="onDragLeave"
+    @drop="onDrop"
+    @dragend="clearDrag"
+  >
     <div class="inner">
       <button class="check" @click="emit('toggle')">{{ done ? '✓' : '' }}</button>
 
@@ -143,6 +204,7 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
         <span class="kid-title" title="点击编辑" @click.stop="emit('editChild', c)">{{ c.title }}</span>
         <span v-if="c.startTime" class="kid-time">{{ c.startTime }}<template v-if="c.endTime">–{{ c.endTime }}</template></span>
         <span v-else-if="c.due" class="kid-time">{{ c.due.slice(5) }}</span>
+        <button class="kid-x" title="从主线上摘下来" @click.stop="detach">⤴</button>
         <button class="kid-x" title="删除这条支线" @click.stop="store.removeTask(c.id)">✕</button>
       </div>
       <div v-if="addingChild" class="kid-add">
@@ -169,6 +231,26 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
 }
 .quest:hover {
   transform: translateX(4px);
+}
+/* 拖拽中的那条变淡；接收的那条高亮成"挂到这里" */
+.quest.dragging {
+  opacity: 0.45;
+}
+.quest.drop-here .inner {
+  background-color: var(--accent-soft);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.quest.drop-here::after {
+  content: '挂成支线';
+  position: absolute;
+  right: 12px;
+  top: -9px;
+  font-size: 0.68rem;
+  color: #fff;
+  background: var(--accent);
+  border-radius: 6px;
+  padding: 0 6px;
+  z-index: 4;
 }
 /* 从任务定位过来的那条：闪几下并放大，几秒后自己停 */
 .quest.flash {
