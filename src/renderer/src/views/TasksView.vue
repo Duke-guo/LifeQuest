@@ -3,7 +3,8 @@ import { ref, computed, onMounted } from 'vue'
 import { useTasksStore } from '../stores/tasks'
 import { useSeasonsStore } from '../stores/seasons'
 import { useTagsStore } from '../stores/tags'
-import { findConflicts, conflictsOn, REPEAT_LABELS, REPEAT_OPTIONS, type Conflict } from '../utils/schedule'
+import { useSemesterStore } from '../stores/semester'
+import { findConflicts, conflictsOn, eventsFromTasks, REPEAT_LABELS, REPEAT_OPTIONS, type Conflict } from '../utils/schedule'
 import { toDateStr } from '../utils/helpers'
 import TaskItem from '../components/TaskItem.vue'
 import TaskEditModal from '../components/TaskEditModal.vue'
@@ -15,9 +16,10 @@ import type { TaskType, TaskKind, Task, RepeatMode } from '../../../shared/types
 const store = useTasksStore()
 const seasonsStore = useSeasonsStore()
 const tagsStore = useTagsStore()
+const semesterStore = useSemesterStore()
 
 const title = ref('')
-const type = ref<TaskType>('daily')
+const type = ref<TaskType>('main')
 const kind = ref<TaskKind>('task')
 const importance = ref(3)
 const due = ref(toDateStr(new Date()))
@@ -34,21 +36,37 @@ const conflicts = ref<Conflict[]>([])
 const pending = ref(false)
 const showAi = ref(false)
 const editing = ref<Task | null>(null)
+/** 默认折叠全部列表，只看今天 */
+const showAll = ref(false)
 
 const sections: Array<{ type: TaskType; label: string }> = [
-  { type: 'main', label: '主线任务' },
-  { type: 'side', label: '支线任务' },
-  { type: 'daily', label: '每日任务' }
+  { type: 'main', label: '主线 · 课程 / 长期目标' },
+  { type: 'side', label: '支线 · 一次性任务' },
+  { type: 'daily', label: '每日 · 习惯' }
 ]
 
 onMounted(async () => {
   if (!store.loaded) await store.load()
   await seasonsStore.load()
   await tagsStore.load()
+  await semesterStore.load()
 })
 
 const todayStr = toDateStr(new Date())
 const todayConflicts = computed(() => conflictsOn(store.tasks, todayStr))
+
+/** 今天实际发生的事项（含每周重复的课程） */
+const todayTasks = computed(() => {
+  const evs = eventsFromTasks(store.tasks, todayStr, todayStr, semesterStore.noClassDates)
+  const ids = new Set(evs.map((e) => e.refId))
+  return store.tasks
+    .filter((t) => ids.has(t.id))
+    .sort((a, b) => {
+      if (a.status === 'done' && b.status !== 'done') return 1
+      if (b.status === 'done' && a.status !== 'done') return -1
+      return (a.startTime ?? '99:99').localeCompare(b.startTime ?? '99:99')
+    })
+})
 
 function buildCandidate(): Partial<Task> {
   return {
@@ -152,11 +170,18 @@ async function onAiImported(): Promise<void> {
           <button type="button" :class="{ on: kind === 'task' }" @click="kind = 'task'">任务</button>
           <button type="button" :class="{ on: kind === 'schedule' }" @click="kind = 'schedule'">日程</button>
         </div>
-        <select v-model="type">
-          <option value="main">主线</option>
-          <option value="side">支线</option>
-          <option value="daily">每日</option>
-        </select>
+        <div class="seg type-seg">
+          <button
+            v-for="(t, key) in ({ main: '主线', side: '支线', daily: '每日' } as Record<TaskType, string>)"
+            :key="key"
+            type="button"
+            :class="{ on: type === key }"
+            :title="key === 'main' ? '课程 / 长期主线' : key === 'side' ? '一次性任务 / 小目标' : '每天重复的小习惯'"
+            @click="type = key"
+          >
+            {{ t }}
+          </button>
+        </div>
         <select v-model="importance">
           <option :value="5">5 · 最重要</option>
           <option :value="4">4 · 重要</option>
@@ -220,11 +245,18 @@ async function onAiImported(): Promise<void> {
       <AddHistory />
     </form>
 
-    <section v-for="s in sections" :key="s.type" class="task-section">
-      <h3>{{ s.label }}</h3>
-      <div v-if="store.byType(s.type).length === 0" class="empty">暂无</div>
+    <!-- 今天 -->
+    <section class="task-section today-sec">
+      <div class="today-head">
+        <h3>今天 · {{ todayTasks.length }} 项</h3>
+        <button class="expand-btn" type="button" @click="showAll = !showAll">
+          {{ showAll ? '收起全部' : '展开全部任务' }}
+          <AppIcon :name="showAll ? 'back' : 'plus'" :size="14" />
+        </button>
+      </div>
+      <div v-if="todayTasks.length === 0" class="empty">今天没有安排，休息一下也很好。</div>
       <TaskItem
-        v-for="t in store.byType(s.type)"
+        v-for="t in todayTasks"
         :key="t.id"
         :task="t"
         @toggle="store.setStatus(t.id, t.status === 'done' ? 'todo' : 'done')"
@@ -232,6 +264,21 @@ async function onAiImported(): Promise<void> {
         @edit="editing = t"
       />
     </section>
+
+    <template v-if="showAll">
+      <section v-for="s in sections" :key="s.type" class="task-section">
+        <h3>{{ s.label }}</h3>
+        <div v-if="store.byType(s.type).length === 0" class="empty">暂无</div>
+        <TaskItem
+          v-for="t in store.byType(s.type)"
+          :key="t.id"
+          :task="t"
+          @toggle="store.setStatus(t.id, t.status === 'done' ? 'todo' : 'done')"
+          @remove="store.removeTask(t.id)"
+          @edit="editing = t"
+        />
+      </section>
+    </template>
 
     <TaskEditModal v-if="editing" :task="editing" @close="editing = null" />
   </div>
@@ -405,5 +452,35 @@ input[type='time'] {
   font-size: 1rem;
   color: var(--text-2);
   margin-bottom: 0.6rem;
+}
+.today-sec {
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+}
+.today-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+.today-head h3 {
+  margin-bottom: 0;
+  color: var(--text);
+  font-size: 1.05rem;
+}
+.expand-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--accent);
+  background: var(--surface);
+  color: var(--accent);
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+.expand-btn:hover {
+  background: var(--accent-soft);
 }
 </style>

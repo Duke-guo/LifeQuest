@@ -4,14 +4,19 @@ import { useNotesStore } from '../stores/notes'
 import { useTasksStore } from '../stores/tasks'
 import { useTagsStore } from '../stores/tags'
 import { useLinksStore } from '../stores/links'
+import { useSemesterStore } from '../stores/semester'
 import { dataApi } from '../services/data'
+import { eventsFromTasks } from '../utils/schedule'
+import { toDateStr } from '../utils/helpers'
 import AppIcon from '../components/AppIcon.vue'
+import NotesVine from '../components/NotesVine.vue'
 import type { EntityRef } from '../../../shared/types'
 
 const store = useNotesStore()
 const tasksStore = useTasksStore()
 const tagsStore = useTagsStore()
 const linksStore = useLinksStore()
+const semesterStore = useSemesterStore()
 
 const title = ref('')
 const category = ref('')
@@ -25,6 +30,8 @@ const imageSrcs = ref<Record<string, string>>({})
 const previewSrc = ref('')
 const linkHint = ref('')
 const saving = ref(false)
+/** 列表 / 葡萄藤 两种视图 */
+const viewMode = ref<'list' | 'vine'>('list')
 
 const categoryOptions = computed(() => store.categories)
 
@@ -32,6 +39,7 @@ onMounted(async () => {
   await tagsStore.load()
   await linksStore.load()
   if (!tasksStore.loaded) await tasksStore.load()
+  await semesterStore.load()
   await store.list()
   if (store.notes.length > 0) select(store.notes[0].id)
 })
@@ -89,7 +97,14 @@ async function save(): Promise<void> {
 
 async function create(): Promise<void> {
   await store.create()
+  viewMode.value = 'list'
   await select(store.currentId as string)
+}
+
+/** 从葡萄藤视图打开某篇笔记 → 回到列表编辑 */
+async function openFromVine(noteId: string): Promise<void> {
+  viewMode.value = 'list'
+  await select(noteId)
 }
 
 async function remove(id: string): Promise<void> {
@@ -159,9 +174,25 @@ function removeTag(t: string): void {
 // ---------- 关联（B12） ----------
 const linkTarget = ref('')
 
+const todayStr = toDateStr(new Date())
+
+/** 今天实际上的课（含每周重复），用于「一键关联今天的课」 */
+const todayCourses = computed(() => {
+  const evs = eventsFromTasks(tasksStore.tasks, todayStr, todayStr, semesterStore.noClassDates)
+  const ids = new Set(evs.map((e) => e.refId))
+  return tasksStore.tasks
+    .filter((t) => ids.has(t.id))
+    .sort((a, b) => (a.startTime ?? '99:99').localeCompare(b.startTime ?? '99:99'))
+})
+
 const linkOptions = computed(() => {
   const opts: Array<{ key: string; label: string }> = []
+  // 今天的课排最前
+  for (const t of todayCourses.value) {
+    opts.push({ key: `task:${t.id}`, label: `今天 · ${t.title}` })
+  }
   for (const t of tasksStore.tasks) {
+    if (todayCourses.value.some((x) => x.id === t.id)) continue
     opts.push({ key: `task:${t.id}`, label: `任务 · ${t.title}` })
   }
   for (const n of store.notes) {
@@ -187,12 +218,20 @@ function labelOf(ref: EntityRef): string {
   return `${ref.kind} · ${ref.id}`
 }
 
-async function addLink(): Promise<void> {
+async function addLink(target?: string): Promise<void> {
   const ref = currentRef.value
-  const v = linkTarget.value
+  const v = target ?? linkTarget.value
   if (!ref || !v) return
   const [kind, id] = v.split(':')
   await linksStore.add(ref, { kind: kind as EntityRef['kind'], id })
+  // 关联到任务时，若笔记还没分类，就用该任务标题当作学科
+  if (kind === 'task' && !category.value.trim()) {
+    const t = tasksStore.tasks.find((x) => x.id === id)
+    if (t) {
+      category.value = t.title
+      await save()
+    }
+  }
   linkTarget.value = ''
 }
 
@@ -219,10 +258,18 @@ function onEditorClick(): void {
         <h2>笔记</h2>
         <p class="sub">标题 · 分类 · 日期 · 标签 · 图片 · 关联</p>
       </div>
-      <button class="new-btn" @click="create"><AppIcon name="plus" :size="16" /> 新建笔记</button>
+      <div class="head-actions">
+        <div class="view-toggle">
+          <button :class="{ on: viewMode === 'list' }" @click="viewMode = 'list'">列表</button>
+          <button :class="{ on: viewMode === 'vine' }" @click="viewMode = 'vine'">葡萄藤</button>
+        </div>
+        <button class="new-btn" @click="create"><AppIcon name="plus" :size="16" /> 新建笔记</button>
+      </div>
     </header>
 
-    <div class="notes-layout">
+    <NotesVine v-if="viewMode === 'vine'" @open="openFromVine" />
+
+    <div v-else class="notes-layout">
       <aside class="note-list">
         <div
           v-for="n in store.notes"
@@ -329,10 +376,26 @@ function onEditorClick(): void {
             {{ labelOf(r) }}
             <button class="tag-x" @click="removeLink(r)">✕</button>
           </span>
-          <select v-model="linkTarget" class="link-select" @change="addLink">
+          <select v-model="linkTarget" class="link-select" @change="addLink()">
             <option value="">＋ 关联到…</option>
             <option v-for="o in linkOptions" :key="o.key" :value="o.key">{{ o.label }}</option>
           </select>
+        </div>
+
+        <!-- 今天的课：一键关联 -->
+        <div v-if="todayCourses.length" class="sec link-sec today-courses">
+          <span class="sec-label">今天的课</span>
+          <button
+            v-for="t in todayCourses"
+            :key="t.id"
+            type="button"
+            class="course-chip"
+            @click="addLink(`task:${t.id}`)"
+          >
+            <AppIcon name="plus" :size="12" /> {{ t.title }}
+            <template v-if="t.startTime">{{ t.startTime }}</template>
+          </button>
+          <span class="hint">点一下：把这篇笔记关联到这节课（并自动填好分类）</span>
         </div>
 
         <div class="actions">
@@ -349,6 +412,31 @@ function onEditorClick(): void {
 </template>
 
 <style scoped>
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.view-toggle {
+  display: flex;
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 2px;
+}
+.view-toggle button {
+  border: none;
+  background: none;
+  padding: 0.4rem 0.8rem;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-2);
+  font-size: 0.85rem;
+}
+.view-toggle button.on {
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 600;
+}
 .new-btn {
   display: inline-flex;
   align-items: center;
@@ -553,6 +641,25 @@ function onEditorClick(): void {
   border-radius: 8px;
   padding: 0.25rem 0.4rem;
   font-size: 0.8rem;
+}
+.today-courses {
+  background: var(--accent-soft);
+}
+.course-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: 1px solid var(--accent);
+  background: var(--surface);
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.course-chip:hover {
+  background: var(--accent);
+  color: #fff;
 }
 .upload-btn {
   display: inline-flex;

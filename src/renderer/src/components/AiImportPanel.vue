@@ -240,7 +240,7 @@ async function importAll(): Promise<void> {
       if (!date) continue
       await store.addTask({
         title: name,
-        type: 'daily',
+        type: 'main',
         kind: s.startTime ? 'schedule' : 'task',
         importance: 3,
         due: date,
