@@ -19,7 +19,7 @@ const items = [
   { key: 'questmap', label: '主线地图', icon: 'map' }
 ]
 
-const RADIUS = 165
+const RADIUS = 178
 
 /** 环形上放「除当前选中之外」的项，随选中项一起旋转 */
 const ringItems = computed(() => {
@@ -87,7 +87,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
           :style="{ '--x': r.x + 'px', '--y': r.y + 'px' }"
           @click.stop="selected = r.idx"
         >
-          <AppIcon :name="r.icon" :size="19" />
+          <AppIcon :name="r.icon" :size="26" />
         </button>
 
         <!-- 中心：当前选中项，大图标 + 清晰文字 -->
@@ -98,7 +98,11 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
         </button>
       </div>
 
-      <span class="hint">滚轮 / ↑↓ 切换 · 点击中心进入 · Esc 关闭</span>
+      <div class="hint">
+        <span class="hint-item"><kbd>滚轮</kbd><kbd>↑ ↓</kbd>切换</span>
+        <span class="hint-item"><kbd>点击中心</kbd>进入</span>
+        <span class="hint-item"><kbd>Esc</kbd>关闭</span>
+      </div>
     </div>
   </transition>
 </template>
@@ -149,33 +153,36 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
   height: 132px;
 }
 
-/* 环上的其它项目：淡化到几乎隐藏，只作为「还有别的」的提示 */
+/* 环上的其它项目：看得清、点得到，但没有中心那么抢眼 */
 .ring-item {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 46px;
-  height: 46px;
-  margin: -23px 0 0 -23px;
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
   border-radius: 50%;
-  border: 1px solid var(--border);
+  border: 2px solid rgba(255, 255, 255, 0.55);
   background: var(--surface);
-  color: var(--text-2);
+  color: var(--text);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0.22;
-  transform: translate(var(--x), var(--y)) scale(0.85);
+  opacity: 0.82;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+  transform: translate(var(--x), var(--y)) scale(0.92);
   transition:
     transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1),
     opacity 0.25s ease,
-    color 0.2s ease;
+    color 0.2s ease,
+    border-color 0.2s ease;
 }
 .ring-item:hover {
-  opacity: 0.95;
+  opacity: 1;
   color: var(--accent);
-  transform: translate(var(--x), var(--y)) scale(1.12);
+  border-color: var(--accent);
+  transform: translate(var(--x), var(--y)) scale(1.14);
 }
 
 /* 中心：唯一清晰可见的选中项 */
@@ -224,8 +231,28 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 }
 
 .hint {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 0.82rem;
-  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 1.4rem;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.84rem;
+  letter-spacing: 0.03em;
+}
+.hint-item {
+  display: inline-flex;
+  align-items: center;
+}
+.hint kbd {
+  font-family: var(--font-num);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.5;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-bottom-width: 2px;
+  border-radius: 7px;
+  padding: 1px 8px;
+  margin-right: 5px;
+  color: #fff;
 }
 </style>

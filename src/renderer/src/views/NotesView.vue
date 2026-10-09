@@ -503,35 +503,65 @@ function onEditorClick(): void {
 }
 .view-toggle {
   display: flex;
-  background: var(--surface-2);
-  border-radius: 10px;
-  padding: 2px;
+  gap: 5px;
 }
 .view-toggle button {
-  border: none;
-  background: none;
-  padding: 0.4rem 0.8rem;
-  border-radius: 8px;
-  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  letter-spacing: 0.02em;
+  padding: 0.34rem 0.85rem;
+  border: 2px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface);
   color: var(--text-2);
-  font-size: 0.85rem;
+  cursor: pointer;
+  box-shadow: 0 3px 0 var(--surface-2);
+  transition:
+    transform 0.14s ease,
+    box-shadow 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease,
+    background-color 0.14s ease;
+}
+.view-toggle button:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .view-toggle button.on {
-  background: var(--surface);
-  color: var(--accent);
-  font-weight: 600;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 3px 0 var(--accent-soft);
 }
 .new-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.55rem 1rem;
+  font-family: var(--font-display);
+  font-size: 0.98rem;
+  letter-spacing: 0.03em;
+  padding: 0.38rem 1.1rem;
   background: var(--accent);
   color: #fff;
-  border: none;
-  border-radius: 10px;
+  border: 2px solid var(--accent);
+  border-radius: 14px;
   cursor: pointer;
-  font-weight: 600;
+  box-shadow: 0 4px 0 var(--accent-soft);
+  transform: rotate(-1.2deg);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    filter 0.15s ease;
+}
+.new-btn:hover {
+  transform: rotate(0deg) translateY(-1px);
+  box-shadow: 0 5px 0 var(--accent-soft);
+  filter: brightness(1.05);
+}
+.new-btn:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 var(--accent-soft);
 }
 .notes-layout {
   display: flex;
@@ -547,25 +577,37 @@ function onEditorClick(): void {
 }
 .list-modes {
   display: flex;
-  background: var(--surface-2);
-  border-radius: 10px;
-  padding: 2px;
+  gap: 4px;
   margin-bottom: 0.2rem;
 }
 .list-modes button {
   flex: 1;
-  border: none;
-  background: none;
-  padding: 0.32rem 0;
-  border-radius: 8px;
-  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 0.84rem;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
   color: var(--text-2);
-  font-size: 0.78rem;
+  padding: 0.26rem 0;
+  cursor: pointer;
+  box-shadow: 0 2px 0 var(--surface-2);
+  transition:
+    transform 0.14s ease,
+    box-shadow 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease,
+    background-color 0.14s ease;
+}
+.list-modes button:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .list-modes button.on {
-  background: var(--surface);
-  color: var(--accent);
-  font-weight: 600;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 0 var(--accent-soft);
 }
 .group-head {
   display: flex;

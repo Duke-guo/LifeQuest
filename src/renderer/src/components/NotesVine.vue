@@ -84,16 +84,14 @@ function toNode(n: { id: string; title: string; date: string; rating: number; im
   return { id: n.id, title: n.title, date: n.date, rating: n.rating, images: n.images.length, x: CX, y: TOP }
 }
 
-/** 给一列节点分配「葡萄」位置：一簇挂在藤上，节点之间保持固定间距，不摊满整根藤 */
-const STEP = 86
+/** 给一列节点分配「葡萄」位置：从藤的顶端往下挂，节点之间固定间距 */
+const STEP = 84
 function placeNodes(nodes: VineNode[]): VineNode[] {
   const n = nodes.length
   const avail = BOTTOM - TOP
   const step = n <= 1 ? 0 : Math.min(STEP, avail / (n - 1))
-  const total = (n - 1) * step
-  const start = TOP + Math.max(0, (avail - total) / 2)
   nodes.forEach((node, i) => {
-    const y = n === 1 ? TOP + avail / 2 : start + i * step
+    const y = TOP + i * step
     const side = i % 2 === 0 ? -1 : 1
     const off = side * (16 + hash(node.id) * 18)
     node.y = y
@@ -327,23 +325,36 @@ function openNode(n: VineNode): void {
 }
 .vine-modes {
   display: flex;
-  background: var(--surface-2);
-  border-radius: 10px;
-  padding: 2px;
+  gap: 5px;
 }
 .vine-modes button {
-  border: none;
-  background: none;
-  padding: 0.35rem 0.9rem;
-  border-radius: 8px;
-  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  letter-spacing: 0.02em;
+  padding: 0.32rem 0.85rem;
+  border: 2px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface);
   color: var(--text-2);
-  font-size: 0.85rem;
+  cursor: pointer;
+  box-shadow: 0 3px 0 var(--surface-2);
+  transition:
+    transform 0.14s ease,
+    box-shadow 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease,
+    background-color 0.14s ease;
+}
+.vine-modes button:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .vine-modes button.on {
-  background: var(--surface);
-  color: var(--accent);
-  font-weight: 600;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 3px 0 var(--accent-soft);
 }
 .vine-now {
   display: flex;

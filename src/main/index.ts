@@ -219,6 +219,14 @@ function createWindow(): void {
                     )
                     .join('  ') + ']\\n'
               }
+              // 页头按钮样式体检（验证卡通风格是否生效）
+              const nb = document.querySelector('.new-btn, .cartoon-btn')
+              if (nb) {
+                const cs = getComputedStyle(nb)
+                out +=
+                  '[按钮 font=' + cs.fontFamily.split(',')[0] + ' 圆角=' + cs.borderRadius +
+                  ' 边框=' + cs.borderWidth + ' 阴影=' + (cs.boxShadow === 'none' ? '无' : '有') + ']\\n'
+              }
               out += document.body.innerText
               const tas = [...document.querySelectorAll('textarea')].map((t) => t.value).filter((v) => v)
               const ins = [...document.querySelectorAll('input')].map((i) => i.value).filter((v) => v)
