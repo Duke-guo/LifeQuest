@@ -15,7 +15,9 @@ export function parseFrontMatter(content: string): { meta: FrontMatter; body: st
     return { meta: {}, body: trimmed }
   }
   const raw = trimmed.slice(3, end).trim()
-  const body = trimmed.slice(end + 4).replace(/^\r?\n/, '')
+  // 头部与正文之间的空行全部吃掉：
+  // serialize 那边固定写一个空行做分隔，这里若只吃一个，每次保存就会多出一行空行
+  const body = trimmed.slice(end + 4).replace(/^(?:\r?\n)+/, '')
   const meta: FrontMatter = {}
   for (const line of raw.split(/\r?\n/)) {
     const idx = line.indexOf(':')

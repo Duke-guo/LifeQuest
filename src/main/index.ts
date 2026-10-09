@@ -135,6 +135,24 @@ function createWindow(): void {
                 await new Promise((res) => setTimeout(res, 1200))
                 continue
               }
+              if (label.startsWith('@type:')) {
+                const text = JSON.stringify(label.slice(6))
+                const r = await mainWindow.webContents.executeJavaScript(
+                  `(() => {
+                    const el = document.activeElement
+                    if (!el || (el.tagName !== 'TEXTAREA' && el.tagName !== 'INPUT')) return 'no focused field'
+                    const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+                    const setter = Object.getOwnPropertyDescriptor(proto, 'value').set
+                    setter.call(el, ${text})
+                    el.dispatchEvent(new Event('input', { bubbles: true }))
+                    el.blur()
+                    return 'typed into ' + el.tagName
+                  })()`
+                )
+                console.log('type ->', r)
+                await new Promise((res) => setTimeout(res, 600))
+                continue
+              }
               if (label.startsWith('@wait:')) {
                 const ms = Number(label.slice(6)) || 1000
                 await new Promise((res) => setTimeout(res, ms))

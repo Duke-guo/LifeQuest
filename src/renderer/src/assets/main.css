@@ -176,6 +176,128 @@ code {
   animation: fadeIn 0.28s ease;
 }
 
+/* ===== Markdown 排版（笔记正文、预览面板共用） ===== */
+.md-body {
+  line-height: 1.75;
+  font-size: 0.92rem;
+  overflow-wrap: break-word;
+}
+.md-body > *:first-child {
+  margin-top: 0;
+}
+.md-body > *:last-child {
+  margin-bottom: 0;
+}
+.md-body h1,
+.md-body h2,
+.md-body h3,
+.md-body h4,
+.md-body h5,
+.md-body h6 {
+  margin: 1rem 0 0.5rem;
+  line-height: 1.35;
+  color: var(--text);
+}
+.md-body h1 {
+  font-size: 1.5rem;
+}
+.md-body h2 {
+  font-size: 1.25rem;
+}
+.md-body h3 {
+  font-size: 1.08rem;
+}
+.md-body h4,
+.md-body h5,
+.md-body h6 {
+  font-size: 0.98rem;
+}
+.md-body p {
+  margin: 0.5rem 0;
+}
+.md-body ul,
+.md-body ol {
+  margin: 0.5rem 0;
+  padding-left: 1.4rem;
+}
+.md-body li {
+  margin: 0.15rem 0;
+}
+.md-body code {
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 0.86em;
+  background: var(--surface-2);
+  border-radius: 5px;
+  padding: 1px 5px;
+  color: var(--accent-text);
+}
+.md-body .md-code {
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 0.7rem 0.9rem;
+  overflow-x: auto;
+  margin: 0.6rem 0;
+}
+.md-body .md-code code {
+  background: none;
+  padding: 0;
+  color: var(--text);
+}
+.md-body blockquote {
+  margin: 0.6rem 0;
+  padding: 0.35rem 0.9rem;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 0 8px 8px 0;
+  color: var(--text-2);
+}
+.md-body hr {
+  border: none;
+  border-top: 1px dashed var(--border);
+  margin: 1rem 0;
+}
+.md-body a {
+  color: var(--accent);
+}
+.md-body img {
+  max-width: 100%;
+  border-radius: 10px;
+  margin: 0.4rem 0;
+}
+.md-body strong {
+  color: var(--text);
+}
+.md-body del {
+  color: var(--text-3);
+}
+/* 紧凑版（葡萄藤侧栏预览用） */
+.md-body.compact {
+  font-size: 0.85rem;
+  line-height: 1.65;
+  color: var(--text-2);
+}
+.md-body.compact h1,
+.md-body.compact h2,
+.md-body.compact h3,
+.md-body.compact h4 {
+  margin: 0.6rem 0 0.3rem;
+  font-size: 0.98rem;
+}
+.md-body.compact p {
+  margin: 0.35rem 0;
+}
+.md-body.compact ul,
+.md-body.compact ol {
+  margin: 0.35rem 0;
+  padding-left: 1.2rem;
+}
+.md-body.compact blockquote {
+  margin: 0.4rem 0;
+  padding: 0.25rem 0.7rem;
+}
+.md-body.compact .md-code {
+  padding: 0.5rem 0.7rem;
+}
 /* ===== 葡萄藤统一视觉（笔记葡萄藤 / 日记葡萄藤共用） ===== */
 /* 主藤：一条细线，不做立体 */
 .vine-cane {
