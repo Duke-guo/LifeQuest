@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useNotesStore } from '../stores/notes'
 import { useTasksStore } from '../stores/tasks'
 import { useLinksStore } from '../stores/links'
+import { subjectOfNote } from '../utils/noteSubject'
 import AppIcon from './AppIcon.vue'
 
 const emit = defineEmits<{ open: [noteId: string] }>()
@@ -74,17 +75,9 @@ function weekday(date: string): string {
   return WEEKDAY[new Date(y, m - 1, d).getDay()]
 }
 
-/** 笔记的学科：优先 category，其次关联任务标题，否则未分类 */
+/** 笔记的学科见 utils/noteSubject（与笔记列表的「内容」视图保持一致） */
 function subjectOf(noteId: string, fallback: string): string {
-  if (fallback.trim()) return fallback.trim()
-  const refs = linksStore.connectedTo({ kind: 'note', id: noteId })
-  for (const r of refs) {
-    if (r.kind === 'task') {
-      const t = tasksStore.tasks.find((x) => x.id === r.id)
-      if (t) return t.title
-    }
-  }
-  return '未分类'
+  return subjectOfNote(noteId, fallback, linksStore.links, tasksStore.tasks)
 }
 
 function toNode(n: { id: string; title: string; date: string; rating: number; images: string[] }): VineNode {

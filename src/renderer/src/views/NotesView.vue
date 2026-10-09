@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
-import { useNotesStore } from '../stores/notes'
+import { useNotesStore, type Note } from '../stores/notes'
 import { useTasksStore } from '../stores/tasks'
 import { useTagsStore } from '../stores/tags'
 import { useLinksStore } from '../stores/links'
 import { useSemesterStore } from '../stores/semester'
 import { dataApi } from '../services/data'
 import { eventsFromTasks } from '../utils/schedule'
+import { subjectOfNote } from '../utils/noteSubject'
 import { toDateStr } from '../utils/helpers'
 import AppIcon from '../components/AppIcon.vue'
 import NotesVine from '../components/NotesVine.vue'
@@ -38,6 +39,54 @@ const show = reactive({ meta: false, tags: false, images: false, links: false })
 function toggle(key: keyof typeof show): void {
   show[key] = !show[key]
 }
+
+/** 左侧列表的三种排布：总列表 / 按时间 / 按内容（学科） */
+type ListMode = 'all' | 'time' | 'subject'
+const listMode = ref<ListMode>('all')
+
+const WEEKDAY = ['日', '一', '二', '三', '四', '五', '六']
+
+function weekdayOf(date: string): string {
+  const [y, m, d] = date.split('-').map(Number)
+  return WEEKDAY[new Date(y, m - 1, d).getDay()]
+}
+
+interface NoteGroup {
+  key: string
+  label: string
+  sub: string
+  notes: Note[]
+}
+
+const noteGroups = computed<NoteGroup[]>(() => {
+  const notes = store.notes
+  if (listMode.value === 'all') return [{ key: '__all', label: '', sub: '', notes }]
+
+  const map = new Map<string, Note[]>()
+  for (const n of notes) {
+    const k =
+      listMode.value === 'time'
+        ? n.date || '未标日期'
+        : subjectOfNote(n.id, n.category, linksStore.links, tasksStore.tasks)
+    if (!map.has(k)) map.set(k, [])
+    map.get(k)!.push(n)
+  }
+
+  const keys = [...map.keys()].sort((a, b) =>
+    listMode.value === 'time' ? (a < b ? 1 : -1) : a.localeCompare(b, 'zh')
+  )
+  return keys.map((k) => ({
+    key: k,
+    label: listMode.value === 'time' && k !== '未标日期' ? k.slice(5) : k,
+    sub:
+      listMode.value === 'time'
+        ? k === '未标日期'
+          ? `${map.get(k)!.length} 篇`
+          : `周${weekdayOf(k)}`
+        : `${map.get(k)!.length} 篇`,
+    notes: map.get(k)!
+  }))
+})
 
 const categoryOptions = computed(() => store.categories)
 
@@ -279,26 +328,38 @@ function onEditorClick(): void {
 
     <div v-else class="notes-layout">
       <aside class="note-list">
-        <div
-          v-for="n in store.notes"
-          :key="n.id"
-          class="note-row"
-          :class="{ active: n.id === store.currentId }"
-          @click="select(n.id)"
-        >
-          <div class="note-title">{{ n.title }}</div>
-          <div class="note-meta">
-            <span>{{ n.category || '未分类' }}</span>
-            <span class="stars">
-              <AppIcon v-for="i in n.rating" :key="i" name="star" :size="10" />
-            </span>
-          </div>
-          <div class="note-sub">
-            <span v-if="n.images.length" class="badge"><AppIcon name="image" :size="11" />{{ n.images.length }}</span>
-            <span v-if="n.tags.length" class="badge">{{ n.tags[0] }}<template v-if="n.tags.length > 1">+{{ n.tags.length - 1 }}</template></span>
-          </div>
-          <button class="del" title="删除" @click.stop="remove(n.id)">✕</button>
+        <div class="list-modes">
+          <button :class="{ on: listMode === 'all' }" @click="listMode = 'all'">总列表</button>
+          <button :class="{ on: listMode === 'time' }" @click="listMode = 'time'">时间</button>
+          <button :class="{ on: listMode === 'subject' }" @click="listMode = 'subject'">内容</button>
         </div>
+
+        <template v-for="g in noteGroups" :key="g.key">
+          <div v-if="g.label" class="group-head">
+            <span class="gh-label">{{ g.label }}</span>
+            <span class="gh-sub">{{ g.sub }}</span>
+          </div>
+          <div
+            v-for="n in g.notes"
+            :key="n.id"
+            class="note-row"
+            :class="{ active: n.id === store.currentId }"
+            @click="select(n.id)"
+          >
+            <div class="note-title">{{ n.title }}</div>
+            <div class="note-meta">
+              <span>{{ n.category || '未分类' }}</span>
+              <span class="stars">
+                <AppIcon v-for="i in n.rating" :key="i" name="star" :size="10" />
+              </span>
+            </div>
+            <div class="note-sub">
+              <span v-if="n.images.length" class="badge"><AppIcon name="image" :size="11" />{{ n.images.length }}</span>
+              <span v-if="n.tags.length" class="badge">{{ n.tags[0] }}<template v-if="n.tags.length > 1">+{{ n.tags.length - 1 }}</template></span>
+            </div>
+            <button class="del" title="删除" @click.stop="remove(n.id)">✕</button>
+          </div>
+        </template>
         <div v-if="store.notes.length === 0" class="empty">还没有笔记，点右上角新建</div>
       </aside>
 
@@ -483,6 +544,45 @@ function onEditorClick(): void {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+}
+.list-modes {
+  display: flex;
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 2px;
+  margin-bottom: 0.2rem;
+}
+.list-modes button {
+  flex: 1;
+  border: none;
+  background: none;
+  padding: 0.32rem 0;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-2);
+  font-size: 0.78rem;
+}
+.list-modes button.on {
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 600;
+}
+.group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.5rem 0.2rem 0.15rem;
+  border-bottom: 1px dashed var(--border);
+  margin-top: 0.15rem;
+}
+.gh-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+.gh-sub {
+  font-size: 0.7rem;
+  color: var(--text-3);
 }
 .note-row {
   position: relative;
