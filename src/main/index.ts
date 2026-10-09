@@ -337,6 +337,15 @@ function createWindow(): void {
                 const cs = getComputedStyle(cane)
                 out += '[主藤 颜色=' + cs.stroke + ' 宽度=' + cs.strokeWidth + ']\\n'
               }
+              // 长详情是否被收成一行
+              const desc = document.querySelector('.desc')
+              if (desc) {
+                const r = desc.getBoundingClientRect()
+                out +=
+                  '[详情 显示高=' + Math.round(r.height) + ' 内容高=' + desc.scrollHeight +
+                  ' 行数限制=' + (getComputedStyle(desc).webkitLineClamp || '无') +
+                  ' 展开键=' + (document.querySelector('.desc-toggle') ? '有' : '无') + ']\\n'
+              }
               out += document.body.innerText
               const tas = [...document.querySelectorAll('textarea')].map((t) => t.value).filter((v) => v)
               const ins = [...document.querySelectorAll('input')].map((i) => i.value).filter((v) => v)

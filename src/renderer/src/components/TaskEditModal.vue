@@ -213,8 +213,13 @@ function removeTag(id: string): void {
       </div>
 
       <label class="field">
-        <span>描述</span>
-        <input v-model="description" placeholder="可选" />
+        <span>详情（可以很长）</span>
+        <textarea
+          v-model="description"
+          class="detail-input"
+          rows="4"
+          placeholder="要求 / 注意事项 / 链接……"
+        ></textarea>
       </label>
 
       <div class="field tags">
@@ -320,6 +325,18 @@ h2 {
   font-size: 0.74rem;
   color: var(--text-3);
   line-height: 1.6;
+}
+.detail-input {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.86rem;
+  line-height: 1.6;
+  resize: vertical;
 }
 .tag-chip {
   display: inline-flex;

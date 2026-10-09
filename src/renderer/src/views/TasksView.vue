@@ -39,6 +39,8 @@ const kind = computed<TaskKind>(() => (startTime.value ? 'schedule' : 'task'))
 const seasonId = ref('')
 const tagInput = ref('')
 const tagIds = ref<string[]>([])
+const remindMinutes = ref(0)
+const description = ref('')
 const repeat = ref<RepeatMode>('none')
 const repeatUntil = ref('')
 /** 不规律重复：逐次日期 */
@@ -114,6 +116,8 @@ async function submit(force = false): Promise<void> {
     endTime: kind.value === 'schedule' ? endTime.value : null,
     location: location.value.trim() || null,
     seasonId: seasonId.value || null,
+    remindMinutes: remindMinutes.value || null,
+    description: description.value.trim(),
     tagIds: tagIds.value,
     repeat: repeat.value,
     repeatUntil: repeat.value !== 'none' && repeatUntil.value ? repeatUntil.value : null,
@@ -122,6 +126,7 @@ async function submit(force = false): Promise<void> {
 
   title.value = ''
   location.value = ''
+  description.value = ''
   occurrences.value = []
   conflicts.value = []
   pending.value = false
@@ -229,6 +234,16 @@ function locate(t: Task): void {
         <span class="dash">–</span>
         <input v-model="endTime" type="time" title="结束时间" />
         <input v-model="location" class="loc-input" placeholder="地点（可选）" />
+        <label class="inline-field">
+          <span>提前提醒</span>
+          <select v-model.number="remindMinutes">
+            <option :value="0">不提醒</option>
+            <option :value="5">5 分钟</option>
+            <option :value="15">15 分钟</option>
+            <option :value="30">30 分钟</option>
+            <option :value="60">1 小时</option>
+          </select>
+        </label>
         <select v-model="seasonId">
           <option value="">无赛季</option>
           <option v-for="s in seasonsStore.seasons" :key="s.id" :value="s.id">{{ s.name }}</option>
@@ -276,6 +291,19 @@ function locate(t: Task): void {
           <button type="button" class="tag-x" @click="removeTag(id)">✕</button>
         </span>
         <input v-model="tagInput" class="tag-input" placeholder="＋ 标签（回车）" @keyup.enter="addTag" />
+      </div>
+
+      <!-- 详情：内容可能很长，收在下面，和「编辑事项」里的一致 -->
+      <div class="row detail-row">
+        <label class="detail-field">
+          <span>详情（可选，可以很长）</span>
+          <textarea
+            v-model="description"
+            class="detail-input"
+            rows="2"
+            placeholder="要求 / 注意事项 / 链接……"
+          ></textarea>
+        </label>
       </div>
 
       <!-- 冲突确认 -->
@@ -451,6 +479,29 @@ input[type='time'] {
 }
 .occ-editor {
   margin-top: 0.4rem;
+}
+.detail-row {
+  margin-top: 0.5rem;
+}
+.detail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  width: 100%;
+  font-size: 0.75rem;
+  color: var(--text-3);
+}
+.detail-input {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.86rem;
+  line-height: 1.6;
+  resize: vertical;
 }
 .repeat-row {
   gap: 0.7rem;

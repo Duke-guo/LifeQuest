@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { Task } from '../../../shared/types'
 import { formatDate } from '../utils/helpers'
 import { REPEAT_LABELS } from '../utils/schedule'
@@ -10,6 +10,8 @@ const emit = defineEmits<{ toggle: []; remove: []; edit: []; note: []; locate: [
 
 const done = computed(() => props.task.status === 'done')
 const isSchedule = computed(() => props.task.kind === 'schedule')
+/** 详情默认收成一行，长内容不撑高列表 */
+const descOpen = ref(false)
 
 /** 指针角度：越重要越指向上方 */
 const needleAngle = computed(() => (3 - props.task.importance) * 34)
@@ -50,7 +52,16 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
             {{ REPEAT_LABELS[task.repeat] }}
           </span>
           <span v-if="task.repeatUntil" class="pill range">至 {{ task.repeatUntil.slice(5) }}</span>
-          <span v-if="task.description" class="desc">{{ task.description }}</span>
+        </div>
+        <div v-if="task.description" class="desc-row">
+          <span class="desc" :class="{ open: descOpen }" :title="task.description">{{ task.description }}</span>
+          <button
+            v-if="task.description.length > 40"
+            class="desc-toggle"
+            @click.stop="descOpen = !descOpen"
+          >
+            {{ descOpen ? '收起' : '展开' }}
+          </button>
         </div>
       </div>
 
@@ -192,6 +203,42 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
 }
 .loc {
   color: var(--text-3);
+}
+.desc-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  margin-top: 0.2rem;
+}
+/* 详情默认只占一行，不撑高列表 */
+.desc {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.76rem;
+  color: var(--text-3);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+.desc.open {
+  display: block;
+  -webkit-line-clamp: unset;
+  white-space: pre-wrap;
+}
+.desc-toggle {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 0.72rem;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.desc-toggle:hover {
+  text-decoration: underline;
 }
 .take-note,
 .locate {
