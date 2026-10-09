@@ -49,9 +49,12 @@ function toggle(key: keyof typeof show): void {
 /** 正文：合一（实时预览）/ 纯源码 */
 const bodyMode = ref<'live' | 'raw'>('live')
 
+/** 正在编辑的笔记 id（区别于「当前选中」，新建/切换的瞬间两者会不一致） */
+const editingId = ref<string | null>(null)
+
 /** 有改动但还没保存（避免「以为自动存了」而丢内容） */
 const dirty = computed(() => {
-  const n = store.current
+  const n = editingId.value ? store.byId(editingId.value) : null
   if (!n) return false
   return (
     title.value !== n.title ||
@@ -131,13 +134,16 @@ onMounted(async () => {
 })
 
 async function select(id: string): Promise<void> {
-  // 切走前先把上一篇没落盘的改动补上，避免 900ms 内切笔记丢改动
+  // 切走前先把上一篇没落盘的改动补上，避免 900ms 内切笔记丢改动。
+  // 注意：这里必须按「正在编辑的笔记 id」存，不能按 store.current ——
+  // 新建笔记时 currentId 已经被指到新笔记，按它存会把上一篇的内容写进新笔记。
   if (dirty.value) {
     window.clearTimeout(autoTimer)
     await save(true)
   }
+  editingId.value = id
   store.currentId = id
-  const n = store.current
+  const n = store.byId(id)
   if (!n) return
   title.value = n.title
   category.value = n.category
@@ -166,14 +172,16 @@ function splitTags(s: string): string[] {
 }
 
 async function save(auto = false): Promise<void> {
+  const target = editingId.value ? store.byId(editingId.value) : null
+  if (!target) return
   saving.value = true
-  const beforeDate = store.current?.date
+  const beforeDate = target.date
   const tagIds: string[] = []
   for (const t of tagList.value) {
     const tag = await tagsStore.ensure(t, 'theme')
     tagIds.push(tag.id)
   }
-  await store.saveCurrent({
+  Object.assign(target, {
     title: title.value.trim() || '未命名笔记',
     category: category.value.trim(),
     date: date.value || toDateStr(new Date()),
@@ -184,6 +192,7 @@ async function save(auto = false): Promise<void> {
     images: [...images.value],
     content: content.value
   })
+  await store.persist(target)
   // 改了日期要按新日期重排（列表 / 葡萄藤都按日期归类）
   if (beforeDate !== date.value) await store.list()
   saving.value = false
@@ -205,9 +214,9 @@ onUnmounted(() => {
 })
 
 async function create(): Promise<void> {
-  await store.create()
+  const id = await store.create()
   viewMode.value = 'list'
-  await select(store.currentId as string)
+  await select(id)
 }
 
 /** 从葡萄藤视图打开某篇笔记 → 回到列表编辑 */
@@ -256,6 +265,8 @@ async function remove(id: string): Promise<void> {
     confirmText: '删除笔记'
   })
   if (!ok) return
+  const wasEditing = editingId.value === id
+  if (wasEditing) editingId.value = null
   await store.remove(id)
   await linksStore.removeEntity({ kind: 'note', id })
   if (store.notes.length > 0) await select(store.notes[0].id)

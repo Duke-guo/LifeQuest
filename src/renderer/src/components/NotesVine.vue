@@ -20,6 +20,8 @@ type Mode = 'time' | 'subject'
 const mode = ref<Mode>('time')
 const activeCol = ref(0)
 const activeNode = ref(0)
+/** 滚轮换主线的节流 */
+let lock = 0
 
 const containerRef = ref<HTMLElement | null>(null)
 const containerW = ref(0)
@@ -198,14 +200,23 @@ function switchMode(m: Mode): void {
   activeNode.value = 0
 }
 
+/** 滚轮只切主线（一列 = 一条主线），支线靠点葡萄来选 */
 function onWheel(e: WheelEvent): void {
   e.preventDefault()
-  if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
-    clampCol(activeCol.value + (e.deltaX > 0 ? 1 : -1))
-  } else {
-    clampNode(activeNode.value + (e.deltaY > 0 ? 1 : -1))
-  }
+  const now = Date.now()
+  if (now < lock) return
+  // 纵向滚轮也用来左右换主线：横向排布下这是最顺的
+  const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
+  if (Math.abs(d) < 1) return
+  lock = now + 160
+  const next = Math.max(0, Math.min(colCount.value - 1, activeCol.value + (d > 0 ? 1 : -1)))
+  if (next === activeCol.value) return
+  activeCol.value = next
+  // 换列后把支线索引夹到有效范围（不重置，方便同位置对比两列）
+  clampNode(activeNode.value)
 }
+
+/** 支线：点葡萄选中 */
 
 function onKey(e: KeyboardEvent): void {
   const t = e.target as HTMLElement | null
@@ -252,7 +263,7 @@ function openNode(n: VineNode): void {
         </template>
         <span v-else class="now-empty">还没有笔记</span>
       </div>
-      <div class="vine-hint">滚轮/↑↓ 切支线 · ←→ 切主线 · 单击选中（右侧看正文）· 双击进入</div>
+      <div class="vine-hint">滚轮换主线 · 点葡萄选一篇 · 双击或「打开编辑」进入</div>
     </div>
 
     <div class="vine-body">

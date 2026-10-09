@@ -135,6 +135,21 @@ function createWindow(): void {
                 await new Promise((res) => setTimeout(res, 1200))
                 continue
               }
+              if (label.startsWith('@wheel:')) {
+                // 在葡萄藤舞台上派发一次滚轮：@wheel:<deltaY>
+                const d = Number(label.slice(7)) || 0
+                const r = await mainWindow.webContents.executeJavaScript(
+                  `(() => {
+                    const el = document.querySelector('.vine-stage')
+                    if (!el) return 'no vine-stage'
+                    el.dispatchEvent(new WheelEvent('wheel', { deltaY: ${d}, bubbles: true, cancelable: true }))
+                    return 'wheel ' + ${d}
+                  })()`
+                )
+                console.log('wheel ->', r)
+                await new Promise((res) => setTimeout(res, 700))
+                continue
+              }
               if (label.startsWith('@type:')) {
                 const text = JSON.stringify(label.slice(6))
                 const r = await mainWindow.webContents.executeJavaScript(
