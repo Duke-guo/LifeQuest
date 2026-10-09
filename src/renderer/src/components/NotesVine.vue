@@ -91,11 +91,16 @@ function toNode(n: { id: string; title: string; date: string; rating: number; im
   return { id: n.id, title: n.title, date: n.date, rating: n.rating, images: n.images.length, x: CX, y: TOP }
 }
 
-/** 给一列节点分配「葡萄」位置（沿藤蔓纵向分布 + 左右抖动） */
+/** 给一列节点分配「葡萄」位置：一簇挂在藤上，节点之间保持固定间距，不摊满整根藤 */
+const STEP = 86
 function placeNodes(nodes: VineNode[]): VineNode[] {
   const n = nodes.length
+  const avail = BOTTOM - TOP
+  const step = n <= 1 ? 0 : Math.min(STEP, avail / (n - 1))
+  const total = (n - 1) * step
+  const start = TOP + Math.max(0, (avail - total) / 2)
   nodes.forEach((node, i) => {
-    const y = n === 1 ? (TOP + BOTTOM) / 2 : TOP + (i / (n - 1)) * (BOTTOM - TOP)
+    const y = n === 1 ? TOP + avail / 2 : start + i * step
     const side = i % 2 === 0 ? -1 : 1
     const off = side * (16 + hash(node.id) * 18)
     node.y = y
@@ -198,6 +203,11 @@ function onKey(e: KeyboardEvent): void {
   }
 }
 
+function focusNode(col: number, node: number): void {
+  activeCol.value = col
+  activeNode.value = node
+}
+
 function openNode(n: VineNode): void {
   emit('open', n.id)
 }
@@ -218,7 +228,7 @@ function openNode(n: VineNode): void {
         </template>
         <span v-else class="now-empty">还没有笔记</span>
       </div>
-      <div class="vine-hint">滚轮/↑↓ 切支线 · ←→ 切主线 · 点击打开笔记</div>
+      <div class="vine-hint">滚轮/↑↓ 切支线 · ←→ 切主线 · 单击选中（右侧看正文）· 双击进入</div>
     </div>
 
     <div class="vine-body">
@@ -274,7 +284,8 @@ function openNode(n: VineNode): void {
               top: node.y - NODE_H / 2 + 'px',
               '--tilt': ((hash(node.id) - 0.5) * 4).toFixed(1) + 'deg'
             }"
-            @click="openNode(node)"
+            @click="focusNode(ci, ni)"
+            @dblclick="openNode(node)"
           >
             <span class="grape-title">{{ node.title }}</span>
             <span class="grape-meta">

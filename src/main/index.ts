@@ -203,6 +203,22 @@ function createWindow(): void {
                   '，被裁剪 ' + clipped +
                   '，页面溢出 ' + (document.documentElement.scrollHeight - window.innerHeight) + ']\\n'
               }
+              // 葡萄藤几何体检：每粒葡萄相对舞台的 top/left
+              const stage = document.querySelector('.vine-stage')
+              const grapes = [...document.querySelectorAll('.grape')]
+              if (stage && grapes.length) {
+                const sr = stage.getBoundingClientRect()
+                out +=
+                  '[葡萄 ' + grapes.length + ' 粒 top/left: ' +
+                  grapes
+                    .map(
+                      (g) =>
+                        Math.round(g.getBoundingClientRect().top - sr.top) +
+                        '/' +
+                        Math.round(g.getBoundingClientRect().left - sr.left)
+                    )
+                    .join('  ') + ']\\n'
+              }
               out += document.body.innerText
               const tas = [...document.querySelectorAll('textarea')].map((t) => t.value).filter((v) => v)
               const ins = [...document.querySelectorAll('input')].map((i) => i.value).filter((v) => v)
