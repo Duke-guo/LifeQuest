@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useNotesStore } from '../stores/notes'
 import { useTasksStore } from '../stores/tasks'
 import { useTagsStore } from '../stores/tags'
@@ -32,6 +32,12 @@ const linkHint = ref('')
 const saving = ref(false)
 /** 列表 / 葡萄藤 两种视图 */
 const viewMode = ref<'list' | 'vine'>('list')
+/** 除标题与正文外，其余分区用按钮「召唤」 */
+const show = reactive({ meta: false, tags: false, images: false, links: false })
+
+function toggle(key: keyof typeof show): void {
+  show[key] = !show[key]
+}
 
 const categoryOptions = computed(() => store.categories)
 
@@ -124,6 +130,7 @@ async function onPickImages(e: Event): Promise<void> {
   }
   input.value = ''
   await loadImageSrcs()
+  show.images = true
   await save()
 }
 
@@ -148,6 +155,7 @@ async function onPaste(e: ClipboardEvent): Promise<void> {
     }
   }
   await loadImageSrcs()
+  show.images = true
   await save()
 }
 
@@ -295,13 +303,44 @@ function onEditorClick(): void {
       </aside>
 
       <section v-if="store.current" class="note-editor">
-        <!-- 分区 1：标题 -->
+        <!-- 标题（始终可见） -->
         <div class="sec">
           <input v-model="title" class="title-input" placeholder="笔记标题" />
         </div>
 
-        <!-- 分区 2：元信息 -->
-        <div class="sec meta-sec">
+        <!-- 正文：主区域（始终可见） -->
+        <div class="sec body-sec">
+          <textarea
+            v-model="content"
+            class="content-input"
+            placeholder="笔记正文（支持 Markdown）…"
+            @click="onEditorClick"
+          ></textarea>
+        </div>
+
+        <!-- 工具条：其余信息用按钮召唤 -->
+        <div class="tools">
+          <button class="tool-btn" :class="{ on: show.meta }" @click="toggle('meta')">
+            <AppIcon name="star" :size="14" /> 分类 / 信息
+          </button>
+          <button class="tool-btn" :class="{ on: show.tags }" @click="toggle('tags')">
+            <AppIcon name="sparkle" :size="14" /> 标签
+            <em v-if="tagList.length">{{ tagList.length }}</em>
+          </button>
+          <button class="tool-btn" :class="{ on: show.images }" @click="toggle('images')">
+            <AppIcon name="image" :size="14" /> 图片
+            <em v-if="images.length">{{ images.length }}</em>
+          </button>
+          <button class="tool-btn" :class="{ on: show.links }" @click="toggle('links')">
+            <AppIcon name="map" :size="14" /> 关联
+          </button>
+          <span class="tools-spacer"></span>
+          <span v-if="linkHint" class="saved">{{ linkHint }}</span>
+          <button class="save-btn" :disabled="saving" @click="save">{{ saving ? '保存中…' : '保存' }}</button>
+        </div>
+
+        <!-- 分类 / 信息 -->
+        <div v-if="show.meta" class="sec meta-sec">
           <label class="field">
             <span>分类</span>
             <input v-model="category" list="cat-list" placeholder="如：数学" />
@@ -329,8 +368,8 @@ function onEditorClick(): void {
           </label>
         </div>
 
-        <!-- 分区 3：标签 -->
-        <div class="sec tag-sec">
+        <!-- 标签 -->
+        <div v-if="show.tags" class="sec tag-sec">
           <span class="sec-label">标签</span>
           <span v-for="t in tagList" :key="t" class="tag-chip" :style="{ '--c': tagsStore.colorOf(t) }">
             {{ t }}
@@ -339,8 +378,8 @@ function onEditorClick(): void {
           <input v-model="tagInput" class="tag-input" placeholder="加标签后回车" @keyup.enter="addTag" />
         </div>
 
-        <!-- 分区 4：图片 -->
-        <div class="sec img-sec">
+        <!-- 图片 -->
+        <div v-if="show.images" class="sec img-sec">
           <div class="sec-head">
             <span class="sec-label">图片</span>
             <label class="upload-btn">
@@ -358,19 +397,8 @@ function onEditorClick(): void {
           <div v-else class="none">还没有图片</div>
         </div>
 
-        <!-- 分区 5：正文 -->
-        <div class="sec">
-          <span class="sec-label">正文</span>
-          <textarea
-            v-model="content"
-            class="content-input"
-            placeholder="笔记正文（支持 Markdown）…"
-            @click="onEditorClick"
-          ></textarea>
-        </div>
-
-        <!-- 分区 6：关联 -->
-        <div class="sec link-sec">
+        <!-- 关联 -->
+        <div v-if="show.links" class="sec link-sec">
           <span class="sec-label">关联</span>
           <span v-for="r in linkedRefs" :key="`${r.kind}-${r.id}`" class="link-chip">
             {{ labelOf(r) }}
@@ -383,7 +411,7 @@ function onEditorClick(): void {
         </div>
 
         <!-- 今天的课：一键关联 -->
-        <div v-if="todayCourses.length" class="sec link-sec today-courses">
+        <div v-if="show.links && todayCourses.length" class="sec link-sec today-courses">
           <span class="sec-label">今天的课</span>
           <button
             v-for="t in todayCourses"
@@ -396,11 +424,6 @@ function onEditorClick(): void {
             <template v-if="t.startTime">{{ t.startTime }}</template>
           </button>
           <span class="hint">点一下：把这篇笔记关联到这节课（并自动填好分类）</span>
-        </div>
-
-        <div class="actions">
-          <span v-if="linkHint" class="saved">{{ linkHint }}</span>
-          <button class="save-btn" :disabled="saving" @click="save">{{ saving ? '保存中…' : '保存' }}</button>
         </div>
       </section>
     </div>
@@ -530,6 +553,42 @@ function onEditorClick(): void {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
+}
+.tools {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.32rem 0.7rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+.tool-btn em {
+  font-style: normal;
+  font-family: var(--font-num);
+  font-size: 0.72rem;
+  color: var(--text-3);
+}
+.tool-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.tool-btn.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.tools-spacer {
+  flex: 1;
 }
 .sec {
   background: var(--surface);

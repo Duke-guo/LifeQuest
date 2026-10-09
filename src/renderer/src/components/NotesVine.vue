@@ -147,6 +147,10 @@ const trackX = computed(() => {
 
 const colCount = computed(() => columns.value.length)
 const active = computed(() => columns.value[activeCol.value]?.nodes[activeNode.value] ?? null)
+const activeNote = computed(() => {
+  const a = active.value
+  return a ? notesStore.byId(a.id) ?? null : null
+})
 
 function clampCol(i: number): void {
   activeCol.value = Math.max(0, Math.min(colCount.value - 1, i))
@@ -194,11 +198,6 @@ function onKey(e: KeyboardEvent): void {
   }
 }
 
-function focusNode(col: number, node: number): void {
-  activeCol.value = col
-  activeNode.value = node
-}
-
 function openNode(n: VineNode): void {
   emit('open', n.id)
 }
@@ -219,9 +218,10 @@ function openNode(n: VineNode): void {
         </template>
         <span v-else class="now-empty">还没有笔记</span>
       </div>
-      <div class="vine-hint">滚轮/↑↓ 切支线 · ←→ 切主线 · 双击或回车打开</div>
+      <div class="vine-hint">滚轮/↑↓ 切支线 · ←→ 切主线 · 点击打开笔记</div>
     </div>
 
+    <div class="vine-body">
     <div
       ref="containerRef"
       class="vine-stage"
@@ -274,8 +274,7 @@ function openNode(n: VineNode): void {
               top: node.y - NODE_H / 2 + 'px',
               '--tilt': ((hash(node.id) - 0.5) * 4).toFixed(1) + 'deg'
             }"
-            @click="focusNode(ci, ni)"
-            @dblclick="openNode(node)"
+            @click="openNode(node)"
           >
             <span class="grape-title">{{ node.title }}</span>
             <span class="grape-meta">
@@ -293,6 +292,19 @@ function openNode(n: VineNode): void {
         <AppIcon name="notes" :size="34" />
         <p>还没有笔记，先去「列表」写一篇吧。<br />写下的笔记会像葡萄一样挂在时间或学科的藤上。</p>
       </div>
+    </div>
+
+    <aside v-if="activeNote" class="vine-preview">
+      <div class="pv-head">
+        <span class="pv-date">{{ activeNote.date || '' }}</span>
+        <button class="pv-open" @click="active && openNode(active)">打开编辑</button>
+      </div>
+      <h4 class="pv-title">{{ activeNote.title }}</h4>
+      <div class="pv-stars">
+        <AppIcon v-for="i in activeNote.rating" :key="i" name="star" :size="12" />
+      </div>
+      <pre class="pv-body">{{ activeNote.content || '（这篇还没有正文）' }}</pre>
+    </aside>
     </div>
   </div>
 </template>
@@ -352,7 +364,14 @@ function openNode(n: VineNode): void {
   font-size: 0.72rem;
   color: var(--text-3);
 }
+.vine-body {
+  display: flex;
+  gap: 0.7rem;
+  align-items: stretch;
+}
 .vine-stage {
+  flex: 1;
+  min-width: 0;
   position: relative;
   overflow: hidden;
   border-radius: 16px;
@@ -360,6 +379,63 @@ function openNode(n: VineNode): void {
     radial-gradient(1200px 400px at 50% -10%, var(--accent-soft), transparent 70%),
     var(--surface);
   border: 1px solid var(--border);
+}
+.vine-preview {
+  width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 0.9rem;
+}
+.pv-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.pv-date {
+  font-family: var(--font-num);
+  font-size: 0.78rem;
+  color: var(--text-3);
+}
+.pv-open {
+  border: 1px solid var(--accent);
+  background: var(--surface);
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+.pv-open:hover {
+  background: var(--accent);
+  color: #fff;
+}
+.pv-title {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.3;
+}
+.pv-stars {
+  display: inline-flex;
+  gap: 1px;
+  color: var(--accent);
+}
+.pv-body {
+  flex: 1;
+  min-height: 0;
+  margin: 0.4rem 0 0;
+  padding: 0.5rem 0;
+  font-family: inherit;
+  font-size: 0.85rem;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-y: auto;
+  color: var(--text-2);
 }
 .track {
   position: relative;
