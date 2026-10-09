@@ -175,3 +175,70 @@ code {
 .content > * {
   animation: fadeIn 0.28s ease;
 }
+
+/* ===== 葡萄藤统一视觉（笔记葡萄藤 / 日记葡萄藤共用） ===== */
+/* 主藤：一条细线，不做立体 */
+.vine-cane {
+  fill: none;
+  stroke: rgba(120, 160, 130, 0.5);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.vine-cane.on {
+  stroke: var(--accent);
+  stroke-width: 3.5;
+}
+/* 小枝 / 果柄 */
+.vine-twig {
+  fill: none;
+  stroke: rgba(120, 160, 130, 0.42);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.vine-twig.on {
+  stroke: var(--accent);
+  stroke-dasharray: 3.5 3;
+}
+/* 藤上的文字 */
+.vine-label {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text-2);
+  letter-spacing: 0.01em;
+}
+.vine-label.on {
+  color: var(--accent);
+  font-weight: 700;
+}
+/* 藤根的小圆点 */
+.vine-sprout {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+/* 藤上的果实/节点统一质感：平面 + 细描边 + 淡投影 + 轻微歪斜 */
+.vine-fruit {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    opacity 0.2s ease;
+}
+.vine-fruit:hover {
+  transform: rotate(0deg) scale(1.05);
+}
+.vine-fruit.on {
+  border-color: var(--accent);
+  box-shadow: 0 6px 18px rgba(207, 74, 60, 0.22);
+  transform: rotate(0deg) scale(1.08);
+}

@@ -164,6 +164,13 @@ function pick(key: string): void {
   selKey.value = selKey.value === key ? null : key
 }
 
+/** 每颗果实一点点歪，乱中有序（与笔记葡萄藤一致） */
+function tilt(date: string): string {
+  let h = 0
+  for (let i = 0; i < date.length; i++) h = (h * 31 + date.charCodeAt(i)) | 0
+  return `${(((Math.abs(h) % 100) / 100) * 6 - 3).toFixed(1)}deg`
+}
+
 /** 果实用当天配色（和上面日历同源） */
 function fruitStyle(date: string): Record<string, string> | undefined {
   const c = props.colors?.[date]
@@ -208,23 +215,22 @@ async function openWeek(w: WeekNode): Promise<void> {
       <!-- 每日日记 -->
       <div v-if="row === 0" key="day" class="jv-track" :style="{ '--n': dayNodes.length }">
         <svg class="jv-svg" :viewBox="`0 0 ${VW} ${TRACK_H}`" preserveAspectRatio="none">
-          <path class="jv-vine-under" :d="vinePath" />
-          <path class="jv-vine" :d="vinePath" />
-          <path v-for="s in stems(dayNodes.length)" :key="`s${s.key}`" class="jv-stem" :d="s.d" />
+          <path class="vine-cane" :d="vinePath" />
+          <path v-for="s in stems(dayNodes.length)" :key="`s${s.key}`" class="vine-twig" :d="s.d" />
           <path
             v-for="(d, i) in dayNodes"
             v-show="selKey === d.date"
             :key="`e${d.date}`"
-            class="jv-stem entry"
+            class="vine-twig on"
             :d="entryTendril(i, dayNodes.length)"
           />
         </svg>
 
         <div v-for="d in dayNodes" :key="d.date" class="jv-cell">
           <button
-            class="jv-node"
+            class="jv-node vine-fruit"
             :class="{ empty: !d.has, on: selKey === d.date }"
-            :style="d.has ? fruitStyle(d.date) : undefined"
+            :style="{ ...(d.has ? fruitStyle(d.date) : {}), '--tilt': tilt(d.date) }"
             :title="`${d.date} 周${weekdayOf(d.date)}`"
             @click="pick(d.date)"
           >
@@ -244,29 +250,29 @@ async function openWeek(w: WeekNode): Promise<void> {
             </button>
           </div>
 
-          <span class="jv-wd">周{{ weekdayOf(d.date) }}</span>
+          <span class="vine-label" :class="{ on: selKey === d.date }">周{{ weekdayOf(d.date) }}</span>
         </div>
       </div>
 
       <!-- 周记 -->
       <div v-else key="week" class="jv-track" :style="{ '--n': weekNodes.length }">
         <svg class="jv-svg" :viewBox="`0 0 ${VW} ${TRACK_H}`" preserveAspectRatio="none">
-          <path class="jv-vine-under" :d="vinePath" />
-          <path class="jv-vine" :d="vinePath" />
-          <path v-for="s in stems(weekNodes.length)" :key="`s${s.key}`" class="jv-stem" :d="s.d" />
+          <path class="vine-cane" :d="vinePath" />
+          <path v-for="s in stems(weekNodes.length)" :key="`s${s.key}`" class="vine-twig" :d="s.d" />
           <path
             v-for="(w, i) in weekNodes"
             v-show="selKey === w.start"
             :key="`e${w.start}`"
-            class="jv-stem entry"
+            class="vine-twig on"
             :d="entryTendril(i, weekNodes.length)"
           />
         </svg>
 
         <div v-for="w in weekNodes" :key="w.start" class="jv-cell">
           <button
-            class="jv-node"
+            class="jv-node vine-fruit"
             :class="{ empty: !w.noteId, on: selKey === w.start }"
+            :style="{ '--tilt': tilt(w.start) }"
             :title="`${w.start} ~ ${w.end}`"
             @click="pick(w.start)"
           >
@@ -285,7 +291,7 @@ async function openWeek(w: WeekNode): Promise<void> {
             </button>
           </div>
 
-          <span class="jv-wd">{{ w.label }}</span>
+          <span class="vine-label" :class="{ on: selKey === w.start }">{{ w.label }}</span>
         </div>
       </div>
     </transition>
@@ -339,7 +345,7 @@ async function openWeek(w: WeekNode): Promise<void> {
   margin-left: 0.2rem;
 }
 
-/* 藤 / 果柄 / 果实共用一层坐标 */
+/* 藤 / 果柄 / 果实共用一层坐标（线条样式见 main.css 的 .vine-cane / .vine-twig） */
 .jv-track {
   position: relative;
   display: grid;
@@ -354,35 +360,6 @@ async function openWeek(w: WeekNode): Promise<void> {
   overflow: visible;
   pointer-events: none;
 }
-/* 主藤：深色一层 + 上面压一层浅色，做出枝条的圆润感 */
-.jv-vine-under {
-  fill: none;
-  stroke: rgba(96, 140, 106, 0.9);
-  stroke-width: 4.5;
-  stroke-linecap: round;
-  transform: translateY(1.6px);
-  vector-effect: non-scaling-stroke;
-}
-.jv-vine {
-  fill: none;
-  stroke: rgba(150, 196, 158, 0.95);
-  stroke-width: 3;
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-}
-/* 果柄：打弯的小枝 */
-.jv-stem {
-  fill: none;
-  stroke: rgba(126, 168, 134, 0.9);
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-}
-.jv-stem.entry {
-  stroke: var(--accent);
-  stroke-width: 1.6;
-  stroke-dasharray: 3.5 3;
-}
 
 .jv-cell {
   display: flex;
@@ -391,41 +368,27 @@ async function openWeek(w: WeekNode): Promise<void> {
   /* 与 SVG 的 FRUIT_TOP 对齐 */
   padding-top: 44px;
 }
-/* 葡萄：底色来自当天配色，加一层左上高光做出球感 */
+/* 葡萄：平面质感，与笔记葡萄藤一致（底色来自当天配色） */
 .jv-node {
-  position: relative;
   width: 34px;
   height: 34px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: none;
-  background: var(--surface-2);
-  color: var(--text-3);
   cursor: pointer;
   font-family: var(--font-num);
   font-weight: 700;
   font-size: 0.92rem;
-  background-image: radial-gradient(
-    circle at 34% 26%,
-    rgba(255, 255, 255, 0.72),
-    rgba(255, 255, 255, 0) 58%
-  );
-  transition: transform 0.16s ease, box-shadow 0.16s ease;
-}
-.jv-node:hover {
-  transform: translateY(-2px);
-}
-.jv-node.on {
-  transform: scale(1.12);
+  transform: rotate(var(--tilt, 0deg));
 }
 /* 没写的：淡虚线圈 + 加号 */
 .jv-node.empty {
   background: transparent;
-  background-image: none;
-  border: 1.5px dashed var(--border);
+  border-style: dashed;
   color: var(--text-3);
+  box-shadow: none;
+  opacity: 0.85;
 }
 .jv-node.empty:hover {
   border-color: var(--accent);
@@ -440,7 +403,7 @@ async function openWeek(w: WeekNode): Promise<void> {
   font-size: 0.8rem;
 }
 
-/* 入口果实：藏在果实下方，同一串上的第二颗 */
+/* 入口果实：同一串上的第二颗，平面质感 */
 .jv-entry-slot {
   height: 40px;
   display: flex;
@@ -458,11 +421,6 @@ async function openWeek(w: WeekNode): Promise<void> {
   background: var(--accent);
   color: #fff;
   cursor: pointer;
-  background-image: radial-gradient(
-    circle at 34% 26%,
-    rgba(255, 255, 255, 0.55),
-    rgba(255, 255, 255, 0) 58%
-  );
   box-shadow: 0 2px 6px rgba(60, 30, 25, 0.18);
   animation: jvPop 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
   transition: transform 0.16s ease;
@@ -476,9 +434,7 @@ async function openWeek(w: WeekNode): Promise<void> {
     opacity: 0;
   }
 }
-.jv-wd {
-  font-size: 0.7rem;
-  color: var(--text-3);
+.jv-cell .vine-label {
   margin-top: 2px;
 }
 .jv-fade-enter-active,

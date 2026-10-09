@@ -277,7 +277,7 @@ function createWindow(): void {
               if (jv) {
                 const tr = jv.getBoundingClientRect()
                 const fruits = [...jv.querySelectorAll('.jv-node')]
-                const stems = [...jv.querySelectorAll('.jv-stem')]
+                const stems = [...jv.querySelectorAll('.vine-twig')]
                 out +=
                   '[日记藤 果实=' + fruits.length +
                   ' 顶端=' + fruits.map((f) => Math.round(f.getBoundingClientRect().top - tr.top)).join(',') +
@@ -292,7 +292,13 @@ function createWindow(): void {
                       return nums.length ? Math.round(Number(nums[nums.length - 1])) : '?'
                     })
                     .join(',') +
-                  ' 入口=' + visibleStems.filter((s) => s.classList.contains('entry')).length + ']\\n'
+                  ' 入口=' + visibleStems.filter((s) => s.classList.contains('on')).length + ']\\n'
+              }
+              // 藤蔓统一样式体检
+              const cane = document.querySelector('.vine-cane')
+              if (cane) {
+                const cs = getComputedStyle(cane)
+                out += '[主藤 颜色=' + cs.stroke + ' 宽度=' + cs.strokeWidth + ']\\n'
               }
               out += document.body.innerText
               const tas = [...document.querySelectorAll('textarea')].map((t) => t.value).filter((v) => v)

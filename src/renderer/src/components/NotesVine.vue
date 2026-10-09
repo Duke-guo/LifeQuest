@@ -275,8 +275,8 @@ function openNode(n: VineNode): void {
           :style="{ left: ci * COL_W + 'px', width: COL_W + 'px' }"
         >
           <div class="root">
-            <span class="root-dot"></span>
-            <span class="root-label">{{ col.label }}</span>
+            <span class="vine-sprout"></span>
+            <span class="vine-label" :class="{ on: ci === activeCol }">{{ col.label }}</span>
             <span v-if="col.sub" class="root-sub">{{ col.sub }}</span>
             <button class="root-add" title="在这根藤上再挂一篇笔记（继承分类与标签）" @click.stop="extend(col)">
               ＋
@@ -286,13 +286,14 @@ function openNode(n: VineNode): void {
           <!-- 藤蔓 + 果柄 -->
           <svg class="vine-svg" :viewBox="`0 0 ${COL_W} ${H}`" preserveAspectRatio="none">
             <path
-              class="vine-stem"
+              class="vine-cane"
+              :class="{ on: ci === activeCol }"
               :d="`M ${CX} ${TOP} C ${CX - 14} ${(TOP + BOTTOM) / 2 - 20}, ${CX + 14} ${(TOP + BOTTOM) / 2 + 20}, ${CX} ${BOTTOM}`"
             />
             <line
               v-for="node in col.nodes"
               :key="node.id"
-              class="stalk"
+              class="vine-twig"
               :x1="CX"
               :y1="node.y - 26"
               :x2="node.x"
@@ -304,7 +305,7 @@ function openNode(n: VineNode): void {
           <button
             v-for="(node, ni) in col.nodes"
             :key="node.id"
-            class="grape"
+            class="grape vine-fruit"
             :class="{ active: ci === activeCol && ni === activeNode }"
             :style="{
               left: node.x - 78 + 'px',
@@ -539,14 +540,6 @@ function openNode(n: VineNode): void {
   top: 0;
   height: 100%;
 }
-.column.on .vine-stem {
-  stroke: var(--accent);
-  stroke-width: 3.5;
-  opacity: 0.9;
-}
-.column.on .root-label {
-  color: var(--accent);
-}
 .root {
   position: absolute;
   top: 12px;
@@ -557,19 +550,6 @@ function openNode(n: VineNode): void {
   justify-content: center;
   gap: 0.35rem;
   pointer-events: none;
-}
-.root-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  opacity: 0.7;
-}
-.root-label {
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: var(--text);
-  transition: color 0.2s;
 }
 .root-sub {
   font-size: 0.7rem;
@@ -608,16 +588,6 @@ function openNode(n: VineNode): void {
   height: 100%;
   pointer-events: none;
 }
-.vine-stem {
-  stroke: rgba(120, 160, 130, 0.45);
-  stroke-width: 2.5;
-  fill: none;
-  transition: stroke 0.25s, stroke-width 0.25s;
-}
-.stalk {
-  stroke: rgba(120, 160, 130, 0.4);
-  stroke-width: 1.5;
-}
 .grape {
   position: absolute;
   width: 156px;
@@ -627,29 +597,17 @@ function openNode(n: VineNode): void {
   justify-content: center;
   gap: 1px;
   padding: 5px 10px;
-  border: 1px solid var(--border);
   border-radius: 15px 15px 18px 18px;
-  background: var(--surface);
   color: var(--text);
   cursor: pointer;
   text-align: left;
   transform: rotate(var(--tilt, 0deg));
-  transition:
-    transform 0.2s ease,
-    border-color 0.2s ease,
-    box-shadow 0.2s ease,
-    opacity 0.2s ease;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
   opacity: 0.78;
 }
 .grape:hover {
-  transform: rotate(0deg) scale(1.04);
   opacity: 1;
 }
 .grape.active {
-  border-color: var(--accent);
-  box-shadow: 0 6px 18px rgba(207, 74, 60, 0.22);
-  transform: rotate(0deg) scale(1.09);
   opacity: 1;
   z-index: 2;
 }
