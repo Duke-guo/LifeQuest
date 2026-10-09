@@ -487,6 +487,7 @@ async function removeTask(t: Task): Promise<void> {
           class="week-col"
           :class="{ today: d === today }"
           :style="{ background: colorMap[d]?.bg }"
+          :title="`点这里进日视图：可改这一天的性质、忙碌程度，并增删当天的安排`"
           @click="drillTo(d)"
         >
           <div class="wc-head">
@@ -580,17 +581,6 @@ async function removeTask(t: Task): Promise<void> {
               <span class="side-sub">{{ dayTasks.length }} 项</span>
             </div>
 
-            <div class="busy-edit">
-              <span class="be-label">忙碌程度</span>
-              <input
-                v-model="busyInput"
-                class="be-input"
-                :placeholder="`留空 = 按时间自动算（${autoLabel(cursorIso)}）`"
-                @change="saveBusy"
-              />
-              <button v-if="dayNotes.busyOf(cursorIso)" class="be-clear" @click="useAutoBusy">用默认</button>
-            </div>
-
             <!-- 这天性质：可手动指定，放假还会自动停课 -->
             <div class="phase-edit">
               <span class="be-label">这天的性质</span>
@@ -606,6 +596,21 @@ async function removeTask(t: Task): Promise<void> {
                   {{ o.label }}
                 </button>
               </div>
+              <span class="be-hint">
+                现在：{{ dayNotes.phaseOf(cursorIso) ? '手动指定' : '按校历自动' }} ·
+                「放假（停课）」当天不会排课
+              </span>
+            </div>
+
+            <div class="busy-edit">
+              <span class="be-label">忙碌程度</span>
+              <input
+                v-model="busyInput"
+                class="be-input"
+                :placeholder="`留空 = 按时间自动算（${autoLabel(cursorIso)}）`"
+                @change="saveBusy"
+              />
+              <button v-if="dayNotes.busyOf(cursorIso)" class="be-clear" @click="useAutoBusy">用默认</button>
             </div>
 
             <div v-if="dayTasks.length === 0" class="none">这天还没有安排</div>
@@ -1198,6 +1203,13 @@ async function removeTask(t: Task): Promise<void> {
 .phase-edit .be-label {
   display: block;
   margin-bottom: 0.35rem;
+}
+.be-hint {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.7rem;
+  color: var(--text-3);
+  line-height: 1.5;
 }
 .phase-opts {
   display: flex;
