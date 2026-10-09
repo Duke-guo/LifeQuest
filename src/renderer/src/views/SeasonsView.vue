@@ -2,12 +2,25 @@
 import { ref, onMounted } from 'vue'
 import { useSeasonsStore, derivePhase } from '../stores/seasons'
 import { useGamificationStore } from '../stores/gamification'
+import { useConfirmStore } from '../stores/confirm'
 import { dataApi } from '../services/data'
 import AppIcon from '../components/AppIcon.vue'
 import type { Season, SeasonType } from '../../../shared/types'
 
 const seasonsStore = useSeasonsStore()
 const gStore = useGamificationStore()
+const confirm = useConfirmStore()
+
+/** 删除赛季前确认 */
+async function removeSeason(s: Season): Promise<void> {
+  const ok = await confirm.ask({
+    title: '删除这个赛季？',
+    message: `「${s.name}」`,
+    detail: '赛季本身会被删掉；已经归到这个赛季下的任务不会跟着消失。',
+    confirmText: '删除赛季'
+  })
+  if (ok) await seasonsStore.remove(s.id)
+}
 
 const name = ref('')
 const type = ref<SeasonType>('main')
@@ -135,7 +148,7 @@ async function generateReview(season: Season): Promise<void> {
         </div>
         <div class="season-actions">
           <button class="review-btn" @click="generateReview(s)">生成回顾</button>
-          <button class="del" @click="seasonsStore.remove(s.id)">✕</button>
+          <button class="del" @click="removeSeason(s)">✕</button>
         </div>
       </div>
       <div v-if="seasonsStore.seasons.length === 0" class="empty">还没有赛季，下面创建一个</div>

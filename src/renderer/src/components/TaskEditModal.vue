@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useTasksStore } from '../stores/tasks'
 import { useSeasonsStore } from '../stores/seasons'
 import { useTagsStore } from '../stores/tags'
+import { useConfirmStore } from '../stores/confirm'
 import { findConflicts, REPEAT_LABELS, REPEAT_OPTIONS, type Conflict } from '../utils/schedule'
 import { toDateStr } from '../utils/helpers'
 import AppIcon from './AppIcon.vue'
@@ -12,6 +13,7 @@ const props = defineProps<{ task: Task }>()
 const emit = defineEmits<{ close: [] }>()
 
 const store = useTasksStore()
+const confirm = useConfirmStore()
 const seasonsStore = useSeasonsStore()
 const tagsStore = useTagsStore()
 
@@ -83,6 +85,13 @@ async function save(force = false): Promise<void> {
 }
 
 async function remove(): Promise<void> {
+  const ok = await confirm.ask({
+    title: '删除这件事？',
+    message: `「${props.task.title}」`,
+    detail: '删掉后可以在任务页「历史添加」里一键找回。',
+    confirmText: '删除'
+  })
+  if (!ok) return
   await store.removeTask(props.task.id)
   emit('close')
 }

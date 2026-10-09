@@ -1,9 +1,10 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useTasksStore } from '../stores/tasks'
 import { useSeasonsStore } from '../stores/seasons'
 import { useTagsStore } from '../stores/tags'
 import { useSemesterStore } from '../stores/semester'
+import { useConfirmStore } from '../stores/confirm'
 import { findConflicts, conflictsOn, eventsFromTasks, REPEAT_LABELS, REPEAT_OPTIONS, type Conflict } from '../utils/schedule'
 import { toDateStr } from '../utils/helpers'
 import TaskItem from '../components/TaskItem.vue'
@@ -20,6 +21,7 @@ const store = useTasksStore()
 const seasonsStore = useSeasonsStore()
 const tagsStore = useTagsStore()
 const semesterStore = useSemesterStore()
+const confirm = useConfirmStore()
 
 const title = ref('')
 const type = ref<TaskType>('main')
@@ -141,6 +143,18 @@ async function onAiImported(): Promise<void> {
 async function writeNote(t: Task): Promise<void> {
   const id = await noteFromTask(t)
   emit('openNote', id)
+}
+
+/** 删除任务前先确认（误删还能在「历史添加」里找回） */
+async function removeTask(t: Task): Promise<void> {
+  const ok = await confirm.ask({
+    title: '删除这件事？',
+    message: `「${t.title}」`,
+    detail: '删掉后可以在本页「历史添加」里一键找回。',
+    confirmText: '删除'
+  })
+  if (!ok) return
+  await store.removeTask(t.id)
 }
 </script>
 
@@ -269,7 +283,7 @@ async function writeNote(t: Task): Promise<void> {
         :key="t.id"
         :task="t"
         @toggle="store.setStatus(t.id, t.status === 'done' ? 'todo' : 'done')"
-        @remove="store.removeTask(t.id)"
+        @remove="removeTask(t)"
         @edit="editing = t"
         @note="writeNote(t)"
       />
@@ -284,7 +298,7 @@ async function writeNote(t: Task): Promise<void> {
           :key="t.id"
           :task="t"
           @toggle="store.setStatus(t.id, t.status === 'done' ? 'todo' : 'done')"
-          @remove="store.removeTask(t.id)"
+          @remove="removeTask(t)"
           @edit="editing = t"
           @note="writeNote(t)"
         />

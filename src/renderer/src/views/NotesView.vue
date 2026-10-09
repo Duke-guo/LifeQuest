@@ -5,6 +5,7 @@ import { useTasksStore } from '../stores/tasks'
 import { useTagsStore } from '../stores/tags'
 import { useLinksStore } from '../stores/links'
 import { useSemesterStore } from '../stores/semester'
+import { useConfirmStore } from '../stores/confirm'
 import { dataApi } from '../services/data'
 import { eventsFromTasks } from '../utils/schedule'
 import { subjectOfNote } from '../utils/noteSubject'
@@ -20,6 +21,7 @@ const tasksStore = useTasksStore()
 const tagsStore = useTagsStore()
 const linksStore = useLinksStore()
 const semesterStore = useSemesterStore()
+const confirm = useConfirmStore()
 
 const title = ref('')
 const category = ref('')
@@ -224,6 +226,14 @@ function extendFromVine(payload: { label: string; date?: string; tags: string[] 
 }
 
 async function remove(id: string): Promise<void> {
+  const n = store.byId(id)
+  const ok = await confirm.ask({
+    title: '删除这篇笔记？',
+    message: n ? `「${n.title}」` : '',
+    detail: '笔记文件（notes/xxx.md）会从磁盘删掉，无法恢复；与任务、标签的关联也一并移除。',
+    confirmText: '删除笔记'
+  })
+  if (!ok) return
   await store.remove(id)
   await linksStore.removeEntity({ kind: 'note', id })
   if (store.notes.length > 0) await select(store.notes[0].id)
@@ -270,6 +280,13 @@ async function onPaste(e: ClipboardEvent): Promise<void> {
 }
 
 async function removeImage(name: string): Promise<void> {
+  const ok = await confirm.ask({
+    title: '删除这张图片？',
+    message: '图片会从 assets/ 里删掉，笔记里不再显示。',
+    detail: '如果这张图别处也在用，那边也会一起失效。',
+    confirmText: '删除图片'
+  })
+  if (!ok) return
   images.value = images.value.filter((x) => x !== name)
   await dataApi.deleteImage(name)
   await loadImageSrcs()

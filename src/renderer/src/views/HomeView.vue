@@ -1,9 +1,10 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useTasksStore } from '../stores/tasks'
 import { useJournalIndexStore } from '../stores/journalIndex'
 import { useSemesterStore } from '../stores/semester'
 import { useGamificationStore } from '../stores/gamification'
+import { useConfirmStore } from '../stores/confirm'
 import { eventsFromTasks, eventHours, WEATHER_META, MOOD_META } from '../utils/schedule'
 import { computeDayColor } from '../utils/dayColor'
 import { noteFromTask } from '../utils/noteActions'
@@ -23,6 +24,7 @@ const tasksStore = useTasksStore()
 const journalIndex = useJournalIndexStore()
 const semesterStore = useSemesterStore()
 const gStore = useGamificationStore()
+const confirm = useConfirmStore()
 
 const editing = ref<Task | null>(null)
 
@@ -166,6 +168,17 @@ async function writeNote(t: Task): Promise<void> {
   const id = await noteFromTask(t)
   emit('openNote', id)
 }
+
+async function removeTask(t: Task): Promise<void> {
+  const ok = await confirm.ask({
+    title: '删除这件事？',
+    message: `「${t.title}」`,
+    detail: '删掉后可以在任务页「历史添加」里一键找回。',
+    confirmText: '删除'
+  })
+  if (!ok) return
+  await tasksStore.removeTask(t.id)
+}
 </script>
 
 <template>
@@ -220,7 +233,7 @@ async function writeNote(t: Task): Promise<void> {
           :task="t"
           @toggle="toggleTask(t)"
           @edit="editing = t"
-          @remove="tasksStore.removeTask(t.id)"
+          @remove="removeTask(t)"
           @note="writeNote(t)"
         />
       </section>

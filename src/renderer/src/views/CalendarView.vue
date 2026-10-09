@@ -5,6 +5,7 @@ import { usePlansStore } from '../stores/plans'
 import { useJournalIndexStore } from '../stores/journalIndex'
 import { useSemesterStore } from '../stores/semester'
 import { useDayNotesStore } from '../stores/dayNotes'
+import { useConfirmStore } from '../stores/confirm'
 import {
   eventsFromTasks,
   eventsFromPlans,
@@ -31,6 +32,7 @@ const plansStore = usePlansStore()
 const journalIndex = useJournalIndexStore()
 const semesterStore = useSemesterStore()
 const dayNotes = useDayNotesStore()
+const confirm = useConfirmStore()
 
 type Mode = 'day' | 'week' | 'month'
 const mode = ref<Mode>('week')
@@ -364,6 +366,17 @@ async function writeNote(t: Task): Promise<void> {
   const id = await noteFromTask(t, cursorIso.value)
   emit('openNote', id)
 }
+
+async function removeTask(t: Task): Promise<void> {
+  const ok = await confirm.ask({
+    title: '删除这件事？',
+    message: `「${t.title}」`,
+    detail: '删掉后可以在任务页「历史添加」里一键找回。',
+    confirmText: '删除'
+  })
+  if (!ok) return
+  await tasksStore.removeTask(t.id)
+}
 </script>
 
 <template>
@@ -597,7 +610,7 @@ async function writeNote(t: Task): Promise<void> {
               :task="t"
               @toggle="toggleTask(t)"
               @edit="editing = t"
-              @remove="tasksStore.removeTask(t.id)"
+              @remove="removeTask(t)"
               @note="writeNote(t)"
             />
 

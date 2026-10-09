@@ -15,6 +15,7 @@ import TitleBar from './components/TitleBar.vue'
 import GuideDrawer from './components/GuideDrawer.vue'
 import GuideModal from './components/GuideModal.vue'
 import ReminderBanner from './components/ReminderBanner.vue'
+import ConfirmDialog from './components/ConfirmDialog.vue'
 import AppIcon from './components/AppIcon.vue'
 import { useTasksStore } from './stores/tasks'
 import { useSettingsStore } from './stores/settings'
@@ -165,6 +166,9 @@ function onTeleport(date: string, target: 'journal' | 'calendar'): void {
     <RadialMenu @select="switchView" />
 
     <ReminderBanner />
+
+    <!-- 全局确认框：删除等破坏性操作都会走它 -->
+    <ConfirmDialog />
 
     <GuideModal v-if="showGuide" @close="showGuide = false" />
     <SettingsView v-if="showSettings" @close="showSettings = false" />

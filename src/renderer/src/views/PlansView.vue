@@ -3,11 +3,35 @@ import { ref, onMounted, computed } from 'vue'
 import { usePlansStore } from '../stores/plans'
 import { useSemesterStore } from '../stores/semester'
 import { useTasksStore } from '../stores/tasks'
+import { useConfirmStore } from '../stores/confirm'
 import AppIcon from '../components/AppIcon.vue'
 
 const store = usePlansStore()
 const semesterStore = useSemesterStore()
 const tasksStore = useTasksStore()
+const confirm = useConfirmStore()
+
+/** 删除活动计划前确认 */
+async function removePlan(id: string, name: string): Promise<void> {
+  const ok = await confirm.ask({
+    title: '删除这个计划？',
+    message: `「${name}」`,
+    detail: '计划会从 plans.json 里删掉，日历上对应的色块也会消失。',
+    confirmText: '删除计划'
+  })
+  if (ok) await store.remove(id)
+}
+
+/** 删除学期假期前确认（会影响校历的停课日） */
+async function removeHoliday(id: string, name: string): Promise<void> {
+  const ok = await confirm.ask({
+    title: '删除这个假期？',
+    message: `「${name}」`,
+    detail: '删掉后这些天会恢复成上课日，日历上的放假标记也会消失。',
+    confirmText: '删除假期'
+  })
+  if (ok) await semesterStore.removeHoliday(id)
+}
 
 const title = ref('')
 const start = ref('')
@@ -115,7 +139,7 @@ async function createPlan(): Promise<void> {
           <input v-model="h.start" type="date" />
           <span class="dash">~</span>
           <input v-model="h.end" type="date" />
-          <button class="icon-btn" @click="semesterStore.removeHoliday(h.id)">
+          <button class="icon-btn" @click="removeHoliday(h.id, h.name)">
             <AppIcon name="close" :size="14" />
           </button>
         </div>
@@ -164,7 +188,7 @@ async function createPlan(): Promise<void> {
           <div v-if="p.start || p.end" class="plan-meta">{{ p.start || '…' }} ~ {{ p.end || '…' }}</div>
           <div v-if="p.notes" class="plan-notes">{{ p.notes }}</div>
         </div>
-        <button class="del" @click="store.remove(p.id)">✕</button>
+        <button class="del" @click="removePlan(p.id, p.title)">✕</button>
       </div>
       <div v-if="store.plans.length === 0" class="empty">还没有活动计划</div>
     </section>

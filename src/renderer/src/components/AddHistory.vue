@@ -1,15 +1,28 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useHistoryStore } from '../stores/history'
 import { useTasksStore } from '../stores/tasks'
+import { useConfirmStore } from '../stores/confirm'
 import AppIcon from './AppIcon.vue'
 
 const props = defineProps<{ compact?: boolean }>()
 
 const history = useHistoryStore()
 const tasks = useTasksStore()
+const confirm = useConfirmStore()
 const open = ref(false)
 const hint = ref('')
+
+/** 清空历史：会把「一键找回」的底稿一起删掉，先确认 */
+async function clearHistory(): Promise<void> {
+  const ok = await confirm.ask({
+    title: '清空添加历史？',
+    message: `共 ${history.entries.length} 条记录`,
+    detail: '清空后误删的内容就不能再一键找回了。',
+    confirmText: '清空'
+  })
+  if (ok) await history.clear()
+}
 
 onMounted(async () => {
   if (!history.loaded) await history.load()
@@ -58,7 +71,7 @@ function fmt(at: string): string {
         </div>
         <div class="hist-foot">
           <span v-if="hint" class="hist-ok">{{ hint }}</span>
-          <button class="hist-clear" @click="history.clear()">清空历史</button>
+          <button class="hist-clear" @click="clearHistory">清空历史</button>
         </div>
       </template>
     </div>
