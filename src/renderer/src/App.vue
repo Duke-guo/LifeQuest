@@ -52,6 +52,8 @@ const backStack = ref<View[]>([])
 const showSettings = ref(false)
 const showGuide = ref(false)
 const focusDate = ref<string | undefined>(undefined)
+/** 跳到日历时落在哪个视图：任务定位看周、日记/地图传送看天 */
+const focusMode = ref<'day' | 'week'>('week')
 
 const tasksStore = useTasksStore()
 const settingsStore = useSettingsStore()
@@ -111,9 +113,10 @@ async function openJournal(date: string): Promise<void> {
   active.value = 'journal'
 }
 
-function openCalendar(date: string): void {
+function openCalendar(date: string, mode: 'day' | 'week' = 'day'): void {
   if (active.value !== 'calendar') pushHistory()
   focusDate.value = date
+  focusMode.value = mode
   active.value = 'calendar'
 }
 
@@ -147,13 +150,20 @@ function onTeleport(date: string, target: 'journal' | 'calendar'): void {
         @navigate="switchView"
         @open-journal="openJournal"
         @open-note="openNote"
+        @open-calendar="openCalendar"
       />
-      <TasksView v-else-if="active === 'tasks'" @open-note="openNote" />
+      <TasksView
+        v-else-if="active === 'tasks'"
+        @open-note="openNote"
+        @open-calendar="openCalendar"
+      />
       <CalendarView
         v-else-if="active === 'calendar'"
         :focus-date="focusDate"
+        :focus-mode="focusMode"
         @open-journal="openJournal"
         @open-note="openNote"
+        @open-calendar="openCalendar"
       />
       <NotesView v-else-if="active === 'notes'" />
       <JournalView v-else-if="active === 'journal'" />

@@ -1,11 +1,11 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useTasksStore } from '../stores/tasks'
 import { useJournalIndexStore } from '../stores/journalIndex'
 import { useSemesterStore } from '../stores/semester'
 import { useGamificationStore } from '../stores/gamification'
 import { useConfirmStore } from '../stores/confirm'
-import { eventsFromTasks, eventHours, WEATHER_META, MOOD_META } from '../utils/schedule'
+import { eventsFromTasks, eventHours, nextOccurrence, WEATHER_META, MOOD_META } from '../utils/schedule'
 import { computeDayColor } from '../utils/dayColor'
 import { noteFromTask } from '../utils/noteActions'
 import { toDateStr } from '../utils/helpers'
@@ -18,6 +18,7 @@ const emit = defineEmits<{
   navigate: [key: string]
   openJournal: [date: string]
   openNote: [id: string]
+  openCalendar: [date: string]
 }>()
 
 const tasksStore = useTasksStore()
@@ -179,6 +180,12 @@ async function removeTask(t: Task): Promise<void> {
   if (!ok) return
   await tasksStore.removeTask(t.id)
 }
+
+/** 跳去日历，定位到这件事所在的（或将来最近的）那一周 */
+function locate(t: Task): void {
+  const date = nextOccurrence(t, today, semesterStore.noClassDates) ?? t.due
+  if (date) emit('openCalendar', date)
+}
 </script>
 
 <template>
@@ -235,6 +242,7 @@ async function removeTask(t: Task): Promise<void> {
           @edit="editing = t"
           @remove="removeTask(t)"
           @note="writeNote(t)"
+              @locate="locate(t)"
         />
       </section>
 

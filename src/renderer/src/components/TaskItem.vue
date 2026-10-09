@@ -3,9 +3,10 @@ import { computed } from 'vue'
 import type { Task } from '../../../shared/types'
 import { formatDate } from '../utils/helpers'
 import { REPEAT_LABELS } from '../utils/schedule'
+import AppIcon from './AppIcon.vue'
 
 const props = defineProps<{ task: Task }>()
-const emit = defineEmits<{ toggle: []; remove: []; edit: []; note: [] }>()
+const emit = defineEmits<{ toggle: []; remove: []; edit: []; note: []; locate: [] }>()
 
 const done = computed(() => props.task.status === 'done')
 const isSchedule = computed(() => props.task.kind === 'schedule')
@@ -52,6 +53,10 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
           <span v-if="task.description" class="desc">{{ task.description }}</span>
         </div>
       </div>
+
+      <button class="locate" title="在日历里定位到这件事所在的那一周" @click.stop="emit('locate')">
+        <AppIcon name="calendar" :size="15" />
+      </button>
 
       <button class="take-note" title="为这件事写一篇笔记" @click.stop="emit('note')">
         <svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true">
@@ -188,7 +193,8 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
 .loc {
   color: var(--text-3);
 }
-.take-note {
+.take-note,
+.locate {
   background: none;
   border: none;
   color: var(--text-3);
@@ -200,10 +206,12 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
   opacity: 0.55;
   transition: opacity 0.15s ease, color 0.15s ease, background-color 0.15s ease;
 }
-.quest:hover .take-note {
+.quest:hover .take-note,
+.quest:hover .locate {
   opacity: 1;
 }
-.take-note:hover {
+.take-note:hover,
+.locate:hover {
   color: var(--accent);
   background: var(--accent-soft);
 }

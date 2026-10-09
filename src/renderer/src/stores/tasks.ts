@@ -2,7 +2,15 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { dataApi } from '../services/data'
 import { useHistoryStore } from './history'
-import type { Task, TasksFile, TaskType, TaskStatus, TaskKind, RepeatMode } from '../../../shared/types'
+import type {
+  Task,
+  TasksFile,
+  TaskType,
+  TaskStatus,
+  TaskKind,
+  TaskOccurrence,
+  RepeatMode
+} from '../../../shared/types'
 import { uid } from '../utils/helpers'
 
 export interface NewTaskInput {
@@ -20,6 +28,7 @@ export interface NewTaskInput {
   linkedNoteIds?: string[]
   repeat?: RepeatMode
   repeatUntil?: string | null
+  occurrences?: TaskOccurrence[]
   description?: string
 }
 
@@ -38,6 +47,7 @@ export const useTasksStore = defineStore('tasks', () => {
       remindMinutes: t.remindMinutes ?? null,
       repeat: t.repeat ?? 'none',
       repeatUntil: t.repeatUntil ?? null,
+      occurrences: t.occurrences ?? [],
       tagIds: t.tagIds ?? [],
       linkedNoteIds: t.linkedNoteIds ?? []
     }))
@@ -67,6 +77,7 @@ export const useTasksStore = defineStore('tasks', () => {
       remindMinutes: input.remindMinutes ?? null,
       repeat: input.repeat ?? 'none',
       repeatUntil: input.repeatUntil ?? null,
+      occurrences: input.occurrences ?? [],
       tags: [],
       tagIds: input.tagIds ?? [],
       linkedNoteIds: input.linkedNoteIds ?? [],

@@ -17,6 +17,8 @@ import {
 import { toDateStr } from '../utils/helpers'
 import { computeDayColor, busyTier, type DayColor } from '../utils/dayColor'
 import { noteFromTask } from '../utils/noteActions'
+import { nextOccurrence } from '../utils/schedule'
+import { computeDayGrade, GRADE_TITLE, type DayGrade } from '../utils/dayGrade'
 import AppIcon from '../components/AppIcon.vue'
 import TaskItem from '../components/TaskItem.vue'
 import JournalVine from '../components/JournalVine.vue'
@@ -24,8 +26,8 @@ import TaskEditModal from '../components/TaskEditModal.vue'
 import AddHistory from '../components/AddHistory.vue'
 import type { CalendarEvent, Task, DayPhaseOverride } from '../../../shared/types'
 
-const emit = defineEmits<{ openJournal: [date: string]; openNote: [id: string] }>()
-const props = defineProps<{ focusDate?: string }>()
+const emit = defineEmits<{ openJournal: [date: string]; openNote: [id: string]; openCalendar: [date: string, mode?: 'day' | 'week'] }>()
+const props = defineProps<{ focusDate?: string; focusMode?: 'day' | 'week' }>()
 
 const tasksStore = useTasksStore()
 const plansStore = usePlansStore()
@@ -57,7 +59,7 @@ onMounted(async () => {
   if (props.focusDate) {
     const [fy, fm, fd] = props.focusDate.split('-').map(Number)
     cursor.value = new Date(fy, fm - 1, fd)
-    mode.value = 'day'
+    mode.value = props.focusMode ?? 'day'
   }
 })
 
@@ -201,6 +203,19 @@ const PHASE_OPTIONS: Array<{ key: DayPhaseOverride; label: string }> = [
   { key: 'none', label: '空白' },
   { key: 'custom', label: '自定义…' }
 ]
+
+/** 每天完成的等级评价：只评「今天及以前」，未来的事不预判 */
+function gradeOf(date: string): DayGrade | null {
+  if (date > today) return null
+  return computeDayGrade(eventsOn(date), journalIndex.on(date))
+}
+
+function gradeTitle(date: string): string {
+  const g = gradeOf(date)
+  if (!g) return ''
+  const pct = Math.round(g.score * 100)
+  return g.grade + ' 级 · 完成度 ' + pct + '% · ' + GRADE_TITLE[g.grade]
+}
 
 const customPhase = ref('')
 /** 「自定义…」被点开后，显示输入框 */
@@ -406,6 +421,12 @@ async function removeTask(t: Task): Promise<void> {
   if (!ok) return
   await tasksStore.removeTask(t.id)
 }
+
+/** 从日视图里的条目跳到它所在的那一周 */
+function locate(t: Task): void {
+  const date = nextOccurrence(t, today, skipDates.value) ?? t.due
+  if (date) emit('openCalendar', date, 'week')
+}
 </script>
 
 <template>
@@ -448,6 +469,14 @@ async function removeTask(t: Task): Promise<void> {
           @click="c.inMonth && drillTo(c.date)"
         >
           <template v-if="c.inMonth">
+            <span
+              v-if="gradeOf(c.date)"
+              class="grade"
+              :class="`g-${gradeOf(c.date)!.grade}`"
+              :title="gradeTitle(c.date)"
+            >
+              {{ gradeOf(c.date)!.grade }}
+            </span>
             <div class="cell-head">
               <span class="day">{{ c.day }}</span>
               <span class="wk">第{{ semesterStore.weekOf(c.date) }}周</span>
@@ -519,6 +548,14 @@ async function removeTask(t: Task): Promise<void> {
           :title="`点这里进日视图：可改这一天的性质、忙碌程度，并增删当天的安排`"
           @click="drillTo(d)"
         >
+          <span
+            v-if="gradeOf(d)"
+            class="grade"
+            :class="`g-${gradeOf(d)!.grade}`"
+            :title="gradeTitle(d)"
+          >
+            {{ gradeOf(d)!.grade }}
+          </span>
           <div class="wc-head">
             <span class="wc-wd">周{{ weekdayOf(d) }}</span>
             <span class="wc-date">{{ d.slice(5) }}</span>
@@ -668,6 +705,7 @@ async function removeTask(t: Task): Promise<void> {
               @edit="editing = t"
               @remove="removeTask(t)"
               @note="writeNote(t)"
+              @locate="locate(t)"
             />
 
             <div class="quick-add">
@@ -942,6 +980,43 @@ async function removeTask(t: Task): Promise<void> {
 .p-custom {
   background: rgba(120, 140, 170, 0.22);
   color: #4a5a72;
+}
+/* 每天的等级评价（S/A/B/C/D），落在格子左上角 */
+.grade {
+  position: absolute;
+  top: 5px;
+  left: 6px;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 4px;
+  border-radius: 7px;
+  font-family: var(--font-num);
+  font-weight: 700;
+  font-size: 0.72rem;
+  line-height: 19px;
+  text-align: center;
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  z-index: 2;
+}
+.grade.g-S {
+  background: linear-gradient(135deg, #e8b53c, #d99b1f);
+}
+.grade.g-A {
+  background: linear-gradient(135deg, #58b978, #3f9c60);
+}
+.grade.g-B {
+  background: linear-gradient(135deg, #5b8def, #4173d6);
+}
+.grade.g-C {
+  background: var(--text-3);
+}
+.grade.g-D {
+  background: #c4756b;
+}
+/* 周视图的列也要定位基准 */
+.week-col {
+  position: relative;
 }
 .custom-phase {
   display: flex;

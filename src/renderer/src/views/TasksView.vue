@@ -5,17 +5,21 @@ import { useSeasonsStore } from '../stores/seasons'
 import { useTagsStore } from '../stores/tags'
 import { useSemesterStore } from '../stores/semester'
 import { useConfirmStore } from '../stores/confirm'
-import { findConflicts, conflictsOn, eventsFromTasks, REPEAT_LABELS, REPEAT_OPTIONS, type Conflict } from '../utils/schedule'
+import { findConflicts, conflictsOn, eventsFromTasks, nextOccurrence, REPEAT_LABELS, REPEAT_OPTIONS, type Conflict } from '../utils/schedule'
 import { toDateStr } from '../utils/helpers'
 import TaskItem from '../components/TaskItem.vue'
 import TaskEditModal from '../components/TaskEditModal.vue'
 import AddHistory from '../components/AddHistory.vue'
 import AiImportPanel from '../components/AiImportPanel.vue'
+import OccurrenceEditor from '../components/OccurrenceEditor.vue'
 import AppIcon from '../components/AppIcon.vue'
 import { noteFromTask } from '../utils/noteActions'
-import type { TaskType, TaskKind, Task, RepeatMode } from '../../../shared/types'
+import type { TaskType, TaskKind, Task, RepeatMode, TaskOccurrence } from '../../../shared/types'
 
-const emit = defineEmits<{ openNote: [id: string] }>()
+const emit = defineEmits<{
+  openNote: [id: string]
+  openCalendar: [date: string, mode?: 'day' | 'week']
+}>()
 
 const store = useTasksStore()
 const seasonsStore = useSeasonsStore()
@@ -37,6 +41,9 @@ const tagInput = ref('')
 const tagIds = ref<string[]>([])
 const repeat = ref<RepeatMode>('none')
 const repeatUntil = ref('')
+/** 不规律重复：逐次日期 */
+const occurrences = ref<TaskOccurrence[]>([])
+const showOcc = ref(false)
 
 const conflicts = ref<Conflict[]>([])
 const pending = ref(false)
@@ -109,11 +116,13 @@ async function submit(force = false): Promise<void> {
     seasonId: seasonId.value || null,
     tagIds: tagIds.value,
     repeat: repeat.value,
-    repeatUntil: repeat.value !== 'none' && repeatUntil.value ? repeatUntil.value : null
+    repeatUntil: repeat.value !== 'none' && repeatUntil.value ? repeatUntil.value : null,
+    occurrences: occurrences.value.filter((o) => o.date)
   })
 
   title.value = ''
   location.value = ''
+  occurrences.value = []
   conflicts.value = []
   pending.value = false
 }
@@ -156,6 +165,12 @@ async function removeTask(t: Task): Promise<void> {
   })
   if (!ok) return
   await store.removeTask(t.id)
+}
+
+/** 跳去日历，定位到这件事所在的（或将来最近的）那一周 */
+function locate(t: Task): void {
+  const date = nextOccurrence(t, todayStr, semesterStore.noClassDates) ?? t.due
+  if (date) emit('openCalendar', date, 'week')
 }
 </script>
 
@@ -241,6 +256,20 @@ async function removeTask(t: Task): Promise<void> {
         </template>
       </div>
 
+      <!-- 不规律重复：逐次列日期 -->
+      <div class="row occ-row-wrap">
+        <button type="button" class="occ-toggle" @click="showOcc = !showOcc">
+          {{ showOcc ? '收起按次填写' : '＋ 按具体日期添加（不规律）' }}
+          <span v-if="occurrences.length" class="occ-count">{{ occurrences.length }}</span>
+        </button>
+        <span v-if="!showOcc && occurrences.length" class="range-hint">
+          已加 {{ occurrences.length }} 次
+        </span>
+      </div>
+      <div v-if="showOcc" class="row occ-editor">
+        <OccurrenceEditor v-model="occurrences" />
+      </div>
+
       <div class="row tags-row">
         <span v-for="id in tagIds" :key="id" class="tag-chip" :style="{ '--c': tagsStore.byId(id)?.color }">
           {{ tagsStore.byId(id)?.name }}
@@ -284,6 +313,7 @@ async function removeTask(t: Task): Promise<void> {
         @remove="removeTask(t)"
         @edit="editing = t"
         @note="writeNote(t)"
+        @locate="locate(t)"
       />
     </section>
 
@@ -299,6 +329,7 @@ async function removeTask(t: Task): Promise<void> {
           @remove="removeTask(t)"
           @edit="editing = t"
           @note="writeNote(t)"
+        @locate="locate(t)"
         />
       </section>
     </template>
@@ -398,6 +429,28 @@ input[type='time'] {
   margin: 0.45rem 0 0;
   font-size: 0.74rem;
   color: var(--text-3);
+}
+.occ-toggle {
+  border: 1px dashed var(--border);
+  background: none;
+  color: var(--text-2);
+  border-radius: 9px;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.occ-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.occ-count {
+  font-family: var(--font-num);
+  font-weight: 700;
+  color: var(--accent);
+  margin-left: 0.2rem;
+}
+.occ-editor {
+  margin-top: 0.4rem;
 }
 .repeat-row {
   gap: 0.7rem;

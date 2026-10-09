@@ -7,7 +7,8 @@ import { useConfirmStore } from '../stores/confirm'
 import { findConflicts, REPEAT_LABELS, REPEAT_OPTIONS, type Conflict } from '../utils/schedule'
 import { toDateStr } from '../utils/helpers'
 import AppIcon from './AppIcon.vue'
-import type { Task, TaskType, TaskKind, RepeatMode } from '../../../shared/types'
+import OccurrenceEditor from './OccurrenceEditor.vue'
+import type { Task, TaskType, TaskKind, RepeatMode, TaskOccurrence } from '../../../shared/types'
 
 const props = defineProps<{ task: Task }>()
 const emit = defineEmits<{ close: [] }>()
@@ -29,6 +30,7 @@ const location = ref(props.task.location ?? '')
 const remindMinutes = ref(props.task.remindMinutes ?? 0)
 const repeat = ref<RepeatMode>(props.task.repeat ?? 'none')
 const repeatUntil = ref(props.task.repeatUntil ?? '')
+const occurrences = ref<TaskOccurrence[]>([...(props.task.occurrences ?? [])])
 const seasonId = ref(props.task.seasonId ?? '')
 const description = ref(props.task.description ?? '')
 const tagInput = ref('')
@@ -56,7 +58,8 @@ function candidate(): Task {
     endTime: kind.value === 'schedule' ? endTime.value || null : null,
     location: location.value.trim() || null,
     repeat: repeat.value,
-    repeatUntil: repeat.value !== 'none' && repeatUntil.value ? repeatUntil.value : null
+    repeatUntil: repeat.value !== 'none' && repeatUntil.value ? repeatUntil.value : null,
+    occurrences: occurrences.value.filter((o) => o.date)
   }
 }
 
@@ -201,6 +204,12 @@ function removeTag(id: string): void {
           <span>重复截止</span>
           <input v-model="repeatUntil" type="date" />
         </label>
+      </div>
+
+      <!-- 不规律重复：逐次列日期 -->
+      <div class="field occ-block">
+        <span>按具体日期（不规律）</span>
+        <OccurrenceEditor v-model="occurrences" />
       </div>
 
       <label class="field">

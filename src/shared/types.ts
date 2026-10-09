@@ -44,6 +44,13 @@ export type TaskStatus = 'todo' | 'doing' | 'done' | 'archived'
 /** task = 粗略任务（可无时间）；schedule = 日程（有具体时间段） */
 export type TaskKind = 'task' | 'schedule'
 
+/** 不规律的一次：单独指定日期（可覆盖时间段） */
+export interface TaskOccurrence {
+  date: string
+  startTime?: string | null
+  endTime?: string | null
+}
+
 export interface Task {
   id: string
   kind: TaskKind
@@ -68,6 +75,8 @@ export interface Task {
   repeat?: RepeatMode
   /** 重复截止日期（含当天）；空表示不限 */
   repeatUntil?: string | null
+  /** 不规律的重复：逐次列出日期（可与 repeat 并存，各自都会排进日历） */
+  occurrences?: TaskOccurrence[]
   tags: string[]
   tagIds: string[]
   /** 关联的笔记 id（日程 ↔ 笔记） */

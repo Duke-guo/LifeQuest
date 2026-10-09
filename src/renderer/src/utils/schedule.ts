@@ -1,4 +1,14 @@
-import type { Task, Plan, CalendarEvent, Weather, Mood, RepeatMode } from '../../../shared/types'
+import type {
+  Task,
+  Plan,
+  CalendarEvent,
+  Weather,
+  Mood,
+  RepeatMode,
+  TaskOccurrence
+} from '../../../shared/types'
+
+export type { TaskOccurrence }
 
 export const REPEAT_LABELS: Record<RepeatMode, string> = {
   none: '不重复',
@@ -37,6 +47,21 @@ export function eventsFromTasks(
     }
 
     if (t.repeatUntil && t.due > t.repeatUntil) continue
+
+    // 不规律的逐次日期（可与固定重复并存）
+    const occ = t.occurrences ?? []
+    if (occ.length > 0) {
+      occ.forEach((o, i) => {
+        if (!o.date) return
+        if (rangeStart && o.date < rangeStart) return
+        if (rangeEnd && o.date > rangeEnd) return
+        if (skipDates?.has(o.date)) return
+        out.push(makeEvent(t, o.date, `-o${i}`, o))
+      })
+      // 逐次日期和固定重复是两套；没有固定重复时，due 那天不额外生成
+      if (!mode) continue
+    }
+
     // 单次事项也要落在请求区间内才返回：
     // 否则调用方只要「某一天的时长/件数」，就会被别的日子的单次事项污染
     if (rangeStart && t.due < rangeStart) continue
@@ -107,17 +132,49 @@ function addMonth(d: Date): Date {
   return new Date(y, m, Math.min(day, last))
 }
 
-function makeEvent(t: Task, date: string, suffix: string): CalendarEvent {
+function makeEvent(
+  t: Task,
+  date: string,
+  suffix: string,
+  override?: { startTime?: string | null; endTime?: string | null }
+): CalendarEvent {
+  const start = override?.startTime ?? t.startTime
+  const end = override?.endTime ?? t.endTime
   return {
     id: `task-${t.id}${suffix}`,
     date,
     kind: t.kind === 'schedule' ? 'schedule' : 'task',
     title: t.title,
-    time: t.startTime ?? undefined,
-    endTime: t.endTime ?? undefined,
+    time: start ?? undefined,
+    endTime: end ?? undefined,
     refId: t.id,
     meta: { importance: t.importance, status: t.status, location: t.location }
   }
+}
+
+/**
+ * 这个任务「下一次发生」的日期，用于从任务一键跳到日历对应那一周。
+ * 单次 → 它自己的日期；重复 → 从 from 起最近的一次（跳过停课日）。
+ */
+export function nextOccurrence(task: Task, from: string, skipDates?: Set<string>): string | null {
+  const occDates = (task.occurrences ?? [])
+    .map((o) => o.date)
+    .filter(Boolean)
+    .filter((d) => !skipDates?.has(d))
+  const future = occDates.filter((d) => d >= from).sort()
+  if (future.length) return future[0]
+
+  if (!task.due) return occDates.sort().pop() ?? null
+  const mode = task.repeat && task.repeat !== 'none' ? task.repeat : null
+  if (!mode) return task.due
+
+  if (task.due >= from) return task.due
+  const until = task.repeatUntil ?? null
+  if (until && until < from) return null // 这一轮已经结束了
+  const hardEnd = until ?? toStr(addDays(parseLocal(from), 400))
+  const dates = expandRepeat(task.due, mode, until, from, hardEnd)
+  for (const d of dates) if (!skipDates?.has(d)) return d
+  return null
 }
 
 /** 把活动计划展开为区间内的每日事件 */
