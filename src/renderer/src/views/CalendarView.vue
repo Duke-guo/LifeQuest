@@ -18,6 +18,7 @@ import { computeDayColor, busyTier, type DayColor } from '../utils/dayColor'
 import { noteFromTask } from '../utils/noteActions'
 import AppIcon from '../components/AppIcon.vue'
 import TaskItem from '../components/TaskItem.vue'
+import JournalVine from '../components/JournalVine.vue'
 import TaskEditModal from '../components/TaskEditModal.vue'
 import AddHistory from '../components/AddHistory.vue'
 import type { CalendarEvent, Task, DayPhaseOverride } from '../../../shared/types'
@@ -523,6 +524,15 @@ async function writeNote(t: Task): Promise<void> {
           </div>
         </div>
       </div>
+
+      <!-- 横向的日记葡萄藤：串起本周每天的日记，滚轮切到周记 -->
+      <JournalVine
+        :week-start="weekSummary.start"
+        :week-end="weekSummary.end"
+        :days="weekDays"
+        @open-journal="(v: string) => emit('openJournal', v)"
+        @open-note="(v: string) => emit('openNote', v)"
+      />
     </template>
 
     <!-- ========== 日视图（左时间轴 + 右可编辑侧栏） ========== -->
