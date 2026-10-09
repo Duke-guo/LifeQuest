@@ -11,6 +11,7 @@ import GraphView from './views/GraphView.vue'
 import QuestMapView from './views/QuestMapView.vue'
 import SettingsView from './views/SettingsView.vue'
 import RadialMenu from './components/RadialMenu.vue'
+import TitleBar from './components/TitleBar.vue'
 import GuideDrawer from './components/GuideDrawer.vue'
 import GuideModal from './components/GuideModal.vue'
 import ReminderBanner from './components/ReminderBanner.vue'
@@ -121,6 +122,7 @@ function onTeleport(date: string, target: 'journal' | 'calendar'): void {
 
 <template>
   <div class="app">
+    <TitleBar />
     <GuideDrawer @open-settings="showSettings = true" @open-guide="showGuide = true" />
 
     <main class="content">
@@ -166,7 +168,8 @@ function onTeleport(date: string, target: 'journal' | 'calendar'): void {
 .content {
   max-width: 1120px;
   margin: 0 auto;
-  padding: 5rem 2rem 7rem;
+  /* 顶部留出自绘标题栏（38px）的高度 */
+  padding: 4.6rem 2rem 7rem;
 }
 .back-btn {
   display: inline-flex;

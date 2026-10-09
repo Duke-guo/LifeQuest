@@ -47,7 +47,8 @@ function goGuide(): void {
 .guide-root {
   position: fixed;
   left: 22px;
-  top: 22px;
+  /* 让开自绘标题栏 */
+  top: 54px;
   z-index: 95;
 }
 .avatar {

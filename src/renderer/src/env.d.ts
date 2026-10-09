@@ -23,5 +23,12 @@ interface Window {
     aiImageToTasks: (
       dataUrl: string
     ) => Promise<{ ok: boolean; items?: unknown[]; error?: string }>
+    win: {
+      minimize: () => Promise<void>
+      toggleMaximize: () => Promise<boolean>
+      close: () => Promise<void>
+      isMaximized: () => Promise<boolean>
+      onMaximizedChange: (cb: (v: boolean) => void) => void
+    }
   }
 }

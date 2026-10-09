@@ -22,7 +22,18 @@ const api = {
   aiImageToTasks: (
     dataUrl: string
   ): Promise<{ ok: boolean; items?: unknown[]; error?: string }> =>
-    ipcRenderer.invoke('ai:imageToTasks', dataUrl)
+    ipcRenderer.invoke('ai:imageToTasks', dataUrl),
+
+  // 自绘标题栏的窗口控制
+  win: {
+    minimize: (): Promise<void> => ipcRenderer.invoke('window:minimize'),
+    toggleMaximize: (): Promise<boolean> => ipcRenderer.invoke('window:toggleMaximize'),
+    close: (): Promise<void> => ipcRenderer.invoke('window:close'),
+    isMaximized: (): Promise<boolean> => ipcRenderer.invoke('window:isMaximized'),
+    onMaximizedChange: (cb: (v: boolean) => void): void => {
+      ipcRenderer.on('window:maximized', (_e, v: boolean) => cb(v))
+    }
+  }
 }
 
 contextBridge.exposeInMainWorld('api', api)

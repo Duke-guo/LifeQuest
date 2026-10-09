@@ -97,12 +97,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
           <span class="core-name">{{ current.label }}</span>
         </button>
       </div>
-
-      <div class="hint">
-        <span class="hint-item"><kbd>滚轮</kbd><kbd>↑ ↓</kbd>切换</span>
-        <span class="hint-item"><kbd>点击中心</kbd>进入</span>
-        <span class="hint-item"><kbd>Esc</kbd>关闭</span>
-      </div>
     </div>
   </transition>
 </template>
@@ -228,31 +222,5 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
   font-size: 1.15rem;
   letter-spacing: 0.06em;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-}
-
-.hint {
-  display: flex;
-  align-items: center;
-  gap: 1.4rem;
-  color: rgba(255, 255, 255, 0.78);
-  font-size: 0.84rem;
-  letter-spacing: 0.03em;
-}
-.hint-item {
-  display: inline-flex;
-  align-items: center;
-}
-.hint kbd {
-  font-family: var(--font-num);
-  font-size: 0.78rem;
-  font-weight: 700;
-  line-height: 1.5;
-  background: rgba(255, 255, 255, 0.16);
-  border: 1px solid rgba(255, 255, 255, 0.26);
-  border-bottom-width: 2px;
-  border-radius: 7px;
-  padding: 1px 8px;
-  margin-right: 5px;
-  color: #fff;
 }
 </style>

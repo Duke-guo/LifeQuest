@@ -7,8 +7,13 @@ function createWindow(): void {
   const mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
+    minWidth: 940,
+    minHeight: 600,
     show: false,
     autoHideMenuBar: true,
+    // 自绘标题栏：顶部那三个窗口按钮由应用自己画（见 components/TitleBar.vue）
+    frame: false,
+    backgroundColor: '#f6f4f4',
     title: 'LifeQuest',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -16,6 +21,13 @@ function createWindow(): void {
       contextIsolation: true
     }
   })
+
+  // 最大化状态同步给渲染进程（按钮图标要跟着变）
+  const sendMax = (v: boolean): void => {
+    if (!mainWindow.isDestroyed()) mainWindow.webContents.send('window:maximized', v)
+  }
+  mainWindow.on('maximize', () => sendMax(true))
+  mainWindow.on('unmaximize', () => sendMax(false))
 
   // 调试：把渲染进程 console 转发到主进程 stdout
   if (process.env.LIFEQUEST_SCREENSHOT) {
@@ -227,6 +239,16 @@ function createWindow(): void {
                   '[按钮 font=' + cs.fontFamily.split(',')[0] + ' 圆角=' + cs.borderRadius +
                   ' 边框=' + cs.borderWidth + ' 阴影=' + (cs.boxShadow === 'none' ? '无' : '有') + ']\\n'
               }
+              // 自绘标题栏体检
+              const tb = document.querySelector('.titlebar')
+              if (tb) {
+                const r = tb.getBoundingClientRect()
+                const wbs = [...document.querySelectorAll('.wb')]
+                out +=
+                  '[标题栏 高=' + Math.round(r.height) + ' 窗口键=' + wbs.length +
+                  ' 键位=' + wbs.map((b) => Math.round(b.getBoundingClientRect().width)).join(',') +
+                  ' 拖拽区=' + (getComputedStyle(tb).webkitAppRegion || '无') + ']\\n'
+              }
               out += document.body.innerText
               const tas = [...document.querySelectorAll('textarea')].map((t) => t.value).filter((v) => v)
               const ins = [...document.querySelectorAll('input')].map((i) => i.value).filter((v) => v)
@@ -253,6 +275,29 @@ function createWindow(): void {
 
 // 骨架自检：渲染进程调用 ping，主进程回 pong，验证 IPC 桥接
 ipcMain.handle('ping', () => 'pong')
+
+// 自绘标题栏的窗口控制
+function windowOf(e: { sender: Electron.WebContents }): BrowserWindow | null {
+  return BrowserWindow.fromWebContents(e.sender)
+}
+
+ipcMain.handle('window:minimize', (e) => {
+  windowOf(e)?.minimize()
+})
+
+ipcMain.handle('window:toggleMaximize', (e) => {
+  const w = windowOf(e)
+  if (!w) return false
+  if (w.isMaximized()) w.unmaximize()
+  else w.maximize()
+  return w.isMaximized()
+})
+
+ipcMain.handle('window:close', (e) => {
+  windowOf(e)?.close()
+})
+
+ipcMain.handle('window:isMaximized', (e) => windowOf(e)?.isMaximized() ?? false)
 
 app.whenReady().then(async () => {
   await setupIpc()
