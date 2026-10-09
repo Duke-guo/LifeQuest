@@ -1,10 +1,10 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, ref, nextTick } from 'vue'
 import type { Task } from '../../../shared/types'
 import { formatDate } from '../utils/helpers'
 import { REPEAT_LABELS } from '../utils/schedule'
 import { useTasksStore } from '../stores/tasks'
-import { draggingTaskId, dropTargetId, clearDrag } from '../utils/taskDrag'
+import { draggingTaskId, dropTargetId, clearDrag, startAutoScroll } from '../utils/taskDrag'
 import AppIcon from './AppIcon.vue'
 
 const props = defineProps<{ task: Task; flash?: boolean }>()
@@ -74,6 +74,7 @@ function isDescendant(candidateId: string, ancestorId: string): boolean {
 
 function onDragStart(e: DragEvent): void {
   draggingTaskId.value = props.task.id
+  startAutoScroll()
   if (e.dataTransfer) {
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', props.task.id)

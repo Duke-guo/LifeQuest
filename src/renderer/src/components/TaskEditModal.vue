@@ -34,6 +34,11 @@ const repeat = ref<RepeatMode>(props.task.repeat ?? 'none')
 const repeatUntil = ref(props.task.repeatUntil ?? '')
 const occurrences = ref<TaskOccurrence[]>([...(props.task.occurrences ?? [])])
 const chains = ref<TaskChain[]>([...(props.task.chains ?? [])])
+const parentId = ref(props.task.parentId ?? '')
+/** 可以当主线的候选：顶层任务，排除自己 */
+const parentOptions = computed(() =>
+  store.tasks.filter((t) => !t.parentId && t.id !== props.task.id)
+)
 const seasonId = ref(props.task.seasonId ?? '')
 const description = ref(props.task.description ?? '')
 const tagInput = ref('')
@@ -64,6 +69,7 @@ function candidate(): Task {
     repeat: repeat.value,
     repeatUntil: repeat.value !== 'none' && repeatUntil.value ? repeatUntil.value : null,
     occurrences: occurrences.value.filter((o) => o.date),
+    parentId: parentId.value || null,
     chains: chains.value.filter((c) => c.due && c.repeat !== 'none')
   }
 }
@@ -141,6 +147,13 @@ function removeTag(id: string): void {
             <option value="main">主线</option>
             <option value="side">支线</option>
             <option value="daily">每日</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>所属主线（也可在列表里拖过去）</span>
+          <select v-model="parentId">
+            <option value="">无 · 独立任务</option>
+            <option v-for="p in parentOptions" :key="p.id" :value="p.id">{{ p.title }}</option>
           </select>
         </label>
         <label class="field">
