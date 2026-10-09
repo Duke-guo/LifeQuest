@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed, nextTick } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
 import { useNotesStore, type Note } from '../stores/notes'
 import { useTasksStore } from '../stores/tasks'
 import { useTagsStore } from '../stores/tags'
@@ -25,6 +25,8 @@ const confirm = useConfirmStore()
 
 const title = ref('')
 const category = ref('')
+/** 笔记日期：可改（时间主线 / 日记藤都按它归类） */
+const date = ref('')
 const rating = ref(3)
 const theText = ref('')
 const tagList = ref<string[]>([])
@@ -55,6 +57,7 @@ const dirty = computed(() => {
     title.value !== n.title ||
     content.value !== n.content ||
     category.value !== n.category ||
+    date.value !== n.date ||
     rating.value !== n.rating ||
     tagList.value.join('\u0001') !== n.tags.join('\u0001')
   )
@@ -128,11 +131,17 @@ onMounted(async () => {
 })
 
 async function select(id: string): Promise<void> {
+  // 切走前先把上一篇没落盘的改动补上，避免 900ms 内切笔记丢改动
+  if (dirty.value) {
+    window.clearTimeout(autoTimer)
+    await save(true)
+  }
   store.currentId = id
   const n = store.current
   if (!n) return
   title.value = n.title
   category.value = n.category
+  date.value = n.date
   rating.value = n.rating
   theText.value = n.theme.join(', ')
   tagList.value = [...n.tags]
@@ -156,8 +165,9 @@ function splitTags(s: string): string[] {
     .filter(Boolean)
 }
 
-async function save(): Promise<void> {
+async function save(auto = false): Promise<void> {
   saving.value = true
+  const beforeDate = store.current?.date
   const tagIds: string[] = []
   for (const t of tagList.value) {
     const tag = await tagsStore.ensure(t, 'theme')
@@ -166,6 +176,7 @@ async function save(): Promise<void> {
   await store.saveCurrent({
     title: title.value.trim() || '未命名笔记',
     category: category.value.trim(),
+    date: date.value || toDateStr(new Date()),
     theme: splitTags(theText.value),
     rating: rating.value,
     tags: [...tagList.value],
@@ -173,10 +184,25 @@ async function save(): Promise<void> {
     images: [...images.value],
     content: content.value
   })
+  // 改了日期要按新日期重排（列表 / 葡萄藤都按日期归类）
+  if (beforeDate !== date.value) await store.list()
   saving.value = false
-  linkHint.value = '已保存'
+  linkHint.value = auto ? '已自动保存' : '已保存'
   window.setTimeout(() => (linkHint.value = ''), 2000)
 }
+
+// 有改动就自动存（改完分类/日期不用记得按保存，列表和葡萄藤会立刻跟着变）
+let autoTimer = 0
+watch(dirty, (d) => {
+  if (!d) return
+  window.clearTimeout(autoTimer)
+  autoTimer = window.setTimeout(() => void save(true), 900)
+})
+onUnmounted(() => {
+  window.clearTimeout(autoTimer)
+  // 切走时如果还有没落盘的改动，补一次
+  if (dirty.value) void save(true)
+})
 
 async function create(): Promise<void> {
   await store.create()
@@ -492,7 +518,7 @@ function onEditorClick(): void {
           <span class="tools-spacer"></span>
           <span v-if="dirty" class="dirty-hint">● 有改动未保存</span>
           <span v-else-if="linkHint" class="saved">{{ linkHint }}</span>
-          <button class="save-btn" :class="{ dirty }" :disabled="saving" @click="save">
+          <button class="save-btn" :class="{ dirty }" :disabled="saving" @click="save(false)">
             {{ saving ? '保存中…' : dirty ? '保存 *' : '保存' }}
           </button>
         </div>
@@ -508,7 +534,7 @@ function onEditorClick(): void {
           </label>
           <label class="field">
             <span>日期</span>
-            <input :value="store.current.date" disabled />
+            <input v-model="date" type="date" />
           </label>
           <label class="field">
             <span>评价</span>

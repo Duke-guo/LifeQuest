@@ -190,6 +190,9 @@ function createWindow(): void {
                     // 用 dispatchEvent 而不是 el.click()：SVG 元素没有 click() 方法
                     if (el) {
                       el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+                      // 合成事件不会触发「聚焦」这个默认行为，需要显式补上，
+                      // 否则点完输入框再 @type: 会找不到焦点
+                      if (typeof el.focus === 'function') el.focus()
                       return 'clicked(sel)'
                     }
                     return 'not found(sel)'
