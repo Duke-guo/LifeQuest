@@ -12,9 +12,10 @@ import TaskEditModal from '../components/TaskEditModal.vue'
 import AddHistory from '../components/AddHistory.vue'
 import AiImportPanel from '../components/AiImportPanel.vue'
 import OccurrenceEditor from '../components/OccurrenceEditor.vue'
+import ChainEditor from '../components/ChainEditor.vue'
 import AppIcon from '../components/AppIcon.vue'
 import { noteFromTask } from '../utils/noteActions'
-import type { TaskType, TaskKind, Task, RepeatMode, TaskOccurrence } from '../../../shared/types'
+import type { TaskType, TaskKind, Task, RepeatMode, TaskOccurrence, TaskChain } from '../../../shared/types'
 
 const emit = defineEmits<{
   openNote: [id: string]
@@ -47,6 +48,8 @@ const repeatUntil = ref('')
 /** 不规律重复：逐次日期 */
 const occurrences = ref<TaskOccurrence[]>([])
 const showOcc = ref(false)
+const chains = ref<TaskChain[]>([])
+const showChains = ref(false)
 
 const conflicts = ref<Conflict[]>([])
 const pending = ref(false)
@@ -124,13 +127,15 @@ async function submit(force = false): Promise<void> {
     tagIds: tagIds.value,
     repeat: repeat.value,
     repeatUntil: repeat.value !== 'none' && repeatUntil.value ? repeatUntil.value : null,
-    occurrences: occurrences.value.filter((o) => o.date)
+    occurrences: occurrences.value.filter((o) => o.date),
+    chains: chains.value.filter((c) => c.due && c.repeat !== 'none')
   })
 
   title.value = ''
   location.value = ''
   description.value = ''
   occurrences.value = []
+  chains.value = []
   conflicts.value = []
   pending.value = false
 }
@@ -288,6 +293,16 @@ function locate(t: Task): void {
           已加 {{ occurrences.length }} 次
         </span>
       </div>
+      <div class="row occ-row-wrap">
+        <button type="button" class="occ-toggle" @click="showChains = !showChains">
+          {{ showChains ? '收起重复时段' : '＋ 加重复时段（一周上两次这类）' }}
+          <span v-if="chains.length" class="occ-count">{{ chains.length }}</span>
+        </button>
+      </div>
+      <div v-if="showChains" class="row occ-editor">
+        <ChainEditor v-model="chains" />
+      </div>
+
       <div v-if="showOcc" class="row occ-editor">
         <OccurrenceEditor v-model="occurrences" />
       </div>
@@ -349,6 +364,7 @@ function locate(t: Task): void {
         @edit="editing = t"
         @note="writeNote(t)"
         @locate="locate(t)"
+              @edit-child="editing = $event"
       />
     </section>
 
@@ -365,6 +381,7 @@ function locate(t: Task): void {
           @edit="editing = t"
           @note="writeNote(t)"
         @locate="locate(t)"
+              @edit-child="editing = $event"
         />
       </section>
     </template>

@@ -33,20 +33,37 @@ export function eventsFromTasks(
     if (!t.due || t.status === 'archived') continue
 
     const mode = t.repeat && t.repeat !== 'none' ? t.repeat : null
+    let emitted = false
+
     if (mode && rangeStart && rangeEnd) {
       // 展开区间 = [可见区间] ∩ [due, repeatUntil]
       const from = t.due > rangeStart ? t.due : rangeStart
       const until = t.repeatUntil && t.repeatUntil < rangeEnd ? t.repeatUntil : rangeEnd
-      if (until < from) continue
-      const dates = expandRepeat(t.due, mode, t.repeatUntil ?? null, from, until)
-      dates.forEach((d, i) => {
-        if (skipDates?.has(d)) return
-        out.push(makeEvent(t, d, `-r${i}`))
-      })
-      continue
+      if (until >= from) {
+        const dates = expandRepeat(t.due, mode, t.repeatUntil ?? null, from, until)
+        dates.forEach((d, i) => {
+          if (skipDates?.has(d)) return
+          out.push(makeEvent(t, d, `-r${i}`))
+        })
+      }
+      emitted = true
     }
 
-    if (t.repeatUntil && t.due > t.repeatUntil) continue
+    // 额外的重复链（一个任务多条：高数周二一节、周四一节）
+    // 注意：必须放在上面的 continue 之前，否则有主重复的任务永远走不到这里
+    const chains = t.chains ?? []
+    chains.forEach((c, ci) => {
+      if (!c.due || !c.repeat || c.repeat === 'none') return
+      const from = rangeStart && c.due < rangeStart ? rangeStart : c.due
+      const untilRaw = c.repeatUntil ?? null
+      const until = rangeEnd && (!untilRaw || untilRaw > rangeEnd) ? rangeEnd : untilRaw
+      if (!until || until < from) return
+      expandRepeat(c.due, c.repeat, untilRaw, from, until).forEach((d, i) => {
+        if (skipDates?.has(d)) return
+        out.push(makeEvent(t, d, `-c${ci}-${i}`, c))
+      })
+      emitted = true
+    })
 
     // 不规律的逐次日期（可与固定重复并存）
     const occ = t.occurrences ?? []
@@ -58,9 +75,12 @@ export function eventsFromTasks(
         if (skipDates?.has(o.date)) return
         out.push(makeEvent(t, o.date, `-o${i}`, o))
       })
-      // 逐次日期和固定重复是两套；没有固定重复时，due 那天不额外生成
-      if (!mode) continue
+      emitted = true
     }
+
+    if (emitted) continue
+
+    if (t.repeatUntil && t.due > t.repeatUntil) continue
 
     // 单次事项也要落在请求区间内才返回：
     // 否则调用方只要「某一天的时长/件数」，就会被别的日子的单次事项污染

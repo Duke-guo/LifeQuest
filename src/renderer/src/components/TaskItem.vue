@@ -1,12 +1,59 @@
-<script setup lang="ts">
-import { computed, ref } from 'vue'
+﻿<script setup lang="ts">
+import { computed, ref, nextTick } from 'vue'
 import type { Task } from '../../../shared/types'
 import { formatDate } from '../utils/helpers'
 import { REPEAT_LABELS } from '../utils/schedule'
+import { useTasksStore } from '../stores/tasks'
 import AppIcon from './AppIcon.vue'
 
 const props = defineProps<{ task: Task; flash?: boolean }>()
-const emit = defineEmits<{ toggle: []; remove: []; edit: []; note: []; locate: [] }>()
+const emit = defineEmits<{
+  toggle: []
+  remove: []
+  edit: []
+  note: []
+  locate: []
+  /** 子任务要打开编辑弹窗时，把子任务本身抛给视图 */
+  editChild: [task: Task]
+}>()
+
+const store = useTasksStore()
+/** 附属支线：只有顶层任务会挂子任务，避免递归套娃 */
+const children = computed(() =>
+  props.task.parentId ? [] : store.tasks.filter((t) => t.parentId === props.task.id)
+)
+const addingChild = ref(false)
+const childTitle = ref('')
+const childInput = ref<HTMLInputElement | null>(null)
+
+async function startAddChild(): Promise<void> {
+  addingChild.value = !addingChild.value
+  if (!addingChild.value) return
+  await nextTick()
+  childInput.value?.focus()
+}
+
+async function addChild(): Promise<void> {
+  const t = childTitle.value.trim()
+  if (!t) {
+    addingChild.value = false
+    return
+  }
+  await store.addTask({
+    title: t,
+    type: 'side',
+    importance: Math.max(1, props.task.importance - 1),
+    due: props.task.due,
+    seasonId: props.task.seasonId,
+    parentId: props.task.id
+  })
+  childTitle.value = ''
+  addingChild.value = false
+}
+
+async function toggleChild(c: Task): Promise<void> {
+  await store.setStatus(c.id, c.status === 'done' ? 'todo' : 'done')
+}
 
 const done = computed(() => props.task.status === 'done')
 const isSchedule = computed(() => props.task.kind === 'schedule')
@@ -65,6 +112,10 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
         </div>
       </div>
 
+      <button class="add-child" title="在这条主线下挂一条支线任务" @click.stop="startAddChild">
+        <AppIcon name="plus" :size="14" />
+      </button>
+
       <button class="locate" title="在日历里定位到这件事所在的那一周" @click.stop="emit('locate')">
         <AppIcon name="calendar" :size="15" />
       </button>
@@ -83,6 +134,28 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
       </button>
 
       <button class="remove" @click="emit('remove')" title="删除">✕</button>
+    </div>
+
+    <!-- 附属的支线任务 -->
+    <div v-if="children.length || addingChild" class="kids">
+      <div v-for="c in children" :key="c.id" class="kid" :class="{ done: c.status === 'done' }">
+        <button class="kid-check" @click.stop="toggleChild(c)">{{ c.status === 'done' ? '✓' : '' }}</button>
+        <span class="kid-title" title="点击编辑" @click.stop="emit('editChild', c)">{{ c.title }}</span>
+        <span v-if="c.startTime" class="kid-time">{{ c.startTime }}<template v-if="c.endTime">–{{ c.endTime }}</template></span>
+        <span v-else-if="c.due" class="kid-time">{{ c.due.slice(5) }}</span>
+        <button class="kid-x" title="删除这条支线" @click.stop="store.removeTask(c.id)">✕</button>
+      </div>
+      <div v-if="addingChild" class="kid-add">
+        <input
+          ref="childInput"
+          v-model="childTitle"
+          class="kid-input"
+          placeholder="支线任务名称，回车添加…"
+          @keyup.enter="addChild"
+          @keyup.esc="addingChild = false"
+          @blur="addChild"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -270,7 +343,8 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
   text-decoration: underline;
 }
 .take-note,
-.locate {
+.locate,
+.add-child {
   background: none;
   border: none;
   color: var(--text-3);
@@ -283,13 +357,97 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
   transition: opacity 0.15s ease, color 0.15s ease, background-color 0.15s ease;
 }
 .quest:hover .take-note,
-.quest:hover .locate {
+.quest:hover .locate,
+.quest:hover .add-child {
   opacity: 1;
 }
 .take-note:hover,
-.locate:hover {
+.locate:hover,
+.add-child:hover {
   color: var(--accent);
   background: var(--accent-soft);
+}
+/* 附属支线：缩进 + 左侧连接线，一眼看出挂在哪条主线下 */
+.kids {
+  margin: -0.2rem 0 0.5rem 2.1rem;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.kid {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+  color: var(--text-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.2rem 0.5rem;
+}
+.kid.done .kid-title {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+.kid-check {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: none;
+  color: #fff;
+  font-size: 0.6rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+}
+.kid.done .kid-check {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.kid-title {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kid-title:hover {
+  color: var(--accent);
+}
+.kid-time {
+  font-family: var(--font-num);
+  font-size: 0.72rem;
+  color: var(--text-3);
+}
+.kid-x {
+  border: none;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 0.72rem;
+}
+.kid-x:hover {
+  color: var(--danger);
+}
+.kid-add {
+  display: flex;
+}
+.kid-input {
+  flex: 1;
+  padding: 0.25rem 0.5rem;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.82rem;
 }
 .remove {
   background: none;

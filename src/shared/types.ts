@@ -51,6 +51,17 @@ export interface TaskOccurrence {
   endTime?: string | null
 }
 
+/** 一条重复链：一个任务可以有多条（比如高数一周两节，周二一节、周四一节） */
+export interface TaskChain {
+  /** 这条链的起点日期，决定落在星期几 */
+  due: string
+  repeat: RepeatMode
+  repeatUntil?: string | null
+  startTime?: string | null
+  endTime?: string | null
+  location?: string | null
+}
+
 export interface Task {
   id: string
   kind: TaskKind
@@ -79,6 +90,8 @@ export interface Task {
   repeatUntil?: string | null
   /** 不规律的重复：逐次列出日期（可与 repeat 并存，各自都会排进日历） */
   occurrences?: TaskOccurrence[]
+  /** 额外的重复链：一个任务多条（一周两节课就是两条链） */
+  chains?: TaskChain[]
   tags: string[]
   tagIds: string[]
   /** 关联的笔记 id（日程 ↔ 笔记） */

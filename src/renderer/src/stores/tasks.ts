@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+﻿import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { dataApi } from '../services/data'
 import { useHistoryStore } from './history'
@@ -9,6 +9,7 @@ import type {
   TaskStatus,
   TaskKind,
   TaskOccurrence,
+  TaskChain,
   RepeatMode
 } from '../../../shared/types'
 import { uid } from '../utils/helpers'
@@ -33,6 +34,7 @@ export interface NewTaskInput {
   repeat?: RepeatMode
   repeatUntil?: string | null
   occurrences?: TaskOccurrence[]
+  chains?: TaskChain[]
   description?: string
 }
 
@@ -54,6 +56,7 @@ export const useTasksStore = defineStore('tasks', () => {
       dueTime: t.dueTime ?? null,
       parentId: t.parentId ?? null,
       occurrences: t.occurrences ?? [],
+      chains: t.chains ?? [],
       tagIds: t.tagIds ?? [],
       linkedNoteIds: t.linkedNoteIds ?? []
     }))
@@ -85,6 +88,7 @@ export const useTasksStore = defineStore('tasks', () => {
       repeat: input.repeat ?? 'none',
       repeatUntil: input.repeatUntil ?? null,
       occurrences: input.occurrences ?? [],
+      chains: input.chains ?? [],
       tags: [],
       tagIds: input.tagIds ?? [],
       linkedNoteIds: input.linkedNoteIds ?? [],

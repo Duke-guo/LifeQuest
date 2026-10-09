@@ -243,6 +243,7 @@ function locate(t: Task): void {
           @remove="removeTask(t)"
           @note="writeNote(t)"
               @locate="locate(t)"
+              @edit-child="editing = $event"
         />
       </section>
 

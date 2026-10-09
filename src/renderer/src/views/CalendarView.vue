@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useTasksStore } from '../stores/tasks'
 import { usePlansStore } from '../stores/plans'
@@ -136,6 +136,15 @@ function loadScore(date: string): number {
 /** 算法默认档位（按当天安排的总时长；阈值统一在 utils/dayColor.ts） */
 function autoLabel(date: string): string {
   return busyTier(loadScore(date), eventsOn(date).length, deadlinePressure(eventsOn(date), today))
+}
+
+/** 周视图列高：今天最高，往两边递减 —— 上缘平齐、下缘鼓出来一条弧 */
+const WEEK_BASE_H = 190
+function weekColHeight(i: number): number {
+  const ti = weekDays.value.indexOf(today)
+  const d = ti < 0 ? 3 : Math.abs(i - ti)
+  const extra = [96, 56, 26, 8][Math.min(d, 3)]
+  return WEEK_BASE_H + extra
 }
 
 /** 这一天的截止型事项（画成插入旗标） */
@@ -590,11 +599,11 @@ function locate(t: Task): void {
       </div>
       <div class="week-grid" :key="`w${animKey}`" :class="slideClass" @wheel.prevent="onWheel">
         <div
-          v-for="d in weekDays"
+          v-for="(d, i) in weekDays"
           :key="d"
           class="week-col"
           :class="{ today: d === today }"
-          :style="{ background: colorMap[d]?.bg }"
+          :style="{ background: colorMap[d]?.bg, height: weekColHeight(i) + 'px' }"
           :title="`点这里进日视图：可改这一天的性质、忙碌程度，并增删当天的安排`"
           @click="drillTo(d)"
         >
@@ -785,6 +794,7 @@ function locate(t: Task): void {
               @remove="removeTask(t)"
               @note="writeNote(t)"
               @locate="locate(t)"
+              @edit-child="editing = $event"
             />
 
             <div class="quick-add">
@@ -1215,12 +1225,14 @@ function locate(t: Task): void {
   color: #7d52b8;
 }
 .week-grid {
+  align-items: start;
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 6px;
 }
 .week-col {
-  min-height: 220px;
+  min-height: 150px;
+  align-self: start;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface);

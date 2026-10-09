@@ -29,6 +29,8 @@ export const useJournalIndexStore = defineStore('journalIndex', () => {
     const out: JournalIndexEntry[] = []
     for (const f of files) {
       const date = f.replace(/\.md$/, '')
+      // 周记文件是 w2026-10-04.md 这种，按天索引要跳过（它归 weeklyJournal 管）
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue
       const raw = await dataApi.readMarkdown(`journal/${f}`)
       const { meta, body } = parseFrontMatter(raw)
       const firstLine = body

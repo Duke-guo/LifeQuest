@@ -1,11 +1,11 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useJournalIndexStore } from '../stores/journalIndex'
-import { useNotesStore } from '../stores/notes'
+import { useWeeklyJournalStore } from '../stores/weeklyJournal'
 import { useSemesterStore } from '../stores/semester'
-import { extendNote } from '../utils/noteActions'
 import { toDateStr } from '../utils/helpers'
 import AppIcon from './AppIcon.vue'
+import WeeklyJournalModal from './WeeklyJournalModal.vue'
 
 interface DayColorLike {
   bg: string
@@ -24,7 +24,9 @@ const props = defineProps<{
 const emit = defineEmits<{ openJournal: [date: string]; openNote: [id: string] }>()
 
 const journalIndex = useJournalIndexStore()
-const notesStore = useNotesStore()
+const weekly = useWeeklyJournalStore()
+const showWeekEditor = ref(false)
+const editingWeek = ref<{ start: string; end: string; label: string } | null>(null)
 const semesterStore = useSemesterStore()
 
 /** 0 = 每日日记，1 = 周记；滚轮切换，一次只显示一条 */
@@ -36,9 +38,9 @@ let lock = 0
 const VW = 700
 const VINE_BASE = 13
 const VINE_AMP = 5
-const FRUIT_TOP = 44 // 果实顶端；离藤很近
+const FRUIT_TOP = 34 // 果实顶端；离藤很近
 const FRUIT_SIZE = 34
-const ENTRY_TOP = 84
+const ENTRY_TOP = 72
 const ENTRY_SIZE = 26
 const TRACK_H = ENTRY_TOP + ENTRY_SIZE + 6
 
@@ -88,11 +90,12 @@ function entryTendril(i: number, n: number): string {
 
 onMounted(async () => {
   await journalIndex.load()
-  if (notesStore.notes.length === 0) await notesStore.list()
+  if (!weekly.loaded) await weekly.load()
   if (!semesterStore.semester.start) await semesterStore.load()
 })
 
 const WEEKDAY = ['日', '一', '二', '三', '四', '五', '六']
+const today = toDateStr(new Date())
 
 function dayNum(date: string): string {
   return String(Number(date.slice(8)))
@@ -119,19 +122,13 @@ const dayNodes = computed<DayNode[]>(() =>
   })
 )
 
-function weeklyNoteOf(start: string, end: string): string | null {
-  const found = notesStore.notes.find(
-    (n) => n.category.trim() === '周记' && n.date >= start && n.date <= end
-  )
-  return found?.id ?? null
-}
-
 interface WeekNode {
   start: string
   end: string
   label: string
   short: string
-  noteId: string | null
+  /** 这周写了周记没有 */
+  has: boolean
   /** 相对本周的位置：0 = 本周，-2/-1 过去，+1/+2 将来 */
   offset: number
 }
@@ -149,7 +146,7 @@ const weekNodes = computed<WeekNode[]>(() => {
       offset: off,
       label: off === 0 ? `本周 · 第 ${wk ?? '—'} 周` : wk ? `第 ${wk} 周` : `${start.slice(5)} 起`,
       short: wk ? String(wk) : '＋',
-      noteId: weeklyNoteOf(start, end)
+      has: weekly.has(start)
     })
   }
   return out
@@ -202,18 +199,10 @@ function openDay(date: string): void {
   emit('openJournal', date)
 }
 
-async function openWeek(w: WeekNode): Promise<void> {
-  if (w.noteId) {
-    emit('openNote', w.noteId)
-    return
-  }
-  const id = await extendNote({
-    category: '周记',
-    date: w.start,
-    title: `周记 · ${w.start.slice(5)} ~ ${w.end.slice(5)}`
-  })
-  await notesStore.list()
-  emit('openNote', id)
+/** 打开这一周的周记（和日记同一个模块，存在 journal/w<周日>.md） */
+function openWeek(w: WeekNode): void {
+  editingWeek.value = { start: w.start, end: w.end, label: w.label }
+  showWeekEditor.value = true
 }
 </script>
 
@@ -243,8 +232,12 @@ async function openWeek(w: WeekNode): Promise<void> {
         <div v-for="d in dayNodes" :key="d.date" class="jv-cell">
           <button
             class="jv-node vine-fruit"
-            :class="{ empty: !d.has, on: selKey === d.date }"
-            :style="{ ...(d.has ? fruitStyle(d.date) : {}), '--tilt': tilt(d.date) }"
+            :class="{ empty: !d.has, on: selKey === d.date, current: d.date === today }"
+            :style="{
+              ...(d.has ? fruitStyle(d.date) : {}),
+              '--tilt': tilt(d.date),
+              '--scale': d.date === today ? 1.3 : 1
+            }"
             :title="`${d.date} 周${weekdayOf(d.date)}`"
             @click="pick(d.date)"
           >
@@ -285,12 +278,12 @@ async function openWeek(w: WeekNode): Promise<void> {
         <div v-for="w in weekNodes" :key="w.start" class="jv-cell">
           <button
             class="jv-node vine-fruit"
-            :class="{ empty: !w.noteId, on: selKey === w.start, current: w.offset === 0 }"
+            :class="{ empty: !w.has, on: selKey === w.start, current: w.offset === 0 }"
             :style="{ '--tilt': tilt(w.start), '--scale': nodeScale(w.offset), opacity: nodeOpacity(w.offset) }"
             :title="`${w.start} ~ ${w.end}`"
             @click="pick(w.start)"
           >
-            <span v-if="w.noteId" class="jv-num sm">{{ w.short }}</span>
+            <span v-if="w.has" class="jv-num sm">{{ w.short }}</span>
             <span v-else class="jv-plus">＋</span>
           </button>
 
@@ -298,7 +291,7 @@ async function openWeek(w: WeekNode): Promise<void> {
             <button
               v-if="selKey === w.start"
               class="jv-entry"
-              :title="w.noteId ? '打开这周的周记' : '写这周的周记'"
+              :title="w.has ? '打开这周的周记' : '写这周的周记'"
               @click="openWeek(w)"
             >
               <AppIcon name="notes" :size="13" />
@@ -309,6 +302,14 @@ async function openWeek(w: WeekNode): Promise<void> {
         </div>
       </div>
     </transition>
+
+    <WeeklyJournalModal
+      v-if="showWeekEditor && editingWeek"
+      :week-start="editingWeek.start"
+      :week-end="editingWeek.end"
+      :label="editingWeek.label"
+      @close="showWeekEditor = false"
+    />
   </section>
 </template>
 
@@ -370,7 +371,7 @@ async function openWeek(w: WeekNode): Promise<void> {
   top: 0;
   left: 0;
   width: 100%;
-  height: 116px;
+  height: 100px;
   overflow: visible;
   pointer-events: none;
 }
@@ -380,7 +381,7 @@ async function openWeek(w: WeekNode): Promise<void> {
   flex-direction: column;
   align-items: center;
   /* 与 SVG 的 FRUIT_TOP 对齐 */
-  padding-top: 44px;
+  padding-top: 34px;
 }
 /* 葡萄：平面质感，与笔记葡萄藤一致（底色来自当天配色） */
 .jv-node {
