@@ -80,6 +80,7 @@ onUnmounted(() => {
   window.clearTimeout(flashTimer)
   cancelAnimationFrame(rafId)
   window.clearInterval(measureTimer)
+  window.clearInterval(fallbackTimer)
   for (const t of settleTimers) window.clearTimeout(t)
   window.removeEventListener('resize', measureAll)
 })
@@ -89,6 +90,10 @@ onMounted(() => {
   measureAll()
   // 实测不能只靠 rAF：窗口被遮挡时 rAF 会停摆，这里再挂一条定时器兜底
   measureTimer = window.setInterval(measureAll, 500)
+  // rAF 停摆（窗口被遮挡/切后台）时的兜底推进：看得见时交给 rAF，看不见时用定时器
+  fallbackTimer = window.setInterval(() => {
+    if (performance.now() - lastTickAt > 300) step()
+  }, 120)
   window.addEventListener('resize', measureAll)
   // 进场动画/字体迟到会让第一次量到的坐标偏掉，错开几个时间点重量
   for (const ms of [120, 400, 1000, 2000]) settleTimers.push(window.setTimeout(measureAll, ms))
@@ -259,13 +264,25 @@ function colAt(x: number): number {
   return lefts.length - 1
 }
 
-/** 把某一天滑到视口正中 */
+/** 把某一天滑到视口正中；距离太远就直接落位，不在屏幕里就先把整段窗口挪过来 */
 function centerOn(date: string, animate = true): void {
-  const i = stripDays.value.indexOf(date)
-  if (i < 0) return
+  let i = stripDays.value.indexOf(date)
+  if (i < 0) {
+    // 这一天已经被滚出渲染窗口（滑太远了）：重设窗口，让它落在窗口正中
+    stripStart.value = addDays(date, -Math.floor(WINDOW_DAYS / 2))
+    i = stripDays.value.indexOf(date)
+    if (i < 0) return
+    const want0 = clampOffset(colCenter(i) - viewportW.value / 2)
+    targetOffset.value = want0
+    smoothOffset.value = want0
+    return
+  }
   const want = clampOffset(colCenter(i) - viewportW.value / 2)
   targetOffset.value = want
-  if (!animate) smoothOffset.value = want
+  // 离得远就一步到位，别让用户等它慢慢滑过去
+  if (!animate || Math.abs(want - smoothOffset.value) > viewportW.value * 1.5) {
+    smoothOffset.value = want
+  }
 }
 
 /** 视口正中落在第几天（可能是小数，周记那行靠它换速度） */
@@ -329,8 +346,16 @@ function onStripWheel(e: WheelEvent): void {
 let rafId = 0
 let bandTick = 0
 let measureTimer = 0
+let fallbackTimer = 0
+let lastTickAt = 0
 const settleTimers: number[] = []
-function tick(): void {
+
+/**
+ * 一天推进一步：曲线最低点 + 横向滚动跟随 + 周期性实测。
+ * 抽出来是因为 rAF 在窗口被遮挡/切到后台时会停摆——只靠它的话，
+ * 点了「今天」目标值变了却永远不动（窗口重新可见前像卡住）。
+ */
+function step(): void {
   // 曲线最低点
   const t = targetCenter.value
   const s = smoothCenter.value
@@ -351,12 +376,17 @@ function tick(): void {
   } else if (ds !== dt) {
     smoothOffset.value = dt
   }
-  // 每 20 帧复核一次实测值（字体迟到、窗口缩放），顺便检查要不要平移窗口
+  // 每 20 步复核一次实测值（字体迟到、窗口缩放），顺便检查要不要平移窗口
   if (++bandTick >= 20) {
     bandTick = 0
     measureAll()
     maybeShiftWindow()
   }
+}
+
+function tick(): void {
+  lastTickAt = performance.now()
+  step()
   rafId = requestAnimationFrame(tick)
 }
 
@@ -1060,6 +1090,9 @@ function locate(t: Task): void {
       <div
         ref="viewportRef"
         class="strip-wrap"
+        :data-center="stripCenterDate"
+        :data-offset="Math.round(smoothOffset)"
+        :data-target="Math.round(targetOffset)"
         :style="{ height: WEEK_COL_H + 'px' }"
         @wheel.prevent="onStripWheel"
         @mousemove="onStripMove"

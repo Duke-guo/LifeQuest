@@ -339,9 +339,17 @@ function createWindow(): void {
                 })
                 const todayCol = cols.find((c) => c.classList.contains('today'))
                 const tr = todayCol ? todayCol.getBoundingClientRect() : null
+                const midX = sr.left + sr.width / 2
+                const midCol = cols.find((c) => {
+                  const r = c.getBoundingClientRect()
+                  return r.left <= midX && r.right >= midX
+                })
                 out +=
                   '[日带 视口宽=' + Math.round(sr.width) + ' 总天=' + cols.length +
                   ' 屏上=' + inView.length +
+                  ' 正中=' + (midCol ? (midCol.querySelector('.wc-date')?.textContent || '?').trim() : '?') +
+                  ' 组件中心=' + (strip.getAttribute('data-center') ?? '?') +
+                  ' 目标偏移=' + (strip.getAttribute('data-target') ?? '?') +
                   ' 偏移=' + (document.querySelector('.week-flag-layer')?.getAttribute('data-offset') ?? '?') +
                   ' 今天中心x=' + (tr ? Math.round(tr.left + tr.width / 2 - sr.left) : '今天不在屏上') +
                   ']\\n'
