@@ -71,7 +71,14 @@ onMounted(async () => {
   }
 })
 
-onUnmounted(() => window.clearTimeout(flashTimer))
+onUnmounted(() => {
+  window.clearTimeout(flashTimer)
+  cancelAnimationFrame(rafId)
+})
+
+onMounted(() => {
+  rafId = requestAnimationFrame(tick)
+})
 
 const today = toDateStr(new Date())
 const year = computed(() => cursor.value.getFullYear())
@@ -147,11 +154,41 @@ function weekCurveY(x: number, center: number | null): number {
   return WEEK_FLAT + (1 - WEEK_FLAT) * Math.exp(-k * k)
 }
 
-/** 曲线最低点：悬停跟鼠标；没悬停时本周=今天，非本周=拉平(null) */
+/** 曲线最低点：悬停时连续跟随鼠标（rAF 平滑），没悬停时本周=今天、非本周=拉平 */
 const hoverDay = ref<number | null>(null)
+const targetCenter = ref<number | null>(null)
+const smoothCenter = ref<number | null>(null)
+
+function onWeekMove(e: MouseEvent): void {
+  const wrap = e.currentTarget as HTMLElement
+  const rect = wrap.getBoundingClientRect()
+  const x = (e.clientX - rect.left) / rect.width
+  targetCenter.value = Math.max(0, Math.min(1, x))
+  hoverDay.value = Math.max(0, Math.min(6, Math.floor(x * 7)))
+}
+
+function onWeekLeave(): void {
+  targetCenter.value = null
+  hoverDay.value = null
+}
+
+let rafId = 0
+function tick(): void {
+  const t = targetCenter.value
+  const s = smoothCenter.value
+  if (t === null) {
+    smoothCenter.value = null
+  } else if (s === null) {
+    smoothCenter.value = t
+  } else {
+    smoothCenter.value = s + (t - s) * 0.2
+    if (Math.abs(t - s) < 0.0004) smoothCenter.value = t
+  }
+  rafId = requestAnimationFrame(tick)
+}
+
 const curveCenter = computed<number | null>(() => {
-  const h = hoverDay.value
-  if (h !== null) return (h + 0.5) / 7
+  if (smoothCenter.value !== null) return smoothCenter.value
   const ti = weekDays.value.indexOf(today)
   return ti < 0 ? null : (ti + 0.5) / 7
 })
@@ -629,7 +666,7 @@ function locate(t: Task): void {
           {{ weekSummary.hours }} 小时 · 重要度合计 {{ weekSummary.score }}
         </span>
       </div>
-      <div class="week-wrap">
+      <div class="week-wrap" @mousemove="onWeekMove" @mouseleave="onWeekLeave">
       <svg class="week-clip-defs" aria-hidden="true"><defs><clipPath id="weekCurve" clipPathUnits="objectBoundingBox"><path :d="weekClipPath" /></clipPath></defs></svg>
       <div class="week-grid" :key="`w${animKey}`" :class="slideClass" @wheel.prevent="onWheel">
         <div
@@ -639,8 +676,6 @@ function locate(t: Task): void {
           :class="{ today: d === today, 'curve-peak': hoverDay === i }"
           :style="{ background: colorMap[d]?.bg }"
           :title="`点这里进日视图：可改这一天的性质、忙碌程度，并增删当天的安排`"
-          @mouseenter="hoverDay = i"
-          @mouseleave="hoverDay = null"
           @click="drillTo(d)"
         >
           <span
@@ -1309,10 +1344,6 @@ function locate(t: Task): void {
   position: absolute;
   width: 0;
   height: 0;
-}
-/* 曲线用 CSS d 属性驱动：hover 换最低点时能平滑过渡 */
-.week-curve {
-  transition: d 0.34s cubic-bezier(0.22, 0.9, 0.3, 1);
 }
 .week-col {
   height: 312px;
