@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useTasksStore } from '../stores/tasks'
 import { usePlansStore } from '../stores/plans'
@@ -138,7 +138,7 @@ function autoLabel(date: string): string {
   return busyTier(loadScore(date), eventsOn(date).length, deadlinePressure(eventsOn(date), today))
 }
 
-/** 周视图：下缘是一条曲线 —— 每列高度取曲线在它中心点的值，卡片之间留空隙 */
+/** 周视图：所有列等高，整块用一条连续曲线裁出光滑下边缘；卡片之间留空隙、带圆角 */
 const WEEK_COL_H = 312
 const WEEK_FLAT = 0.84
 function weekCurveY(x: number, center: number | null): number {
@@ -156,16 +156,27 @@ const curveCenter = computed<number | null>(() => {
   return ti < 0 ? null : (ti + 0.5) / 7
 })
 
-/** 每一列的高度 */
-function weekColHeight(i: number): number {
-  return Math.round(WEEK_COL_H * weekCurveY((i + 0.5) / 7, curveCenter.value))
-}
+/** 整块网格的裁剪路径（objectBoundingBox 坐标，一条光滑曲线） */
+const weekClipPath = computed(() => {
+  const center = curveCenter.value
+  const N = 56
+  const y = (x: number): string => weekCurveY(x, center).toFixed(4)
+  const pts: string[] = [`M 0 -0.4`, `L 1 -0.4`]
+  if (center === null) {
+    pts.push(`L 1 ${WEEK_FLAT}`, `L 0 ${WEEK_FLAT}`)
+  } else {
+    pts.push(`L 1 ${y(1)}`)
+    for (let i = N - 1; i >= 0; i--) pts.push(`L ${(i / N).toFixed(4)} ${y(i / N)}`)
+  }
+  pts.push('Z')
+  return pts.join(' ')
+})
 
-/** 旗标位置：夹在这一列的实际高度内 */
+/** 旗标位置：夹在这一列实际露出的高度内（曲线之上），不会被裁掉 */
 function flagTop(f: DeadlineFlag, i: number): string {
-  const h = weekColHeight(i)
-  const wanted = f.pos * h
-  return Math.round(Math.min(wanted, h - 20)) + 'px'
+  const visibleH = weekCurveY((i + 0.5) / 7, curveCenter.value) * WEEK_COL_H
+  const wanted = f.pos * visibleH
+  return Math.round(Math.min(wanted, visibleH - 20)) + 'px'
 }
 
 /** 这一天的截止型事项（画成插入旗标） */
@@ -619,13 +630,14 @@ function locate(t: Task): void {
         </span>
       </div>
       <div class="week-wrap">
+      <svg class="week-clip-defs" aria-hidden="true"><defs><clipPath id="weekCurve" clipPathUnits="objectBoundingBox"><path :d="weekClipPath" /></clipPath></defs></svg>
       <div class="week-grid" :key="`w${animKey}`" :class="slideClass" @wheel.prevent="onWheel">
         <div
           v-for="(d, i) in weekDays"
           :key="d"
           class="week-col"
           :class="{ today: d === today, 'curve-peak': hoverDay === i }"
-          :style="{ background: colorMap[d]?.bg, '--h': weekColHeight(i) }"
+          :style="{ background: colorMap[d]?.bg }"
           :title="`点这里进日视图：可改这一天的性质、忙碌程度，并增删当天的安排`"
           @mouseenter="hoverDay = i"
           @mouseleave="hoverDay = null"
@@ -1276,9 +1288,8 @@ function locate(t: Task): void {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 6px;
-}
-.week-wrap {
-  position: relative;
+  /* 整块用一条连续曲线裁下缘：光滑的下边缘 + 卡片间空隙 */
+  clip-path: url(#weekCurve);
 }
 .week-flag-layer {
   position: absolute;
@@ -1304,21 +1315,15 @@ function locate(t: Task): void {
   transition: d 0.34s cubic-bezier(0.22, 0.9, 0.3, 1);
 }
 .week-col {
-  height: calc(var(--h, 262) * 1px);
+  height: 312px;
   position: relative;
-  border: none;
-  border-left: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: 12px;
   background: var(--surface);
   padding: 8px;
   cursor: pointer;
-  transition:
-    transform 0.24s cubic-bezier(0.22, 0.9, 0.3, 1),
-    box-shadow 0.16s ease;
+  transition: box-shadow 0.16s ease, border-color 0.16s ease;
 }
-.week-col:first-child {
-  border-left: none;
-}
-/* 悬停：曲线最低点挪到这一天，这一列自然露出更多内容（不再整体上抬） */
 .week-col:hover {
   z-index: 3;
 }
