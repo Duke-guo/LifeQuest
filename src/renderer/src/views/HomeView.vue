@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useTasksStore } from '../stores/tasks'
 import { useJournalIndexStore } from '../stores/journalIndex'
@@ -8,6 +8,7 @@ import { useConfirmStore } from '../stores/confirm'
 import { eventsFromTasks, eventHours, nextOccurrence, WEATHER_META, MOOD_META } from '../utils/schedule'
 import { computeDayColor } from '../utils/dayColor'
 import { noteFromTask } from '../utils/noteActions'
+import { deadlineShort, deadlineText, deadlineTier, upcomingDeadlines } from '../utils/deadline'
 import { toDateStr } from '../utils/helpers'
 import AppIcon from '../components/AppIcon.vue'
 import TaskItem from '../components/TaskItem.vue'
@@ -160,6 +161,9 @@ const upcoming = computed(() => {
     .slice(0, 6)
 })
 
+/** 还在盯着的截止任务：首页只摆两周内的，逾期的一并露出来 */
+const deadlines = computed(() => upcomingDeadlines(tasksStore.tasks, today, 14, 14))
+
 async function toggleTask(t: Task): Promise<void> {
   await tasksStore.setStatus(t.id, t.status === 'done' ? 'todo' : 'done')
 }
@@ -226,6 +230,28 @@ function locate(t: Task): void {
       </div>
     </header>
 
+    <!-- 临近截止：每天露一次脸，直到交掉 -->
+    <section v-if="deadlines.length" class="card ddl-card">
+      <div class="card-head">
+        <h3>⚑ 临近截止</h3>
+        <span class="card-sub">越接近截止，重要度会自动抬高</span>
+      </div>
+      <div class="ddl-list">
+        <div
+          v-for="t in deadlines"
+          :key="`dl-${t.id}`"
+          class="ddl-row"
+          :class="`t-${deadlineTier(t, today)}`"
+          title="点一下去日历定位到这一天"
+          @click="locate(t)"
+        >
+          <span class="ddl-badge">{{ deadlineShort(t, today) }}</span>
+          <span class="ddl-title">{{ t.title }}</span>
+          <span class="ddl-when">截止 {{ t.due!.slice(5) }}{{ t.dueTime ? ' ' + t.dueTime : '' }}</span>
+        </div>
+      </div>
+    </section>
+
     <div class="cols">
       <!-- 今天 -->
       <section class="card">
@@ -238,6 +264,7 @@ function locate(t: Task): void {
           v-for="t in todayTasks"
           :key="t.id"
           :task="t"
+          :today="today"
           @toggle="toggleTask(t)"
           @edit="editing = t"
           @remove="removeTask(t)"
@@ -419,6 +446,64 @@ function locate(t: Task): void {
   align-items: baseline;
   justify-content: space-between;
   margin-bottom: 0.7rem;
+}
+/* 临近截止：横向排开，越紧迫越深 */
+.ddl-card {
+  margin-bottom: 1.1rem;
+}
+.ddl-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.ddl-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: transform 0.14s ease, border-color 0.14s ease;
+}
+.ddl-row:hover {
+  transform: translateY(-1px);
+  border-color: var(--border);
+}
+.ddl-badge {
+  font-size: 0.74rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 1px 7px;
+  background: rgba(150, 150, 160, 0.18);
+  color: var(--text-2);
+}
+.ddl-title {
+  font-weight: 600;
+}
+.ddl-when {
+  font-size: 0.76rem;
+  color: var(--text-3);
+}
+.ddl-row.t-soon .ddl-badge {
+  background: rgba(217, 156, 43, 0.2);
+  color: #9a6b10;
+}
+.ddl-row.t-today .ddl-badge {
+  background: rgba(207, 74, 60, 0.2);
+  color: var(--accent);
+}
+.ddl-row.t-today {
+  background: var(--accent-soft);
+}
+.ddl-row.t-over .ddl-badge {
+  background: var(--danger);
+  color: #fff;
+}
+.ddl-row.t-over .ddl-when {
+  color: var(--danger);
+  font-weight: 600;
 }
 .card-head h3 {
   font-size: 1.02rem;

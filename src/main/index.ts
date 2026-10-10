@@ -400,6 +400,20 @@ function createWindow(): void {
                   ' 行数限制=' + (getComputedStyle(desc).webkitLineClamp || '无') +
                   ' 展开键=' + (document.querySelector('.desc-toggle') ? '有' : '无') + ']\\n'
               }
+              // 任务卡宽度体检：按钮挤占后正文还剩多少
+              const quest = document.querySelector('.quest')
+              if (quest) {
+                const inner = quest.querySelector('.inner')
+                const body = quest.querySelector('.body')
+                const title = quest.querySelector('.title')
+                const btns = [...quest.querySelectorAll('.add-child, .locate, .take-note, .remove')]
+                out +=
+                  '[任务卡 inner=' + (inner ? Math.round(inner.getBoundingClientRect().width) : '?') +
+                  ' 正文=' + (body ? Math.round(body.getBoundingClientRect().width) : '?') +
+                  ' 按钮=' + btns.length + '个/' + Math.round(btns.reduce((s, b) => s + b.getBoundingClientRect().width, 0)) +
+                  ' 标题行数≈' + (title && body ? (Math.round(title.getBoundingClientRect().height / (parseFloat(getComputedStyle(title).lineHeight) || 20)) || 1) : '?') +
+                  ']\\n'
+              }
               // 截止旗标 + 定位高亮体检
               const flags = document.querySelectorAll('.flag')
               if (flags.length) {

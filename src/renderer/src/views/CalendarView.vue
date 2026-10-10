@@ -16,6 +16,7 @@ import {
 } from '../utils/schedule'
 import { toDateStr } from '../utils/helpers'
 import { computeDayColor, busyTier, type DayColor } from '../utils/dayColor'
+import { deadlineIntensity, deadlineTier, effectiveImportance } from '../utils/deadline'
 import { noteFromTask } from '../utils/noteActions'
 import { nextOccurrence, deadlinePressure, deadlineTimeOf } from '../utils/schedule'
 import { computeDayGrade, GRADE_TITLE, type DayGrade } from '../utils/dayGrade'
@@ -330,6 +331,8 @@ function measureRowBands(): void {
 /** 这一天的截止型事项（画成插入旗标） */
 interface DeadlineFlag {
   id: string
+  /** 对应任务 id（拿它算紧迫度） */
+  refId: string
   title: string
   /** 落点时刻 HH:mm（24:00 = 当天结束） */
   time: string
@@ -353,6 +356,7 @@ function flagsOn(date: string): DeadlineFlag[] {
     const frac = (toMin(time) / 60 - 6) / 18
     out.push({
       id: e.id,
+      refId: e.refId,
       title: e.title,
       time,
       done: e.meta.status === 'done',
@@ -361,6 +365,49 @@ function flagsOn(date: string): DeadlineFlag[] {
   }
   out.sort((a, b) => a.pos - b.pos)
   return out
+}
+
+// ---------- 日视图：截止型事项画成一条横线 + 渐变压迫带 ----------
+interface DayDeadline {
+  id: string
+  title: string
+  time: string
+  done: boolean
+  /** 落点在时间轴里的像素高度 */
+  y: number
+  /** 0..1 紧迫度：越接近截止越深 */
+  intensity: number
+  tier: 'over' | 'today' | 'soon' | 'later'
+  /** 这个落点上压着别的日程块：那就只留一条线 + 文字，不铺渐变 */
+  overlap: boolean
+}
+
+const dayDeadlines = computed<DayDeadline[]>(() => {
+  const blocks = daySchedules.value.map((e) => {
+    const top = topOf(e.time!)
+    return [top, top + heightOf(e.time!, e.endTime ?? e.time!)] as [number, number]
+  })
+  return flagsOn(cursorIso.value).map((f) => {
+    const time = f.time === '24:00' ? '23:59' : f.time
+    const y = topOf(time)
+    const t = tasksStore.tasks.find((x) => x.id === f.refId)
+    return {
+      id: f.id,
+      title: f.title,
+      time: f.time,
+      done: f.done,
+      y,
+      intensity: t ? deadlineIntensity(t, today) : 0.4,
+      tier: t ? deadlineTier(t, today) : 'later',
+      overlap: blocks.some(([a, b]) => y > a - 4 && y < b + 4)
+    }
+  })
+})
+
+/** 压迫带的颜色：越接近截止越深 */
+function ddlFill(d: DayDeadline): string {
+  const a = (0.06 + d.intensity * 0.3).toFixed(3)
+  return `linear-gradient(to bottom, rgba(207, 74, 60, 0) 0%, rgba(207, 74, 60, ${a}) 100%)`
 }
 
 /** 显示用的标签：用户写过就用用户的 */
@@ -895,6 +942,15 @@ function locate(t: Task): void {
     <template v-else>
       <div class="day-layout">
         <div class="timeline" :key="`d${animKey}`" :class="slideClass" @wheel.prevent="onWheel">
+          <!-- 截止压迫带：从零点铺到截止那一刻，越接近截止越深 -->
+          <div
+            v-for="d in dayDeadlines"
+            v-show="!d.overlap && !d.done"
+            :key="`fill-${d.id}`"
+            class="ddl-fill"
+            :style="{ height: d.y + 'px', background: ddlFill(d) }"
+          ></div>
+
           <div v-for="h in HOURS" :key="h" class="hour-row">
             <span class="hour">{{ String(h).padStart(2, '0') }}:00</span>
           </div>
@@ -909,18 +965,20 @@ function locate(t: Task): void {
             <em v-if="e.meta?.location">{{ e.meta.location }}</em>
           </div>
 
-          <!-- 截止旗标：日中截止就挪到对应时刻 -->
-          <span
-            v-for="f in flagsOn(cursorIso)"
-            :key="f.id"
-            class="flag on-timeline"
-            :class="{ done: f.done }"
-            :style="{ top: topOf(f.time === '24:00' ? '23:59' : f.time) + 'px' }"
-            :title="`${f.done ? '已完成 · ' : '截止 '}${f.time === '24:00' ? '当天 24:00' : f.time} · ${f.title}`"
+          <!-- 截止线：一条横线 + 文字备注；落点压在别的日程块上时也只有这条线 -->
+          <div
+            v-for="d in dayDeadlines"
+            :key="`line-${d.id}`"
+            class="ddl-line"
+            :class="[`t-${d.tier}`, { done: d.done, overlap: d.overlap }]"
+            :style="{ top: d.y - 11 + 'px' }"
+            :title="`${d.done ? '已完成 · ' : '截止 '}${d.time} · ${d.title}`"
           >
-            <i class="flag-pin"></i>
-            <em class="flag-text">{{ f.done ? '已完成' : f.title }}</em>
-          </span>
+            <i class="ddl-pin"></i>
+            <span class="ddl-text">
+              {{ d.done ? '✓ 已完成' : d.time === '24:00' ? '当天 24:00' : d.time }} 截止 · {{ d.title }}
+            </span>
+          </div>
         </div>
 
         <aside class="day-side">
@@ -985,6 +1043,7 @@ function locate(t: Task): void {
               v-for="t in dayTasks"
               :key="t.id"
               :task="t"
+              :today="today"
               :flash="flashId === t.id"
               @toggle="toggleTask(t)"
               @edit="editing = t"
@@ -1344,8 +1403,97 @@ function locate(t: Task): void {
 .flag.done .flag-text {
   background: var(--success);
 }
-.flag.on-timeline {
-  left: 52px;
+/* ---------- 日视图的截止线 / 压迫带 ---------- */
+.ddl-fill {
+  position: absolute;
+  left: 62px;
+  right: 10px;
+  top: 0;
+  border-radius: 8px 8px 0 0;
+  pointer-events: none;
+}
+.ddl-line {
+  position: absolute;
+  left: 62px;
+  right: 10px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  pointer-events: none;
+}
+/* 横线本身 */
+.ddl-line::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  border-radius: 2px;
+  background: rgba(201, 88, 79, 0.5);
+}
+.ddl-pin {
+  width: 0;
+  height: 0;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-left: 11px solid #c9584f;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+  flex-shrink: 0;
+}
+.ddl-text {
+  position: relative;
+  font-family: var(--font-num);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #fff;
+  background: #c9584f;
+  border-radius: 5px;
+  padding: 1px 6px;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
+  max-width: 92%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 紧迫程度：越近越深、越红 */
+.ddl-line.t-later::before {
+  background: rgba(150, 150, 160, 0.45);
+}
+.ddl-line.t-later .ddl-pin {
+  border-left-color: #a9a6ad;
+}
+.ddl-line.t-later .ddl-text {
+  background: #8e8a93;
+}
+.ddl-line.t-soon::before {
+  background: rgba(217, 156, 43, 0.55);
+}
+.ddl-line.t-soon .ddl-pin {
+  border-left-color: #d99c2b;
+}
+.ddl-line.t-soon .ddl-text {
+  background: #c98a1c;
+}
+.ddl-line.t-over::before {
+  background: var(--danger);
+  height: 3px;
+}
+/* 已完成：整条变绿、去掉压迫感 */
+.ddl-line.done::before {
+  background: rgba(85, 168, 159, 0.6);
+}
+.ddl-line.done .ddl-pin {
+  border-left-color: var(--success);
+}
+.ddl-line.done .ddl-text {
+  background: var(--success);
+}
+/* 压在别的日程块上：只留线 + 文字，文字挪到右侧不盖住块里的标题 */
+.ddl-line.overlap::before {
+  opacity: 0.7;
 }
 .grade {
   position: absolute;
@@ -1657,7 +1805,8 @@ function locate(t: Task): void {
   font-size: 0.72rem;
 }
 .day-side {
-  width: 320px;
+  /* 320px 太窄：任务卡里罗盘 + 四个图标按钮会把标题挤成两三行 */
+  width: 384px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;

@@ -1,13 +1,21 @@
 <script setup lang="ts">
 import { computed, ref, nextTick } from 'vue'
 import type { Task } from '../../../shared/types'
-import { formatDate } from '../utils/helpers'
+import { formatDate, todayStr } from '../utils/helpers'
 import { REPEAT_LABELS } from '../utils/schedule'
+import {
+  deadlineBump,
+  deadlineShort,
+  deadlineText,
+  deadlineTier,
+  effectiveImportance,
+  isDeadline
+} from '../utils/deadline'
 import { useTasksStore } from '../stores/tasks'
 import { draggingTaskId, dropTargetId, clearDrag, startAutoScroll } from '../utils/taskDrag'
 import AppIcon from './AppIcon.vue'
 
-const props = defineProps<{ task: Task; flash?: boolean }>()
+const props = defineProps<{ task: Task; flash?: boolean; today?: string }>()
 const emit = defineEmits<{
   toggle: []
   remove: []
@@ -113,8 +121,23 @@ const isSchedule = computed(() => props.task.kind === 'schedule')
 /** 详情默认收成一行，长内容不撑高列表 */
 const descOpen = ref(false)
 
+// ---------- 截止型任务：临近截止时重要度自动抬高（只影响显示，不改磁盘数据） ----------
+const today = computed(() => props.today ?? todayStr())
+/** 显示用的重要度 */
+const imp = computed(() => effectiveImportance(props.task, today.value))
+/** 自动加了多少 */
+const bump = computed(() => (done.value ? 0 : deadlineBump(props.task, today.value)))
+const isDdl = computed(() => isDeadline(props.task))
+const ddlShort = computed(() => (isDdl.value ? deadlineShort(props.task, today.value) : ''))
+const ddlTip = computed(() =>
+  isDdl.value
+    ? `截止：${props.task.due}${props.task.dueTime ? ' ' + props.task.dueTime : ''} · ${deadlineText(props.task, today.value)}`
+    : ''
+)
+const ddlTier = computed(() => deadlineTier(props.task, today.value))
+
 /** 指针角度：越重要越指向上方 */
-const needleAngle = computed(() => (3 - props.task.importance) * 34)
+const needleAngle = computed(() => (3 - imp.value) * 34)
 
 const GEM_COLOR: Record<number, string> = {
   5: 'var(--imp5)',
@@ -124,13 +147,13 @@ const GEM_COLOR: Record<number, string> = {
   1: 'var(--text-3)'
 }
 
-const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text-3)')
+const dialColor = computed(() => GEM_COLOR[imp.value] ?? 'var(--text-3)')
 </script>
 
 <template>
   <div
     class="quest"
-    :class="[`imp-${task.importance}`, { done, schedule: isSchedule, flash, dragging, 'drop-here': dropHere }]"
+    :class="[`imp-${imp}`, { done, schedule: isSchedule, flash, dragging, 'drop-here': dropHere }]"
     draggable="true"
     @dragstart="onDragStart"
     @dragover="onDragOver"
@@ -152,6 +175,14 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
       <div class="body" title="点击编辑" @click="emit('edit')">
         <div class="title">{{ task.title }}</div>
         <div class="meta">
+          <span v-if="isDdl && ddlShort" class="pill ddl" :class="ddlTier" :title="ddlTip">⚑ {{ ddlShort }}</span>
+          <span
+            v-if="bump > 0"
+            class="pill auto-imp"
+            :title="`临近截止，重要度自动从 ${task.importance}★ 提到 ${imp}★（不改动你填的星数）`"
+          >
+            自动 {{ imp }}★
+          </span>
           <span v-if="isSchedule && task.startTime" class="pill time">
             {{ task.startTime }}<template v-if="task.endTime">–{{ task.endTime }}</template>
           </span>
@@ -285,7 +316,7 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
 .inner {
   display: flex;
   align-items: center;
-  gap: 0.7rem;
+  gap: 0.55rem;
   padding: 0.6rem 1.5rem 0.6rem 0.9rem;
   background: var(--surface);
   clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%, 7px 50%);
@@ -394,6 +425,32 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
 .pill.range {
   background: var(--surface-2);
   color: var(--text-2);
+}
+/* 截止徽章：越紧迫越深 */
+.pill.ddl {
+  font-weight: 600;
+}
+.pill.ddl.later {
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+.pill.ddl.soon {
+  background: rgba(217, 156, 43, 0.18);
+  color: #9a6b10;
+}
+.pill.ddl.today {
+  background: rgba(207, 74, 60, 0.2);
+  color: var(--accent);
+}
+.pill.ddl.over {
+  background: var(--danger);
+  color: #fff;
+}
+/* 重要度被自动抬高的小标记 */
+.pill.auto-imp {
+  background: rgba(207, 74, 60, 0.14);
+  color: var(--accent);
+  font-weight: 700;
 }
 .loc {
   color: var(--text-3);

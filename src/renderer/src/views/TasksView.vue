@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useTasksStore } from '../stores/tasks'
 import { useSeasonsStore } from '../stores/seasons'
@@ -7,6 +7,7 @@ import { useSemesterStore } from '../stores/semester'
 import { useConfirmStore } from '../stores/confirm'
 import { findConflicts, conflictsOn, eventsFromTasks, nextOccurrence, REPEAT_LABELS, REPEAT_OPTIONS, type Conflict } from '../utils/schedule'
 import { toDateStr } from '../utils/helpers'
+import { upcomingDeadlines } from '../utils/deadline'
 import TaskItem from '../components/TaskItem.vue'
 import TaskEditModal from '../components/TaskEditModal.vue'
 import AddHistory from '../components/AddHistory.vue'
@@ -74,9 +75,9 @@ onMounted(async () => {
 const todayStr = toDateStr(new Date())
 const todayConflicts = computed(() => conflictsOn(store.tasks, todayStr))
 
-/** 今天实际发生的事项（含每周重复的课程） */
-const todayTasks = computed(() => {
-  const evs = eventsFromTasks(store.tasks, todayStr, todayStr, semesterStore.noClassDates)
+/** 某一天实际发生的事项（含每周重复的课程） */
+function tasksOn(dateStr: string): Task[] {
+  const evs = eventsFromTasks(store.tasks, dateStr, dateStr, semesterStore.noClassDates)
   const ids = new Set(evs.map((e) => e.refId))
   return store.tasks
     .filter((t) => ids.has(t.id))
@@ -85,7 +86,20 @@ const todayTasks = computed(() => {
       if (b.status === 'done' && a.status !== 'done') return -1
       return (a.startTime ?? '99:99').localeCompare(b.startTime ?? '99:99')
     })
+}
+
+/** 今天 */
+const todayTasks = computed(() => tasksOn(todayStr))
+
+/** 明天：提前一天看得见，好安排 */
+const tomorrowStr = computed(() => {
+  const d = new Date()
+  return toDateStr(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1))
 })
+const tomorrowTasks = computed(() => tasksOn(tomorrowStr.value))
+
+/** 还在盯着的截止任务：截止日之前每天都会出现在这里 */
+const deadlines = computed(() => upcomingDeadlines(store.tasks, todayStr))
 
 function buildCandidate(): Partial<Task> {
   return {
@@ -359,12 +373,51 @@ function locate(t: Task): void {
         v-for="t in todayTasks"
         :key="t.id"
         :task="t"
+        :today="todayStr"
         @toggle="store.setStatus(t.id, t.status === 'done' ? 'todo' : 'done')"
         @remove="removeTask(t)"
         @edit="editing = t"
         @note="writeNote(t)"
         @locate="locate(t)"
               @edit-child="editing = $event"
+      />
+    </section>
+
+    <!-- 明天：提前一天看得见 -->
+    <section class="task-section">
+      <h3>明天 · {{ tomorrowTasks.length }} 项</h3>
+      <div v-if="tomorrowTasks.length === 0" class="empty">明天还是空的。</div>
+      <TaskItem
+        v-for="t in tomorrowTasks"
+        :key="`tm-${t.id}`"
+        :task="t"
+        :today="todayStr"
+        @toggle="store.setStatus(t.id, t.status === 'done' ? 'todo' : 'done')"
+        @remove="removeTask(t)"
+        @edit="editing = t"
+        @note="writeNote(t)"
+        @locate="locate(t)"
+        @edit-child="editing = $event"
+      />
+    </section>
+
+    <!-- 截止清单：截止日之前每天都在这儿盯着，越近重要度越高 -->
+    <section v-if="deadlines.length" class="task-section ddl-sec">
+      <div class="today-head">
+        <h3>截止清单 · {{ deadlines.length }} 项</h3>
+        <span class="ddl-hint">越接近截止，重要度会自动抬高（不改动你填的星数）</span>
+      </div>
+      <TaskItem
+        v-for="t in deadlines"
+        :key="`ddl-${t.id}`"
+        :task="t"
+        :today="todayStr"
+        @toggle="store.setStatus(t.id, t.status === 'done' ? 'todo' : 'done')"
+        @remove="removeTask(t)"
+        @edit="editing = t"
+        @note="writeNote(t)"
+        @locate="locate(t)"
+        @edit-child="editing = $event"
       />
     </section>
 
@@ -376,6 +429,7 @@ function locate(t: Task): void {
           v-for="t in store.byType(s.type)"
           :key="t.id"
           :task="t"
+          :today="todayStr"
           @toggle="store.setStatus(t.id, t.status === 'done' ? 'todo' : 'done')"
           @remove="removeTask(t)"
           @edit="editing = t"
@@ -638,5 +692,14 @@ input[type='time'] {
 }
 .expand-btn:hover {
   background: var(--accent-soft);
+}
+/* 截止清单：单独一条底线，和「今天/明天」区分开 */
+.ddl-sec {
+  border-top: 1px dashed var(--border);
+  padding-top: 1rem;
+}
+.ddl-hint {
+  font-size: 0.76rem;
+  color: var(--text-3);
 }
 </style>
