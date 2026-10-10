@@ -418,9 +418,12 @@ function createWindow(): void {
                   ' bandRef=' + (layer ? layer.getAttribute('data-band') + '/' + layer.getAttribute('data-refs') : '?') +
                   ']\\n'
                 const fcols = [...document.querySelectorAll('.flag-col')]
+                const wrapEl = document.querySelector('.week-wrap')
                 out +=
                   '[列对齐 网格: ' + cols.map((c) => Math.round(c.getBoundingClientRect().left) + '+' + Math.round(c.getBoundingClientRect().width)).join(' ') + ']\\n' +
-                  '[列对齐 旗标层: ' + fcols.map((c) => Math.round(c.getBoundingClientRect().left) + '+' + Math.round(c.getBoundingClientRect().width)).join(' ') + ']\\n'
+                  '[列对齐 旗标层: ' + fcols.map((c) => Math.round(c.getBoundingClientRect().left) + '+' + Math.round(c.getBoundingClientRect().width)).join(' ') + ']\\n' +
+                  '[列对齐 wrap.left=' + (wrapEl ? wrapEl.getBoundingClientRect().left.toFixed(1) : '?') +
+                  ' 列数=' + cols.length + ' geo=' + (layer ? layer.getAttribute('data-geo') : '?') + ']\\n'
                 out +=
                   '[截止旗标 ' + flags.length + ' 个: ' +
                   [...flags]

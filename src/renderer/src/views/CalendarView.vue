@@ -74,14 +74,21 @@ onMounted(async () => {
 onUnmounted(() => {
   window.clearTimeout(flashTimer)
   cancelAnimationFrame(rafId)
+  window.clearInterval(measureTimer)
+  for (const t of settleTimers) window.clearTimeout(t)
+  window.removeEventListener('resize', measureAll)
 })
 
 onMounted(() => {
   rafId = requestAnimationFrame(tick)
-  measureFlagBand()
-  // 字体异步加载、后续滚动条出现等都会改动表头高度：低频轮询量一次（每 30 帧）
-  // 换周/换模式后表头文案也会变，一并重量
-  watch([mode, () => weekDays.value[0]], () => measureFlagBand())
+  measureAll()
+  // 实测不能只靠 rAF：窗口被遮挡时 rAF 会停摆，这里再挂一条定时器兜底
+  measureTimer = window.setInterval(measureAll, 500)
+  window.addEventListener('resize', measureAll)
+  // 进场动画/字体迟到会让第一次量到的坐标偏掉，错开几个时间点重量
+  for (const ms of [120, 400, 1000, 2000]) settleTimers.push(window.setTimeout(measureAll, ms))
+  // 换周/换模式后 DOM 结构不变，但文案可能变宽变高，重新量一次
+  watch([mode, () => weekDays.value[0]], () => measureAll())
 })
 
 const today = toDateStr(new Date())
@@ -178,6 +185,8 @@ function onWeekLeave(): void {
 
 let rafId = 0
 let bandTick = 0
+let measureTimer = 0
+const settleTimers: number[] = []
 function tick(): void {
   const t = targetCenter.value
   const s = smoothCenter.value
@@ -189,11 +198,10 @@ function tick(): void {
     smoothCenter.value = s + (t - s) * 0.2
     if (Math.abs(t - s) < 0.0004) smoothCenter.value = t
   }
-  // 每 30 帧（约半秒）复核一次旗标区间上沿，兼顾字体迟到、滚动条出现等布局变化
+  // 每 30 帧（约半秒）复核一次实测值，兼顾字体迟到、滚动条出现等布局变化
   if (++bandTick >= 30) {
     bandTick = 0
-    measureFlagBand()
-    measureRowBands()
+    measureAll()
   }
   rafId = requestAnimationFrame(tick)
 }
@@ -223,6 +231,33 @@ const weekClipPath = computed(() => {
 /** 旗标的可插区间上沿：这一列的日程文字起始处（表头/性质条之下），实测得到 */
 const eventsRefs = ref<HTMLElement[]>([])
 const flagBandTop = ref(104)
+
+/** 各真实列相对旗标层的 left/width：列宽由内容决定、七列不等宽，所以要一列一列量 */
+const colRefs = ref<HTMLElement[]>([])
+const colGeo = ref<{ left: number; width: number }[]>([])
+function measureColGeo(): void {
+  const list = (colRefs.value ?? []).filter((el) => el && el.isConnected)
+  if (!list.length) return
+  const wrap = list[0].closest('.week-wrap')
+  if (!wrap) return
+  const base = wrap.getBoundingClientRect().left
+  const next = list.map((el) => {
+    const r = el.getBoundingClientRect()
+    return { left: r.left - base, width: r.width }
+  })
+  const same =
+    next.length === colGeo.value.length &&
+    next.every((g, i) => Math.abs(g.left - colGeo.value[i].left) < 0.5 && Math.abs(g.width - colGeo.value[i].width) < 0.5)
+  if (!same) colGeo.value = next
+}
+
+/** 三样实测一起做：旗子可插区上沿、文字行区间、各列真实坐标 */
+function measureAll(): void {
+  measureFlagBand()
+  measureRowBands()
+  measureColGeo()
+}
+
 function measureFlagBand(): void {
   const list = eventsRefs.value
   if (!list || !list.length) return
@@ -743,6 +778,7 @@ function locate(t: Task): void {
       <div class="week-grid" :key="`w${animKey}`" :class="slideClass" @wheel.prevent="onWheel">
         <div
           v-for="(d, i) in weekDays"
+          ref="colRefs"
           :key="d"
           class="week-col"
           :class="{ today: d === today, 'curve-peak': hoverDay === i }"
@@ -813,8 +849,17 @@ function locate(t: Task): void {
       </div>
 
       <!-- 截止旗标单独一层：不受裁剪影响，绝不会被曲线切掉 -->
-      <div class="week-flag-layer" :data-band="Math.round(flagBandTop)" :data-refs="eventsRefs.length">
-        <div v-for="(d, i) in weekDays" :key="`f${d}`" class="flag-col">
+      <div class="week-flag-layer" :data-band="Math.round(flagBandTop)" :data-refs="eventsRefs.length" :data-geo="colGeo.map((g) => Math.round(g.left) + 'x' + Math.round(g.width)).join(' ')">
+        <div
+          v-for="(d, i) in weekDays"
+          :key="`f${d}`"
+          class="flag-col"
+          :style="
+            colGeo[i]
+              ? { left: colGeo[i].left + 'px', width: colGeo[i].width + 'px' }
+              : { display: 'none' }
+          "
+        >
           <span
             v-for="(f, fi) in weekFlags[i]"
             :key="f.id"
@@ -1398,8 +1443,9 @@ function locate(t: Task): void {
 .week-grid {
   align-items: stretch;
   display: grid;
-  /* minmax(0,1fr)：不理会内容的最小宽度，7 列永远等宽（否则长标题会把列撑宽、列宽不齐） */
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  /* 故意用 1fr 而不是 minmax(0,1fr)：列宽由内容决定，长标题的列更宽，看着有呼吸感。
+     旗标层不再靠并行网格对齐，改为按各列实测坐标定位（见 measureColGeo）。 */
+  grid-template-columns: repeat(7, 1fr);
   gap: 6px;
   /* 整块用一条连续曲线裁下缘：光滑的下边缘 + 卡片间空隙 */
   clip-path: url(#weekCurve);
@@ -1408,18 +1454,17 @@ function locate(t: Task): void {
 .week-wrap {
   position: relative;
 }
+/* 旗标层：一层透明的定位容器，下面每一列的位置/宽度都从真实列量出来 */
 .week-flag-layer {
   position: absolute;
   inset: 0;
-  display: grid;
-  /* 必须和 .week-grid 用同一套轨道定义，否则旗子会横向错位、插到隔壁列上 */
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 6px;
   pointer-events: none;
   z-index: 4;
 }
 .flag-col {
-  position: relative;
+  position: absolute;
+  top: 0;
+  height: 100%;
 }
 .week-flag-layer .flag {
   transition: top 0.34s cubic-bezier(0.22, 0.9, 0.3, 1);
