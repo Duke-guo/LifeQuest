@@ -2,7 +2,7 @@
 // 1) 便携版单文件 → 工作区根目录 LifeQuest.exe（便于携带/分享，但每次启动要解压，较慢）
 // 2) 免解压版 → app/ 目录（启动快，推荐日常使用；数据仍由程序向上找到工作区的 LifeQuest-Data）
 // 非 Windows 平台（macOS / Linux）请直接用 CI 或 electron-builder 的产物，这里只做提示。
-import { existsSync, rmSync, cpSync, readdirSync, copyFileSync } from 'fs'
+import { existsSync, rmSync, cpSync, readdirSync, copyFileSync, readFileSync } from 'fs'
 import { join } from 'path'
 
 if (process.platform !== 'win32') {
@@ -12,10 +12,15 @@ if (process.platform !== 'win32') {
 }
 
 const rel = 'release'
+// 以 package.json 的版本为准挑便携版，避免把 release/ 里残留的旧版本拷出去
+const version = JSON.parse(readFileSync('package.json', 'utf-8')).version
 
 // ---- 1) 便携版 ----
 if (existsSync(rel)) {
-  const portable = readdirSync(rel).find((f) => f.endsWith('.exe'))
+  const portables = readdirSync(rel)
+    .filter((f) => f.endsWith('.exe') && !f.includes('unpacked'))
+    .sort()
+  const portable = portables.find((f) => f.includes(version)) ?? portables[portables.length - 1]
   if (portable) {
     try {
       copyFileSync(join(rel, portable), 'LifeQuest.exe')
