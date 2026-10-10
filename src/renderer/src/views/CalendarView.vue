@@ -177,7 +177,9 @@ function autoLabel(date: string): string {
 
 // ---------- 连续日带（周视图）：一列一天，靠滚轮左右连贯滑动，不再一周一屏 ----------
 const WEEK_COL_H = 312
-const WEEK_FLAT = 0.84
+/** 下边缘的起伏：最低点那一列满高，往两边按列距平缓降下来（越远越接近平线） */
+const CURVE_FLAT = 0.88
+const CURVE_SIGMA = 2.2
 /** 一列的宽度：按内容估（标题越长越宽），所以日带不是整齐的网格 */
 const COL_GAP = 6
 const COL_MIN = 118
@@ -264,6 +266,17 @@ function colAt(x: number): number {
   return lefts.length - 1
 }
 
+/** 同上，但带小数（用在列内部的相对位置），用于下边缘起伏的连续跟随 */
+function colAtFloat(x: number): number {
+  const lefts = colLefts.value
+  const cols = stripCols.value
+  if (!cols.length) return 0
+  for (let i = 0; i < lefts.length; i++) {
+    if (x < lefts[i] + cols[i].w) return i + Math.max(0, Math.min(1, (x - lefts[i]) / cols[i].w))
+  }
+  return cols.length - 1
+}
+
 /** 把某一天滑到视口正中；距离太远就直接落位，不在屏幕里就先把整段窗口挪过来 */
 function centerOn(date: string, animate = true): void {
   let i = stripDays.value.indexOf(date)
@@ -318,8 +331,10 @@ function maybeShiftWindow(): void {
   smoothOffset.value = clampOffset(smoothOffset.value + delta)
 }
 
-/** 曲线最低点：悬停时连续跟随鼠标（rAF 平滑），没悬停时突出今天 */
+/** 曲线最低点：悬停时连续跟随鼠标，没悬停时突出今天 */
 const hoverCol = ref<number | null>(null)
+/** 悬停处的连续列号（带小数，落点才不会一格一格跳） */
+const peakFloat = ref<number | null>(null)
 const targetCenter = ref<number | null>(null)
 const smoothCenter = ref<number | null>(null)
 
@@ -327,12 +342,15 @@ function onStripMove(e: MouseEvent): void {
   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
   const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
   targetCenter.value = x
-  const i = colAt(smoothOffset.value + x * rect.width)
+  const px = smoothOffset.value + x * rect.width
+  peakFloat.value = colAtFloat(px)
+  const i = colAt(px)
   hoverCol.value = i >= 0 && i < stripDays.value.length ? i : null
 }
 
 function onStripLeave(): void {
   targetCenter.value = null
+  peakFloat.value = null
   hoverCol.value = null
 }
 
@@ -351,22 +369,11 @@ let lastTickAt = 0
 const settleTimers: number[] = []
 
 /**
- * 一天推进一步：曲线最低点 + 横向滚动跟随 + 周期性实测。
+ * 一天推进一步：横向滚动跟随 + 周期性实测。
  * 抽出来是因为 rAF 在窗口被遮挡/切到后台时会停摆——只靠它的话，
  * 点了「今天」目标值变了却永远不动（窗口重新可见前像卡住）。
  */
 function step(): void {
-  // 曲线最低点
-  const t = targetCenter.value
-  const s = smoothCenter.value
-  if (t === null) {
-    smoothCenter.value = null
-  } else if (s === null) {
-    smoothCenter.value = t
-  } else {
-    smoothCenter.value = s + (t - s) * 0.2
-    if (Math.abs(t - s) < 0.0004) smoothCenter.value = t
-  }
   // 横向滚动平滑跟随
   const dt = targetOffset.value
   const ds = smoothOffset.value
@@ -390,35 +397,34 @@ function tick(): void {
   rafId = requestAnimationFrame(tick)
 }
 
-const curveCenter = computed<number | null>(() => {
-  if (smoothCenter.value !== null) return smoothCenter.value
+/**
+ * 下边缘最低点落在哪一列（可以带小数，所以滑动是连续的）：
+ * 鼠标悬停就跟着鼠标，没悬停就跟着今天；今天离屏太远时整条拉平。
+ */
+const peakCol = computed<number | null>(() => {
+  if (peakFloat.value !== null) return peakFloat.value
   const i = stripDays.value.indexOf(today)
   if (i < 0) return null
   const x = (colCenter(i) - smoothOffset.value) / viewportW.value
-  if (x < -0.06 || x > 1.06) return null
-  return Math.min(1, Math.max(0, x))
+  if (x < -0.15 || x > 1.15) return null
+  return i
 })
 
-/** 日带的裁剪路径：整条下边缘一条光滑曲线（裁剪挂在视口层，不随滚动移动） */
-const weekClipPath = computed(() => {
-  const center = curveCenter.value
-  const N = 56
-  const y = (x: number): string => weekCurveY(x, center).toFixed(4)
-  const pts: string[] = [`M 0 -0.4`, `L 1 -0.4`]
-  if (center === null) {
-    pts.push(`L 1 ${WEEK_FLAT}`, `L 0 ${WEEK_FLAT}`)
-  } else {
-    pts.push(`L 1 ${y(1)}`)
-    for (let i = N - 1; i >= 0; i--) pts.push(`L ${(i / N).toFixed(4)} ${y(i / N)}`)
-  }
-  pts.push('Z')
-  return pts.join(' ')
-})
+/**
+ * 每一列的高度：离最低点越近越高，按「列距」算（不是屏幕坐标），
+ * 所以横向滚动时列高不会忽高忽低；又因为是每列自己做高度，
+ * 卡片能保留自己的圆角，不再靠曲线裁一刀（那样切边是硬的）。
+ */
+function colHeight(i: number): number {
+  const p = peakCol.value
+  if (p === null) return Math.round(WEEK_COL_H * CURVE_FLAT)
+  const k = (i - p) / CURVE_SIGMA
+  return Math.round(WEEK_COL_H * (CURVE_FLAT + (1 - CURVE_FLAT) * Math.exp(-k * k)))
+}
 
-/** 某一列在屏幕上对应的曲线高度比例（0..1） */
+/** 某一列的可用高度比例（旗标落点、可见性判断都用它） */
 function colCurveY(i: number): number {
-  const x = (colCenter(i) - smoothOffset.value) / viewportW.value
-  return weekCurveY(Math.min(1, Math.max(0, x)), curveCenter.value)
+  return colHeight(i) / WEEK_COL_H
 }
 /** 这一列现在在屏幕上看得到吗（只给可见的列做实测，省开销） */
 function colVisible(i: number, pad = 0.25): boolean {
@@ -1100,11 +1106,11 @@ function locate(t: Task): void {
       >
         <svg class="week-clip-defs" aria-hidden="true">
           <defs>
-            <clipPath id="weekCurve" clipPathUnits="objectBoundingBox"><path :d="weekClipPath" /></clipPath>
+            <clipPath id="weekCurve" clipPathUnits="objectBoundingBox"><path d="M 0 -0.4 L 1 -0.4 L 1 1 L 0 1 Z" /></clipPath>
           </defs>
         </svg>
 
-        <!-- 卡片层：整条下边缘被一条连续曲线裁掉 -->
+        <!-- 卡片层：每列自己做高度 + 圆角，下边缘自然形成一条平缓起伏 -->
         <div class="strip-clip">
           <div class="strip-track" :style="{ transform: `translateX(${-smoothOffset}px)` }">
             <div
@@ -1112,7 +1118,12 @@ function locate(t: Task): void {
               :key="c.date"
               class="week-col"
               :class="{ today: c.isToday, hovered: hoverCol === c.index }"
-              :style="{ left: colLefts[c.index] + 'px', width: c.w + 'px', background: c.color.bg }"
+              :style="{
+                left: colLefts[c.index] + 'px',
+                width: c.w + 'px',
+                height: colHeight(c.index) + 'px',
+                background: c.color.bg
+              }"
               :title="`点这里进日视图：可改这一天的性质、忙碌程度，并增删当天的安排`"
               @click="drillTo(c.date)"
             >
@@ -1865,11 +1876,10 @@ function locate(t: Task): void {
   position: relative;
   overflow: hidden;
 }
-/* 裁剪挂在视口这一层：曲线固定在屏幕上，不跟内容一起滚 */
+/* 裁剪层现在不裁任何东西（下边缘改由每列自己的高度+圆角形成），保留结构方便以后调 */
 .strip-clip {
   position: absolute;
   inset: 0;
-  clip-path: url(#weekCurve);
 }
 .strip-track {
   position: absolute;
@@ -1908,12 +1918,13 @@ function locate(t: Task): void {
   top: 0;
   height: 312px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  /* 上下都圆一点，底边起伏时看着柔和 */
+  border-radius: 14px 14px 22px 22px;
   background: var(--surface);
   padding: 8px;
   cursor: pointer;
   box-sizing: border-box;
-  transition: box-shadow 0.16s ease, border-color 0.16s ease;
+  transition: box-shadow 0.16s ease, border-color 0.16s ease, height 0.22s cubic-bezier(0.33, 0.9, 0.4, 1);
 }
 .week-col.hovered {
   border-color: var(--accent);
