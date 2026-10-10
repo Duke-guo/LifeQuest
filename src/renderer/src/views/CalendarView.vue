@@ -138,9 +138,8 @@ function autoLabel(date: string): string {
   return busyTier(loadScore(date), eventsOn(date).length, deadlinePressure(eventsOn(date), today))
 }
 
-/** 周视图：所有列等高，整块用同一条曲线裁出下缘 —— 上缘平直、下缘是一条连续曲线 */
+/** 周视图：下缘是一条曲线 —— 每列高度取曲线在它中心点的值，卡片之间留空隙 */
 const WEEK_COL_H = 312
-/** 曲线在 0..1 高度里的取值：没悬停时是平的，悬停时最低点落到那一天 */
 const WEEK_FLAT = 0.84
 function weekCurveY(x: number, center: number | null): number {
   if (center === null) return WEEK_FLAT
@@ -148,44 +147,26 @@ function weekCurveY(x: number, center: number | null): number {
   return WEEK_FLAT + (1 - WEEK_FLAT) * Math.exp(-k * k)
 }
 
-/** 曲线最低点：默认就是「今天」，鼠标停在哪天就跟到哪天 */
+/** 曲线最低点：悬停跟鼠标；没悬停时本周=今天，非本周=拉平(null) */
 const hoverDay = ref<number | null>(null)
-const curveCenter = computed(() => {
+const curveCenter = computed<number | null>(() => {
   const h = hoverDay.value
   if (h !== null) return (h + 0.5) / 7
   const ti = weekDays.value.indexOf(today)
-  return ((ti < 0 ? 3 : ti) + 0.5) / 7
+  return ti < 0 ? null : (ti + 0.5) / 7
 })
 
-/** 旗标纵向位置：夹在「这一列实际露出的范围内」，永远不会被曲线切掉 */
-const WEEK_COL_PX = 312
+/** 每一列的高度 */
+function weekColHeight(i: number): number {
+  return Math.round(WEEK_COL_H * weekCurveY((i + 0.5) / 7, curveCenter.value))
+}
+
+/** 旗标位置：夹在这一列的实际高度内 */
 function flagTop(f: DeadlineFlag, i: number): string {
-  const limit = visibleRatio(i) * WEEK_COL_PX - 20
-  const wanted = f.pos * WEEK_COL_PX
-  return Math.round(Math.min(wanted, limit)) + 'px'
+  const h = weekColHeight(i)
+  const wanted = f.pos * h
+  return Math.round(Math.min(wanted, h - 20)) + 'px'
 }
-
-/** 某根列实际露出的高度比例（旗标要靠它来定位，避免被裁掉） */
-function visibleRatio(i: number): number {
-  const y = weekCurveY((i + 0.5) / 7, curveCenter.value)
-  return y
-}
-
-/** 整块网格的裁剪路径 */
-const weekClipPath = computed(() => {
-  const center = curveCenter.value
-  const N = 56
-  const y = (x: number): string => weekCurveY(x, center).toFixed(4)
-  const pts: string[] = [`M 0 -0.4`, `L 1 -0.4`]
-  if (center === null) {
-    pts.push(`L 1 ${WEEK_FLAT}`, `L 0 ${WEEK_FLAT}`)
-  } else {
-    pts.push(`L 1 ${y(1)}`)
-    for (let i = N - 1; i >= 0; i--) pts.push(`L ${(i / N).toFixed(4)} ${y(i / N)}`)
-  }
-  pts.push('Z')
-  return pts.join(' ')
-})
 
 /** 这一天的截止型事项（画成插入旗标） */
 interface DeadlineFlag {
@@ -637,7 +618,6 @@ function locate(t: Task): void {
           {{ weekSummary.hours }} 小时 · 重要度合计 {{ weekSummary.score }}
         </span>
       </div>
-      <svg class="week-clip-defs" aria-hidden="true"><defs><clipPath id="weekCurve" clipPathUnits="objectBoundingBox"><path class="week-curve" :d="weekClipPath" :style="{ d: `path('${weekClipPath}')` }" /></clipPath></defs></svg>
       <div class="week-wrap">
       <div class="week-grid" :key="`w${animKey}`" :class="slideClass" @wheel.prevent="onWheel">
         <div
@@ -645,7 +625,7 @@ function locate(t: Task): void {
           :key="d"
           class="week-col"
           :class="{ today: d === today, 'curve-peak': hoverDay === i }"
-          :style="{ background: colorMap[d]?.bg }"
+          :style="{ background: colorMap[d]?.bg, '--h': weekColHeight(i) }"
           :title="`点这里进日视图：可改这一天的性质、忙碌程度，并增删当天的安排`"
           @mouseenter="hoverDay = i"
           @mouseleave="hoverDay = null"
@@ -1324,7 +1304,7 @@ function locate(t: Task): void {
   transition: d 0.34s cubic-bezier(0.22, 0.9, 0.3, 1);
 }
 .week-col {
-  height: 312px;
+  height: calc(var(--h, 262) * 1px);
   position: relative;
   border: none;
   border-left: 1px solid var(--border);
