@@ -173,10 +173,22 @@ function autoLabel(date: string): string {
 // ---------- 连续日带（周视图）：一列一天，靠滚轮左右连贯滑动，不再一周一屏 ----------
 const WEEK_COL_H = 312
 const WEEK_FLAT = 0.84
-/** 一列的宽度与间距（固定列宽，屏幕上一次能看到 7~8 天） */
-const COL_W = 132
+/** 一列的宽度：按内容估（标题越长越宽），所以日带不是整齐的网格 */
 const COL_GAP = 6
-const PITCH = COL_W + COL_GAP
+const COL_MIN = 118
+const COL_MAX = 196
+/** 估一行文字要多宽（中日韩字宽约等于字号，西文约一半） */
+function textWidth(s: string): number {
+  let w = 0
+  for (const ch of s) w += /[\u3000-\u9fff\uff00-\uffef]/.test(ch) ? 13 : 6.8
+  return w
+}
+/** 这一列多宽：取最长那条安排 + 卡片内边距，夹在上下限之间 */
+function colWidthOf(events: Array<{ time?: string; title: string }>): number {
+  let w = 0
+  for (const e of events) w = Math.max(w, textWidth(`${e.time ? e.time + ' ' : ''}${e.title}`))
+  return Math.round(Math.max(COL_MIN, Math.min(COL_MAX, w + 24)))
+}
 /** 一次渲染多少天；滚到窗口边缘时整段平移，位移用像素补偿，视觉上完全不动 */
 const WINDOW_DAYS = 70
 
@@ -203,15 +215,48 @@ const viewportW = ref(960)
 const targetOffset = ref(0)
 const smoothOffset = ref(0)
 
+/** 每列的左边界（列宽不定，位置得累加出来） */
+const colLefts = computed(() => {
+  const out: number[] = []
+  let x = 0
+  for (const c of stripCols.value) {
+    out.push(x)
+    x += c.w + COL_GAP
+  }
+  return out
+})
+
+/** 整条日带的总宽 */
+const stripW = computed(() => {
+  const cols = stripCols.value
+  const lefts = colLefts.value
+  if (!cols.length) return 0
+  return lefts[lefts.length - 1] + cols[cols.length - 1].w
+})
+
 function maxOffset(): number {
-  return Math.max(0, stripDays.value.length * PITCH - COL_GAP - viewportW.value)
+  return Math.max(0, stripW.value - viewportW.value)
 }
 function clampOffset(v: number): number {
   return Math.min(maxOffset(), Math.max(0, v))
 }
 /** 某一天在这一段里的横向中心（像素） */
 function colCenter(i: number): number {
-  return i * PITCH + COL_W / 2
+  const lefts = colLefts.value
+  const cols = stripCols.value
+  if (i < 0 || i >= cols.length) return 0
+  return lefts[i] + cols[i].w / 2
+}
+
+/** 屏幕上某个像素位置落在第几列（找不到就返回最近的） */
+function colAt(x: number): number {
+  const lefts = colLefts.value
+  const cols = stripCols.value
+  if (!cols.length) return 0
+  for (let i = 0; i < lefts.length; i++) {
+    if (x < lefts[i] + cols[i].w) return i
+  }
+  return lefts.length - 1
 }
 
 /** 把某一天滑到视口正中 */
@@ -223,28 +268,37 @@ function centerOn(date: string, animate = true): void {
   if (!animate) smoothOffset.value = want
 }
 
-/** 视口正中落在第几列（可能是小数） */
-const centerColIdx = computed(
-  () => (smoothOffset.value + viewportW.value / 2 - COL_W / 2) / PITCH
-)
+/** 视口正中落在第几天（可能是小数，周记那行靠它换速度） */
+const centerDayIdx = computed(() => {
+  const x = smoothOffset.value + viewportW.value / 2
+  const i = colAt(x)
+  const col = stripCols.value[i]
+  if (!col) return 0
+  return i + Math.max(0, Math.min(1, (x - colLefts.value[i]) / col.w))
+})
 
 /** 视口正中对应的日期：周横幅跟着它走 */
 const stripCenterDate = computed(() => {
-  const i = Math.round(centerColIdx.value)
+  const i = Math.round(centerDayIdx.value)
   const days = stripDays.value
   return days[Math.max(0, Math.min(days.length - 1, i))] ?? today
 })
 
 /** 滑到窗口边缘就把整段平移过去：像素同步补偿，屏幕上完全看不出跳变 */
 function maybeShiftWindow(): void {
-  const c = centerColIdx.value
+  const c = centerDayIdx.value
   const margin = 14
   if (c >= margin && c <= WINDOW_DAYS - 1 - margin) return
   const shift = Math.round(c - (WINDOW_DAYS - 1) / 2)
   if (!shift) return
+  // 先记住「屏幕正中那一天」，平移前后都用它换算（中途重算会拿到另一天）
+  const keep = stripCenterDate.value
+  const before = colCenter(stripDays.value.indexOf(keep))
   stripStart.value = addDays(stripStart.value, shift)
-  targetOffset.value = clampOffset(targetOffset.value - shift * PITCH)
-  smoothOffset.value -= shift * PITCH
+  const after = colCenter(stripDays.value.indexOf(keep))
+  const delta = after - before
+  targetOffset.value = clampOffset(targetOffset.value + delta)
+  smoothOffset.value = clampOffset(smoothOffset.value + delta)
 }
 
 /** 曲线最低点：悬停时连续跟随鼠标（rAF 平滑），没悬停时突出今天 */
@@ -256,7 +310,7 @@ function onStripMove(e: MouseEvent): void {
   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
   const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
   targetCenter.value = x
-  const i = Math.floor((smoothOffset.value + x * rect.width) / PITCH)
+  const i = colAt(smoothOffset.value + x * rect.width)
   hoverCol.value = i >= 0 && i < stripDays.value.length ? i : null
 }
 
@@ -341,7 +395,6 @@ function colVisible(i: number, pad = 0.25): boolean {
   const x = (colCenter(i) - smoothOffset.value) / viewportW.value
   return x > -pad && x < 1 + pad
 }
-
 /** 旗标可插区间上沿：日程文字起始处（实测；列宽统一，取可见列的即可） */
 const eventsRefs = ref<HTMLElement[]>([])
 const flagBandTop = ref(104)
@@ -669,7 +722,8 @@ const colorMap = computed<Record<string, DayColor>>(() => {
 interface StripCol {
   date: string
   index: number
-  left: number
+  /** 这一列的宽度（按内容估） */
+  w: number
   isToday: boolean
   isSunday: boolean
   weekNo: number | null
@@ -697,7 +751,7 @@ const stripCols = computed<StripCol[]>(() =>
     return {
       date: d,
       index: i,
-      left: i * PITCH,
+      w: colWidthOf(evs),
       isToday: d === today,
       isSunday: weekdayOf(d) === '日',
       weekNo: semesterStore.weekOf(d),
@@ -1025,7 +1079,7 @@ function locate(t: Task): void {
               :key="c.date"
               class="week-col"
               :class="{ today: c.isToday, hovered: hoverCol === c.index }"
-              :style="{ left: c.left + 'px', width: COL_W + 'px', background: c.color.bg }"
+              :style="{ left: colLefts[c.index] + 'px', width: c.w + 'px', background: c.color.bg }"
               :title="`点这里进日视图：可改这一天的性质、忙碌程度，并增删当天的安排`"
               @click="drillTo(c.date)"
             >
@@ -1087,7 +1141,7 @@ function locate(t: Task): void {
             v-for="c in stripCols"
             :key="`f${c.date}`"
             class="flag-col"
-            :style="{ left: c.left + 'px', width: COL_W + 'px' }"
+            :style="{ left: colLefts[c.index] + 'px', width: c.w + 'px' }"
           >
             <span
               v-for="(f, fi) in weekFlags[c.index]"
@@ -1109,12 +1163,13 @@ function locate(t: Task): void {
         <b>这一天的性质</b>（上课 / 周末 / 放假停课 / 考试 / 空白）、增删当天安排、给每件事填上几点到几点，还能一键写这天的日记。
       </p>
 
-      <!-- 横向的日记葡萄藤：和上面的日带是同一条连续藤，共用同一个偏移 -->
+      <!-- 横向的日记葡萄藤：和上面的日带是同一条连续藤，位置与偏移完全共用 -->
       <JournalVine
         :days="stripDays"
+        :lefts="colLefts"
+        :widths="stripCols.map((c) => c.w)"
         :offset="smoothOffset"
-        :col-width="COL_W"
-        :gap="COL_GAP"
+        :center-index="centerDayIdx"
         :colors="colorMap"
         :start="stripStart"
         @open-journal="(v: string) => emit('openJournal', v)"

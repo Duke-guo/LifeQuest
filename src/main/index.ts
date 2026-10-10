@@ -430,7 +430,46 @@ function createWindow(): void {
                 const cs = getComputedStyle(cane)
                 out += '[主藤 颜色=' + cs.stroke + ' 宽度=' + cs.strokeWidth + ']\\n'
               }
-              // 笔记预览框体检：宽度是否收窄、超长正文是否在框内滚动
+              // 葡萄藤是否和上面的日带对齐（同一条藤，果实该落在对应那一天的列中心）
+              const jvTracks = [...document.querySelectorAll('.jv-track')]
+              const jvCols = [...document.querySelectorAll('.week-col')]
+              if (jvTracks.length && jvCols.length) {
+                const jvVp = document.querySelector('.jv-viewport')
+                const jvr = jvVp ? jvVp.getBoundingClientRect() : null
+                const track = jvTracks[0]
+                const tr = track.getBoundingClientRect()
+                out +=
+                  '[藤 视口宽=' + (jvr ? Math.round(jvr.width) : '?') +
+                  ' left=' + (jvr ? Math.round(jvr.left) : '?') +
+                  '（日带列 left=' + Math.round(jvCols[0].getBoundingClientRect().left) + '）' +
+                  ' 变换=' + getComputedStyle(track).transform.slice(0, 30) + ']\\n'
+                const fruits = [...track.querySelectorAll('.jv-node')]
+                  .filter((f) => {
+                    const r = f.getBoundingClientRect()
+                    return r.width > 0 && r.left > (jvr?.left ?? 0) - 40 && r.left < (jvr?.right ?? 0)
+                  })
+                  .slice(0, 4)
+                out +=
+                  '[藤 可见果实 ' + fruits.length + ' 个: ' +
+                  fruits
+                    .map((f) => {
+                      const r = f.getBoundingClientRect()
+                      const cx = r.left + r.width / 2
+                      let best = ''
+                      let bestD = 99999
+                      for (const c of jvCols) {
+                        const cr = c.getBoundingClientRect()
+                        const d = Math.abs(cr.left + cr.width / 2 - cx)
+                        if (d < bestD) {
+                          bestD = d
+                          best = (c.querySelector('.wc-date')?.textContent || '?').trim()
+                        }
+                      }
+                      return best + '差' + Math.round(bestD) + 'px'
+                    })
+                    .join(' | ') +
+                  ' 轨道宽=' + Math.round(tr.width) + ']\\n'
+              }
               const pv = document.querySelector('.vine-preview')
               if (pv) {
                 const pr = pv.getBoundingClientRect()
