@@ -53,20 +53,35 @@ const TRACK_H = 100
 
 /** 周记那行：果实挨着排，一格一周 */
 const WEEK_PITCH = 56
+/** 周序号基准（必须是周日）：每周一个全局编号，和日带窗口无关，所以滚动不会跳 */
+const WEEK_EPOCH = '2020-01-05'
+function epochDays(date: string): number {
+  const [y, m, d] = date.split('-').map(Number)
+  const [ey, em, ed] = WEEK_EPOCH.split('-').map(Number)
+  return Math.round((new Date(y, m - 1, d).getTime() - new Date(ey, em - 1, ed).getTime()) / 86400000)
+}
+function sundayOfIndex(g: number): string {
+  const [ey, em, ed] = WEEK_EPOCH.split('-').map(Number)
+  return toDateStr(new Date(ey, em - 1, ed + g * 7))
+}
+/** 这一行往前后各渲染多少周（保证屏幕永远是满的，新的周从边上滑进来） */
+const WEEK_SPAN = 22
 
 /** 主藤的走势：一条连续藤穿过所有天（把每周连成一个整体） */
 function vineY(x: number): number {
   return VINE_BASE + VINE_AMP * Math.sin((x / 320) * Math.PI * 2)
 }
-function canePath(width: number): string {
+function canePath(width: number, y: (x: number) => number): string {
   const pts: string[] = []
-  for (let x = 0; x <= width; x += 8) pts.push(`${x} ${vineY(x).toFixed(1)}`)
+  for (let x = 0; x <= width; x += 8) pts.push(`${x} ${y(x).toFixed(1)}`)
   return `M ${pts.join(' L ')}`
 }
-const vinePath = computed(() => canePath(totalW.value))
+const vinePath = computed(() => canePath(totalW.value, vineY))
 
-const weekW = computed(() => Math.max(WEEK_PITCH, weekNodes.value.length * WEEK_PITCH))
-const weekVinePath = computed(() => canePath(weekW.value))
+/** 周记行的藤：波长跟果实间距配套（两个果实一个波），看起来和上面那条一个调子 */
+function weekVineY(gx: number): number {
+  return VINE_BASE + VINE_AMP * Math.sin((gx / (WEEK_PITCH * 2)) * Math.PI * 2)
+}
 
 function dayCenterX(i: number): number {
   return props.lefts[i] + props.widths[i] / 2
@@ -147,41 +162,62 @@ const dayNodes = computed<DayNode[]>(() => {
   })
 })
 
-/** 周记：一周一颗果实，果实之间挨着排 */
+/** 周记：一周一颗果实，果实之间挨着排（按全局周序号定位，窗口怎么变都不跳） */
 interface WeekNode {
+  g: number
+  /** 在这一行里的横向坐标（像素） */
+  x: number
   start: string
   end: string
   label: string
   short: string
   has: boolean
-  index: number
   isCurrent: boolean
 }
 
+/** 日带正中对应的连续周序号（小数） */
+const centerWeekFloat = computed(() => {
+  const n = props.days.length
+  if (!n) return 0
+  const idx = Math.max(0, Math.min(n - 1, Math.floor(props.centerIndex)))
+  const frac = props.centerIndex - idx
+  return (epochDays(props.days[idx]) + frac) / 7
+})
+
+/** 这一行当前渲染的周区间（以屏幕正中那一周为中心，前后各铺满 SPAN 周） */
+const weekWin = computed(() => {
+  const c = Math.round(centerWeekFloat.value)
+  return { first: c - WEEK_SPAN, last: c + WEEK_SPAN }
+})
+
+const WEEK_ROWS = WEEK_SPAN * 2 + 1
+const weekW = computed(() => WEEK_ROWS * WEEK_PITCH)
+/** 轨道左边界的全局像素（用来把局部坐标换回全局，藤的相位才不会随窗口跳） */
+const weekX0 = computed(() => weekWin.value.first * WEEK_PITCH)
+
+const weekVinePath = computed(() =>
+  canePath(weekW.value, (lx) => weekVineY(weekX0.value + lx))
+)
+
 const weekNodes = computed<WeekNode[]>(() => {
-  const first = firstSunday.value
   const out: WeekNode[] = []
-  for (let i = first; i < props.days.length; i += 7) {
-    const start = props.days[i]
+  for (let k = 0; k < WEEK_ROWS; k++) {
+    const g = weekWin.value.first + k
+    const start = sundayOfIndex(g)
     const end = shiftDate(start, 6)
     const wk = semesterStore.weekOf(start)
     out.push({
+      g,
+      x: g * WEEK_PITCH + WEEK_PITCH / 2,
       start,
       end,
-      index: out.length,
-      isCurrent: today >= start && today <= end,
       label: wk ? `第 ${wk} 周` : `${start.slice(5)} 起`,
       short: wk ? String(wk) : '＋',
-      has: weekly.has(start)
+      has: weekly.has(start),
+      isCurrent: today >= start && today <= end
     })
   }
   return out
-})
-
-/** 这一段里第一个周日的位置（周记那行按它对齐） */
-const firstSunday = computed(() => {
-  const [sy, sm, sd] = props.start.split('-').map(Number)
-  return (7 - new Date(sy, sm - 1, sd).getDay()) % 7
 })
 
 /**
@@ -189,10 +225,7 @@ const firstSunday = computed(() => {
  * 上面滚一周（7 天）→ 这里正好走一格，滚动速度是上面的 1/7。
  */
 const weekOffset = computed(
-  () =>
-    ((props.centerIndex - firstSunday.value - 3) / 7) * WEEK_PITCH +
-    WEEK_PITCH / 2 -
-    viewportW.value / 2
+  () => centerWeekFloat.value * WEEK_PITCH + WEEK_PITCH / 2 - viewportW.value / 2
 )
 
 /** 果实用当天配色（和上面日历同源） */
@@ -265,30 +298,31 @@ function visibleDay(index: number): boolean {
         </div>
       </div>
 
-      <!-- 周记：一周一颗，果实挨着排；速度是上面日带的 1/7 -->
+      <!-- 周记：一周一颗，果实挨着排；速度是上面日带的 1/7，整行一直铺满，新的周从边上滑进来 -->
       <div
         v-else
         class="jv-track"
-        :style="{ width: weekW + 'px', transform: `translateX(${-weekOffset}px)` }"
+        :data-center-week="centerWeekFloat.toFixed(3)"
+        :data-week-offset="weekOffset.toFixed(1)"
+        :style="{
+          width: weekW + 'px',
+          transform: `translateX(${-(weekOffset - weekX0)}px)`
+        }"
       >
-        <svg
-          class="jv-svg"
-          :viewBox="`0 0 ${weekW} ${TRACK_H}`"
-          preserveAspectRatio="none"
-        >
+        <svg class="jv-svg" :viewBox="`0 0 ${weekW} ${TRACK_H}`" preserveAspectRatio="none">
           <path class="vine-cane" :d="weekVinePath" />
           <path
             v-for="w in weekNodes"
-            :key="`t${w.start}`"
+            :key="`t${w.g}`"
             class="vine-twig"
-            :d="tendril(w.index * WEEK_PITCH + WEEK_PITCH / 2, vineY(w.index * WEEK_PITCH + WEEK_PITCH / 2), FRUIT_TOP, w.index % 2 === 0 ? -1 : 1)"
+            :d="tendril(w.x - weekX0, weekVineY(w.x), FRUIT_TOP, w.g % 2 === 0 ? -1 : 1)"
           />
         </svg>
         <div
           v-for="w in weekNodes"
-          :key="w.start"
+          :key="w.g"
           class="jv-cell"
-          :style="{ left: w.index * WEEK_PITCH + WEEK_PITCH / 2 + 'px', width: 0 }"
+          :style="{ left: w.x - weekX0 + 'px', width: 0 }"
         >
           <span class="jv-week-no">{{ w.label }}</span>
           <button

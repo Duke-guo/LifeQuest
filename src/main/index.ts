@@ -442,7 +442,10 @@ function createWindow(): void {
                   '[藤 视口宽=' + (jvr ? Math.round(jvr.width) : '?') +
                   ' left=' + (jvr ? Math.round(jvr.left) : '?') +
                   '（日带列 left=' + Math.round(jvCols[0].getBoundingClientRect().left) + '）' +
-                  ' 变换=' + getComputedStyle(track).transform.slice(0, 30) + ']\\n'
+                  ' 变换=' + getComputedStyle(track).transform.slice(0, 30) +
+                  ' centerWeek=' + (track.getAttribute('data-center-week') ?? '-') +
+                  ' weekOff=' + (track.getAttribute('data-week-offset') ?? '-') +
+                  ' 日带偏移=' + (document.querySelector('.week-flag-layer')?.getAttribute('data-offset') ?? '-') + ']\\n'
                 const fruits = [...track.querySelectorAll('.jv-node')]
                   .filter((f) => {
                     const r = f.getBoundingClientRect()
