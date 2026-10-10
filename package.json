@@ -1,6 +1,6 @@
 {
   "name": "lifequest",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "现实游戏化生活管理应用：日记 / 日历 / 待办 / 笔记 / 活动计划，本地优先，数据是自己的普通文件",
   "license": "MIT",
   "author": {
@@ -57,6 +57,7 @@
       "buildResources": "build"
     },
     "files": ["out/**/*", "package.json"],
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "win": {
       "icon": "build/icon.png",
       "target": [
@@ -67,24 +68,16 @@
       ]
     },
     "portable": {
-      "artifactName": "LifeQuest-${version}-便携版.exe"
+      "artifactName": "LifeQuest-${version}-portable.exe"
     },
     "mac": {
       "icon": "build/icon.png",
       "category": "public.app-category.productivity",
-      "target": [
-        {
-          "target": "dmg",
-          "arch": ["x64", "arm64"]
-        },
-        {
-          "target": "zip",
-          "arch": ["x64", "arm64"]
-        }
-      ]
+      "arch": ["universal"],
+      "target": ["dmg", "zip"]
     },
     "dmg": {
-      "artifactName": "LifeQuest-${version}-mac-${arch}.${ext}",
+      "artifactName": "LifeQuest-${version}-mac.${ext}",
       "title": "LifeQuest ${version}",
       "contents": [
         { "x": 140, "y": 200, "type": "file" },
