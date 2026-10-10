@@ -42,15 +42,25 @@ jobs:
               release/*.deb
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
 
       - name: 安装依赖
         run: npm ci
+
+      # AppImage 的打包工具（appimagetool）自己就是个 AppImage，需要 FUSE 才能跑；
+      # GitHub 的 Ubuntu runner 默认没有，装一下；装不上也没关系，下一步会用解包模式兜底。
+      # Ubuntu 24.04 里包名是 libfuse2t64，所以两条都试。
+      - name: 安装 Linux 打包依赖
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fakeroot xz-utils libarchive-tools || true
+          sudo apt-get install -y -qq libfuse2 || sudo apt-get install -y -qq libfuse2t64 || true
 
       - name: 类型检查
         run: npm run typecheck
@@ -62,10 +72,14 @@ jobs:
         env:
           # 个人项目没有代码签名证书：让 electron-builder 不要去找证书
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          # 没有 FUSE 时，让 AppImage 相关的工具改成「解包运行」
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+          # 万一还是失败，日志里能看到细节
+          DEBUG: ${{ runner.os == 'Linux' && 'electron-builder' || '' }}
         run: ${{ matrix.command }}
 
       - name: 上传构建产物
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.glob }}
@@ -78,7 +92,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 下载全部产物
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: dist
           merge-multiple: true
