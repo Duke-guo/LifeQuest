@@ -8,6 +8,8 @@ name: Release
 # 注解可以通过公开 API 读到（不需要登录），便于远程定位问题。
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
@@ -117,14 +119,18 @@ jobs:
 
       # ---------- 把失败原因做成公开可读的注解 ----------
       - name: 记录失败原因（注解）
-        if: always() && hashFiles('ci-logs/pack.log') != ''
+        if: >-
+          always() && hashFiles('ci-logs/pack.log') != '' &&
+          (steps.pack-win.outcome == 'failure' || steps.pack-mac.outcome == 'failure' ||
+           steps.pack-appimage.outcome == 'failure' || steps.pack-deb.outcome == 'failure')
         shell: bash
         run: |
-          echo "== 日志里的报错行 =="
-          grep -inE "error|cannot|failed|not found|no such|ENOENT|Please install|denied|✗|Error:" ci-logs/pack.log | tail -n 15 || true
-          ERR=$(grep -inE "error|cannot|failed|not found|no such|ENOENT|Please install|denied|✗|Error:" ci-logs/pack.log | tail -n 8 | tr '\n' '|' | tr -d '\r' | cut -c1-2500)
+          set +e
+          ERR=$(grep -inE "error|cannot|failed|not found|no such|ENOENT|Please install|denied|✗|Error:|stackTrace" ci-logs/pack.log | tail -n 8 | tr '\n' '|' | tr -d '\r' | cut -c1-2500)
           if [ -z "$ERR" ]; then ERR=$(tail -n 12 ci-logs/pack.log | tr '\n' '|' | tr -d '\r' | cut -c1-2500); fi
-          echo "::error title=打包失败原因::${ERR}"
+          echo "== 报错摘录 =="
+          echo "$ERR" | tr '|' '\n' | tail -n 8
+          echo "::error title=打包失败原因::$ERR"
 
       - name: 如果有打包失败就让任务失败
         if: steps.pack-win.outcome == 'failure' || steps.pack-mac.outcome == 'failure' || steps.pack-appimage.outcome == 'failure' || steps.pack-deb.outcome == 'failure'

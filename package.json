@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "description": "现实游戏化生活管理应用：日记 / 日历 / 待办 / 笔记 / 活动计划，本地优先，数据是自己的普通文件",
   "license": "MIT",
-  "author": "GuoXudong (Duke-guo)",
+  "author": {
+    "name": "GuoXudong",
+    "email": "Duke-guo@users.noreply.github.com"
+  },
   "homepage": "https://github.com/Duke-guo/LifeQuest#readme",
   "repository": {
     "type": "git",
