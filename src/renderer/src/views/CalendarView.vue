@@ -732,16 +732,16 @@ const weekStripGradient = computed(() => {
   const lefts = colLefts.value
   const total = stripW.value
   if (!cols.length || !total) return ''
-  // 相邻两天之间留一小段柔和过渡，不做成一格一格硬边
-  const F = 9
   const pct = (px: number): string =>
     ((Math.max(0, Math.min(total, px)) / total) * 100).toFixed(3)
   const stops: string[] = [`${cols[0].color.bg} 0%`]
   let last = 0
   for (let i = 1; i < cols.length; i++) {
     const mid = lefts[i]
-    const a = Math.max(last, mid - F / 2)
-    const b = Math.max(a, mid + F / 2)
+    // 交界处的柔和过渡：跟相邻两列的宽度挂钩（最宽 56px），但不吃掉上一段
+    const f = Math.max(10, Math.min(56, Math.min(cols[i - 1].w, cols[i].w) * 0.45, mid - last))
+    const a = Math.max(last, mid - f / 2)
+    const b = Math.max(a, mid + f / 2)
     stops.push(`${cols[i - 1].color.bg} ${pct(a)}%`)
     stops.push(`${cols[i].color.bg} ${pct(b)}%`)
     last = b
