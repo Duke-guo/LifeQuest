@@ -391,11 +391,16 @@ function createWindow(): void {
                 const cs = getComputedStyle(cane)
                 out += '[主藤 颜色=' + cs.stroke + ' 宽度=' + cs.strokeWidth + ']\\n'
               }
-              // 笔记预览框体检：宽度是否收窄
+              // 笔记预览框体检：宽度是否收窄、超长正文是否在框内滚动
               const pv = document.querySelector('.vine-preview')
               if (pv) {
                 const pr = pv.getBoundingClientRect()
-                out += '[笔记预览 宽=' + Math.round(pr.width) + ' 高=' + Math.round(pr.height) + ']\\n'
+                const pvBody = pv.querySelector('.pv-body')
+                out +=
+                  '[笔记预览 宽=' + Math.round(pr.width) + ' 高=' + Math.round(pr.height) +
+                  ' 正文可视=' + (pvBody ? Math.round(pvBody.clientHeight) : '?') +
+                  ' 正文内容=' + (pvBody ? pvBody.scrollHeight : '?') +
+                  ' 可滚=' + (pvBody && pvBody.scrollHeight > pvBody.clientHeight + 1 ? '是' : '否') + ']\\n'
               }
               // 长详情是否被收成一行
               const desc = document.querySelector('.desc')

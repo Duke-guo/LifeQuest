@@ -353,7 +353,12 @@ function openNode(n: VineNode): void {
       </div>
     </div>
 
-    <aside v-if="activeNote" class="vine-preview" @wheel.prevent.stop="onPreviewWheel">
+    <aside
+      v-if="activeNote"
+      class="vine-preview"
+      :style="{ height: H + 'px' }"
+      @wheel.prevent.stop="onPreviewWheel"
+    >
       <div class="pv-head">
         <span class="pv-date">{{ activeNote.date || '' }}</span>
         <button class="pv-open" @click="active && openNode(active)">打开编辑</button>
@@ -464,6 +469,8 @@ function openNode(n: VineNode): void {
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 0.9rem;
+  /* 高度由模板绑定成和舞台一样高：正文超长时在框内滚动，而不是把整页撑长 */
+  overflow: hidden;
 }
 .pv-head {
   display: flex;
@@ -502,11 +509,26 @@ function openNode(n: VineNode): void {
   flex: 1;
   min-height: 0;
   margin: 0.4rem 0 0;
-  padding: 0.5rem 0;
+  padding: 0.5rem 0.35rem 0.5rem 0;
   font-family: inherit;
   white-space: pre-wrap;
   word-break: break-word;
   overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* 细一点的滚动条，别喧宾夺主 */
+.pv-body::-webkit-scrollbar {
+  width: 7px;
+}
+.pv-body::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+.pv-body::-webkit-scrollbar-thumb:hover {
+  background: var(--text-3);
+}
+.pv-body::-webkit-scrollbar-track {
+  background: transparent;
 }
 .pv-body.md-body {
   white-space: normal;
