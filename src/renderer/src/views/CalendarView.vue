@@ -199,12 +199,6 @@ function colWidthOf(events: Array<{ time?: string; title: string }>): number {
 /** 一次渲染多少天；滚到窗口边缘时整段平移，位移用像素补偿，视觉上完全不动 */
 const WINDOW_DAYS = 70
 
-function weekCurveY(x: number, center: number | null): number {
-  if (center === null) return WEEK_FLAT
-  const k = (x - center) / 0.34
-  return WEEK_FLAT + (1 - WEEK_FLAT) * Math.exp(-k * k)
-}
-
 function addDays(date: string, n: number): string {
   const [y, m, d] = date.split('-').map(Number)
   return toDateStr(new Date(y, m - 1, d + n))
@@ -331,17 +325,14 @@ function maybeShiftWindow(): void {
   smoothOffset.value = clampOffset(smoothOffset.value + delta)
 }
 
-/** 曲线最低点：悬停时连续跟随鼠标，没悬停时突出今天 */
+/** 下边缘最低点：悬停时连续跟随鼠标，没悬停时突出今天 */
 const hoverCol = ref<number | null>(null)
 /** 悬停处的连续列号（带小数，落点才不会一格一格跳） */
 const peakFloat = ref<number | null>(null)
-const targetCenter = ref<number | null>(null)
-const smoothCenter = ref<number | null>(null)
 
 function onStripMove(e: MouseEvent): void {
   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
   const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-  targetCenter.value = x
   const px = smoothOffset.value + x * rect.width
   peakFloat.value = colAtFloat(px)
   const i = colAt(px)
@@ -349,7 +340,6 @@ function onStripMove(e: MouseEvent): void {
 }
 
 function onStripLeave(): void {
-  targetCenter.value = null
   peakFloat.value = null
   hoverCol.value = null
 }
@@ -732,7 +722,33 @@ async function saveCustomPhase(): Promise<void> {
   await tasksStore.load()
 }
 
-/** 周横幅：色块用真实元素 + transform 跟着日带滑（不每帧重画渐变），文字浮在上面 */
+/**
+ * 周横幅的那条长带：一次性按所有列打好色标（色块边界＝下面各列的边界），
+ * 之后只靠 transform 左右滚 —— 不随时间重算，滚动时零重绘。
+ * 只在「窗口平移」时才会重算一次（相当于滚动到未渲染区域再补一段）。
+ */
+const weekStripGradient = computed(() => {
+  const cols = stripCols.value
+  const lefts = colLefts.value
+  const total = stripW.value
+  if (!cols.length || !total) return ''
+  // 相邻两天之间留一小段柔和过渡，不做成一格一格硬边
+  const F = 9
+  const pct = (px: number): string =>
+    ((Math.max(0, Math.min(total, px)) / total) * 100).toFixed(3)
+  const stops: string[] = [`${cols[0].color.bg} 0%`]
+  let last = 0
+  for (let i = 1; i < cols.length; i++) {
+    const mid = lefts[i]
+    const a = Math.max(last, mid - F / 2)
+    const b = Math.max(a, mid + F / 2)
+    stops.push(`${cols[i - 1].color.bg} ${pct(a)}%`)
+    stops.push(`${cols[i].color.bg} ${pct(b)}%`)
+    last = b
+  }
+  stops.push(`${cols[cols.length - 1].color.bg} 100%`)
+  return `linear-gradient(90deg, ${stops.join(', ')})`
+})
 
 /** 当前视图内每天的颜色，按日期索引（避免模板里重复计算） */
 const colorMap = computed<Record<string, DayColor>>(() => {
@@ -1068,18 +1084,16 @@ function locate(t: Task): void {
     <!-- ========== 周视图：连续日带，滚轮左右滑 ========== -->
     <template v-else-if="mode === 'week'">
       <div class="week-banner" :class="TAG_CLASS[weekSummary.tag]">
-        <!-- 和下面各列一一对应的色块，跟着日带一起滑 -->
-        <div class="wb-blocks" aria-hidden="true">
-          <div class="wb-track" :style="{ transform: `translateX(${-smoothOffset}px)` }">
-            <span
-              v-for="c in stripCols"
-              v-show="colVisible(c.index, 0.2)"
-              :key="`b${c.date}`"
-              class="wb-block"
-              :style="{ left: colLefts[c.index] + 2 + 'px', width: c.w - 4 + 'px', background: c.color.bg }"
-            ></span>
-          </div>
-        </div>
+        <!-- 一条画好的长色带，跟日带共用同一个偏移，只做 transform -->
+        <div
+          class="wb-strip"
+          aria-hidden="true"
+          :style="{
+            width: stripW + 'px',
+            transform: `translateX(${-smoothOffset}px)`,
+            backgroundImage: weekStripGradient
+          }"
+        ></div>
         <span class="wb-tag">{{ weekSummary.tag }}</span>
         <span v-if="semesterStore.weekOf(weekSummary.start)" class="wb-week">
           第 {{ semesterStore.weekOf(weekSummary.start) }} 周
@@ -1838,21 +1852,14 @@ function locate(t: Task): void {
   margin-bottom: 0.9rem;
   background: var(--surface-2);
 }
-/* 色块层：和下面各列一一对应，跟着日带一起滑（只动 transform，交给合成器） */
-.wb-blocks {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-.wb-track {
-  position: absolute;
-  inset: 0;
-  will-change: transform;
-}
-.wb-block {
+/* 色带层：一条画好的长带，跟着日带一起 transform（只动 transform，交给合成器） */
+.wb-strip {
   position: absolute;
   top: 0;
+  left: 0;
   height: 100%;
+  will-change: transform;
+  pointer-events: none;
 }
 /* 文字浮在色块上面 */
 .wb-tag,

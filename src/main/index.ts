@@ -391,11 +391,15 @@ function createWindow(): void {
                   ' 键位=' + wbs.map((b) => Math.round(b.getBoundingClientRect().width)).join(',') +
                   ' 拖拽区=' + (getComputedStyle(tb).webkitAppRegion || '无') + ']\\n'
               }
-              // 周横幅渐变体检
-              const wb = document.querySelector('.week-banner')
-              if (wb) {
-                const bg = getComputedStyle(wb).backgroundImage
-                out += '[周横幅 渐变=' + (bg.includes('gradient') ? '有' : '无') + ' 色标数=' + (bg.match(/rgb/g) || []).length + ']\\n'
+              // 周横幅体检：那条长色带的宽度与色标
+              const banner = document.querySelector('.week-banner')
+              const band = document.querySelector('.wb-strip')
+              if (banner && band) {
+                const bg = band.style.backgroundImage || ''
+                out +=
+                  '[周横幅 带左=' + Math.round(band.getBoundingClientRect().left - banner.getBoundingClientRect().left) +
+                  ' 带宽=' + Math.round(band.getBoundingClientRect().width) +
+                  ' 色标=' + (bg.match(/rgb/g) || []).length + ']\\n'
               }
               // 性质条体检：空白占位 / 各类性质
               const bars = [...document.querySelectorAll('.phase-bar, .wc-phase')]
@@ -560,17 +564,18 @@ function createWindow(): void {
                 const track = document.querySelector('.strip-track')
                 out += '[日带裁剪=' + (cp && cp !== 'none' ? cp.slice(0, 24) : '无') +
                   ' 总宽=' + (track ? Math.round(track.getBoundingClientRect().width) : '?') + ']\\n'
-                const path = document.querySelector('#weekCurve path')
-                if (path) {
-                  const nums = (path.getAttribute('d') || '').match(/-?\\d+(\\.\\d+)?/g) || []
-                  const pts = []
-                  for (let i = 4; i + 1 < nums.length; i += 2) pts.push([Number(nums[i]), Number(nums[i + 1])])
-                  if (pts.length) {
-                    let lo = pts[0]
-                    for (const p of pts) if (p[1] > lo[1]) lo = p
-                    out += '[曲线最低点 x=' + lo[0].toFixed(3) + ' y=' + lo[1].toFixed(3) +
-                      ' 应为第' + (Math.floor(lo[0] * 7) + 1) + '列 采样=' + pts.length + ']\\n'
-                  }
+                const curveCols = [...document.querySelectorAll('.week-col')]
+                if (curveCols.length) {
+                  // 现在下边缘由每列自己的高度形成：报一下正中那几列的高度（起伏是否平缓）
+                  const mid = curveCols.findIndex((c) => c.classList.contains('today'))
+                  const at = mid >= 0 ? mid : Math.floor(curveCols.length / 2)
+                  out +=
+                    '[下边缘 列高=' +
+                    curveCols
+                      .slice(Math.max(0, at - 4), at + 5)
+                      .map((c) => Math.round(c.getBoundingClientRect().height))
+                      .join(',') +
+                    ']\\n'
                 }
               }
               const flashed = document.querySelectorAll('.quest.flash, .dot.flash, .sched-block.flash')
