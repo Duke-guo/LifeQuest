@@ -190,6 +190,28 @@ function createWindow(): void {
                 await new Promise((res) => setTimeout(res, 600))
                 continue
               }
+              if (label.startsWith('@hover:')) {
+                // 在指定元素上派发一次鼠标移动（用它在元素内的相对位置）：@hover:<selector>@<0..1>
+                const [selPart, fracPart] = label.slice(7).split('@')
+                const sel = JSON.stringify(selPart)
+                const frac = Number(fracPart)
+                const r = await mainWindow.webContents.executeJavaScript(
+                  `(() => {
+                    const el = document.querySelector(${sel})
+                    if (!el) return 'no target'
+                    const r = el.getBoundingClientRect()
+                    const x = r.left + r.width * (isNaN(${frac}) ? 0.5 : ${frac})
+                    const y = r.top + r.height * 0.5
+                    el.dispatchEvent(new MouseEvent('mousemove', {
+                      bubbles: true, clientX: x, clientY: y
+                    }))
+                    return 'hover at ' + Math.round(x) + ',' + Math.round(y)
+                  })()`
+                )
+                console.log('hover ->', r)
+                await new Promise((res) => setTimeout(res, 260))
+                continue
+              }
               if (label.startsWith('@wait:')) {
                 const ms = Number(label.slice(6)) || 1000
                 await new Promise((res) => setTimeout(res, ms))
@@ -371,16 +393,52 @@ function createWindow(): void {
               // 截止旗标 + 定位高亮体检
               const flags = document.querySelectorAll('.flag')
               if (flags.length) {
+                const layer = document.querySelector('.week-flag-layer')
+                const cols = [...document.querySelectorAll('.week-col')]
+                const lr = layer ? layer.getBoundingClientRect() : null
+                const cr = cols[0] ? cols[0].getBoundingClientRect() : null
+                out +=
+                  '[旗标层 与首列对齐偏差 top=' +
+                  (lr && cr ? Math.round(lr.top - cr.top) : '?') +
+                  ' left=' + (lr && cr ? Math.round(lr.left - cr.left) : '?') +
+                  ' 宽=' + (lr ? Math.round(lr.width) : '?') +
+                  '/' + (cr ? Math.round(cr.width) : '?') +
+                  ' 列高=' + (cr ? Math.round(cr.height) : '?') +
+                  ' 可插区上沿=' + (document.querySelector('.wc-events') ? document.querySelector('.wc-events').offsetTop : '?') +
+                  ' bandRef=' + (layer ? layer.getAttribute('data-band') + '/' + layer.getAttribute('data-refs') : '?') +
+                  ']\\n'
                 out +=
                   '[截止旗标 ' + flags.length + ' 个: ' +
                   [...flags]
-                    .map((f) => (f.getAttribute('title') || '').slice(0, 14) + '@' + f.style.top)
+                    .map((f) => {
+                      const fr = f.getBoundingClientRect()
+                      const col = f.closest('.flag-col')
+                      const ci = col ? [...(col.parentElement?.children || [])].indexOf(col) : -1
+                      const c = cols[ci]
+                      const rel = c ? Math.round(fr.top + fr.height / 2 - c.getBoundingClientRect().top) : -1
+                      return (f.textContent || '').trim() + ' 列' + ci + ' 距列顶' + rel +
+                        '/可见' + (c ? Math.round(c.getBoundingClientRect().height) : '?') +
+                        ' 左' + (c ? Math.round(fr.left - c.getBoundingClientRect().left) : '?') +
+                        ' 时刻' + (f.querySelector('.flag-text') && getComputedStyle(f.querySelector('.flag-text')).display !== 'none' ? '显示' : '收起')
+                    })
                     .join(' | ') + ']\\n'
               }
               const wg = document.querySelector('.week-grid')
               if (wg) {
                 const cp = getComputedStyle(wg).clipPath
                 out += '[周网格 裁剪=' + (cp && cp !== 'none' ? cp.slice(0, 24) : '无') + ' 列数=' + wg.children.length + ']\\n'
+                const path = document.querySelector('#weekCurve path')
+                if (path) {
+                  const nums = (path.getAttribute('d') || '').match(/-?\\d+(\\.\\d+)?/g) || []
+                  const pts = []
+                  for (let i = 4; i + 1 < nums.length; i += 2) pts.push([Number(nums[i]), Number(nums[i + 1])])
+                  if (pts.length) {
+                    let lo = pts[0]
+                    for (const p of pts) if (p[1] > lo[1]) lo = p
+                    out += '[曲线最低点 x=' + lo[0].toFixed(3) + ' y=' + lo[1].toFixed(3) +
+                      ' 应为第' + (Math.floor(lo[0] * 7) + 1) + '列 采样=' + pts.length + ']\\n'
+                  }
+                }
               }
               const flashed = document.querySelectorAll('.quest.flash, .dot.flash, .sched-block.flash')
               out += '[定位高亮 ' + flashed.length + ' 个（任务条目/周格事件/时间轴）]\\n'

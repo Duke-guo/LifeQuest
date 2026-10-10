@@ -78,6 +78,10 @@ onUnmounted(() => {
 
 onMounted(() => {
   rafId = requestAnimationFrame(tick)
+  measureFlagBand()
+  // 字体异步加载、后续滚动条出现等都会改动表头高度：低频轮询量一次（每 30 帧）
+  // 换周/换模式后表头文案也会变，一并重量
+  watch([mode, () => weekDays.value[0]], () => measureFlagBand())
 })
 
 const today = toDateStr(new Date())
@@ -173,6 +177,7 @@ function onWeekLeave(): void {
 }
 
 let rafId = 0
+let bandTick = 0
 function tick(): void {
   const t = targetCenter.value
   const s = smoothCenter.value
@@ -183,6 +188,12 @@ function tick(): void {
   } else {
     smoothCenter.value = s + (t - s) * 0.2
     if (Math.abs(t - s) < 0.0004) smoothCenter.value = t
+  }
+  // 每 30 帧（约半秒）复核一次旗标区间上沿，兼顾字体迟到、滚动条出现等布局变化
+  if (++bandTick >= 30) {
+    bandTick = 0
+    measureFlagBand()
+    measureRowBands()
   }
   rafId = requestAnimationFrame(tick)
 }
@@ -209,11 +220,58 @@ const weekClipPath = computed(() => {
   return pts.join(' ')
 })
 
+/** 旗标的可插区间上沿：这一列的日程文字起始处（表头/性质条之下），实测得到 */
+const eventsRefs = ref<HTMLElement[]>([])
+const flagBandTop = ref(104)
+function measureFlagBand(): void {
+  const list = eventsRefs.value
+  if (!list || !list.length) return
+  let t = 0
+  for (const el of list) {
+    if (!el || !el.isConnected) continue
+    const v = el.offsetTop || 0
+    if (v > t) t = v
+  }
+  if (t > 0 && Math.abs(t - flagBandTop.value) > 0.5) flagBandTop.value = t
+}
+
 /** 旗标位置：夹在这一列实际露出的高度内（曲线之上），不会被裁掉 */
 function flagTop(f: DeadlineFlag, i: number): string {
   const visibleH = weekCurveY((i + 0.5) / 7, curveCenter.value) * WEEK_COL_H
-  const wanted = f.pos * visibleH
-  return Math.round(Math.min(wanted, visibleH - 20)) + 'px'
+  const top = Math.min(flagBandTop.value, Math.max(24, visibleH - 40))
+  const bottom = Math.max(top + 20, visibleH - 14)
+  const wanted = top + f.pos * (bottom - top)
+  return Math.round(Math.min(Math.max(wanted, top), bottom)) + 'px'
+}
+
+/** 每列里文字行占用的竖直区间（相对列顶），用来判断旗子会不会压在文字上 */
+const rowBands = ref<Record<number, [number, number][]>>({})
+function measureRowBands(): void {
+  const list = eventsRefs.value
+  if (!list || !list.length) return
+  const map: Record<number, [number, number][]> = {}
+  list.forEach((el, i) => {
+    if (!el || !el.isConnected) return
+    const bands: [number, number][] = []
+    for (const c of Array.from(el.children)) {
+      if (!c.classList.contains('dot')) continue
+      const r = c as HTMLElement
+      bands.push([r.offsetTop, r.offsetTop + r.offsetHeight])
+    }
+    map[i] = bands
+  })
+  rowBands.value = map
+}
+
+/**
+ * 旗子正好落在一行文字上时，只留小旗、把时刻收起来（鼠标移到这一列再展开）——
+ * 和日视图时间轴「重叠就只画一条线」是同一个原则，避免把日程文字盖掉。
+ */
+function flagCompact(f: DeadlineFlag, i: number): boolean {
+  if (hoverDay.value === i) return false
+  const t = parseFloat(flagTop(f, i))
+  const bands = rowBands.value[i] ?? []
+  return bands.some(([a, b]) => t > a - 10 && t < b + 10)
 }
 
 /** 这一天的截止型事项（画成插入旗标） */
@@ -726,7 +784,7 @@ function locate(t: Task): void {
             {{ phaseText(d) }}
           </div>
 
-          <div class="wc-events">
+          <div ref="eventsRefs" class="wc-events">
             <span
               v-for="e in eventsOn(d).slice(0, hoverDay === i ? 12 : 5)"
               :key="e.id"
@@ -741,13 +799,13 @@ function locate(t: Task): void {
       </div>
 
       <!-- 截止旗标单独一层：不受裁剪影响，绝不会被曲线切掉 -->
-      <div class="week-flag-layer">
+      <div class="week-flag-layer" :data-band="Math.round(flagBandTop)" :data-refs="eventsRefs.length">
         <div v-for="(d, i) in weekDays" :key="`f${d}`" class="flag-col">
           <span
             v-for="f in flagsOn(d)"
             :key="f.id"
             class="flag"
-            :class="{ done: f.done }"
+            :class="{ done: f.done, compact: flagCompact(f, i) }"
             :style="{ top: flagTop(f, i) }"
             :title="`${f.done ? '已完成 · ' : '截止 '}${f.time === '24:00' ? '当天 24:00' : f.time} · ${f.title}`"
           >
@@ -1094,6 +1152,9 @@ function locate(t: Task): void {
   font-weight: 600;
   border-radius: 6px;
   padding: 1px 6px;
+  /* 窄列里也要保持一行，否则「轻松」会被拆成上下两字 */
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 /* 忙碌标签的颜色由算法注入（见 utils/dayColor.ts）；只有"用户自定义"用固定紫色区分 */
 .b-auto {
@@ -1106,6 +1167,7 @@ function locate(t: Task): void {
 .icons {
   display: inline-flex;
   gap: 3px;
+  flex-shrink: 0;
 }
 .ico {
   display: inline-flex;
@@ -1177,11 +1239,12 @@ function locate(t: Task): void {
   pointer-events: auto;
   z-index: 3;
 }
-.week-col .flag {
-  right: 0;
+/* 靠右插旗：旗杆落在这一列右侧的时间点上，文字在左，不压住左侧的日程文字 */
+.week-flag-layer .flag {
+  right: 4px;
   left: auto;
-  padding-right: 6px;
   flex-direction: row-reverse;
+  gap: 2px;
 }
 /* 旗杆 */
 .flag::before {
@@ -1209,13 +1272,13 @@ function locate(t: Task): void {
 }
 .flag-text {
   font-family: var(--font-num);
-  font-size: 0.74rem;
+  font-size: 0.7rem;
   font-weight: 700;
   font-style: normal;
   color: #fff;
   background: #c9584f;
   border-radius: 5px;
-  padding: 1px 5px;
+  padding: 1px 4px;
   white-space: nowrap;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
 }
@@ -1326,11 +1389,16 @@ function locate(t: Task): void {
   /* 整块用一条连续曲线裁下缘：光滑的下边缘 + 卡片间空隙 */
   clip-path: url(#weekCurve);
 }
+/* 旗标层的定位基准：必须就是周网格本身，否则 top 会相对别的祖先计算，旗子会飘到错误高度 */
+.week-wrap {
+  position: relative;
+}
 .week-flag-layer {
   position: absolute;
   inset: 0;
   display: grid;
   grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
   pointer-events: none;
   z-index: 4;
 }
@@ -1339,6 +1407,10 @@ function locate(t: Task): void {
 }
 .week-flag-layer .flag {
   transition: top 0.34s cubic-bezier(0.22, 0.9, 0.3, 1);
+}
+/* 压到文字行上时只留小旗，时刻收起来（悬停这一列会展开） */
+.flag.compact .flag-text {
+  display: none;
 }
 .week-clip-defs {
   position: absolute;
@@ -1401,6 +1473,10 @@ function locate(t: Task): void {
 .wc-count {
   font-size: 0.7rem;
   color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 .wc-phase {
   height: 15px;
