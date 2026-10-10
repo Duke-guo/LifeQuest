@@ -56,7 +56,7 @@ function buildAppMenu(): void {
       submenu: [
         {
           label: '项目主页',
-          click: () => void shell.openExternal('https://github.com/GuoXudong/lifequest')
+          click: () => void shell.openExternal('https://github.com/Duke-guo/LifeQuest')
         }
       ]
     }

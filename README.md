@@ -109,8 +109,8 @@
 需要 Node.js 20+ 和 npm（Windows / macOS / Linux 都可以）。
 
 ```bash
-git clone https://github.com/<你的用户名>/lifequest.git
-cd lifequest
+git clone https://github.com/Duke-guo/LifeQuest.git
+cd LifeQuest
 npm install
 npm run dev        # 开发模式（热更新）
 ```
