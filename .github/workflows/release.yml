@@ -35,8 +35,7 @@ jobs:
             artifact: LifeQuest-macos
             glob: |
               release/*.dmg
-              release/*.zip
-          - name: Linux (AppImage + deb)
+              release/*.zip          - name: Linux (AppImage + deb)
             os: ubuntu-latest
             artifact: LifeQuest-linux
             glob: |
@@ -90,7 +89,8 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
           mkdir -p ci-logs
-          npx electron-builder --mac dmg zip --publish never 2>&1 | tee ci-logs/pack.log
+          # 不带 target/arch 参数，让 package.json 里的 mac.target（universal）生效
+          npx electron-builder --mac --publish never 2>&1 | tee ci-logs/pack.log
           exit ${PIPESTATUS[0]}
 
       - name: 打包 · Linux AppImage
