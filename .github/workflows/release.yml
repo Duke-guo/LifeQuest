@@ -35,7 +35,8 @@ jobs:
             artifact: LifeQuest-macos
             glob: |
               release/*.dmg
-              release/*.zip          - name: Linux (AppImage + deb)
+              release/*.zip
+          - name: Linux (AppImage + deb)
             os: ubuntu-latest
             artifact: LifeQuest-linux
             glob: |
