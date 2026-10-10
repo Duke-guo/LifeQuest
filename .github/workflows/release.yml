@@ -3,6 +3,9 @@ name: Release
 # 触发方式：
 #   1) 打 tag（形如 v0.1.0）→ 自动构建三平台安装包，并建 Release 上传附件
 #   2) 手动（Actions 页 → Run workflow）→ 只构建并上传 Artifacts，方便先试跑
+#
+# 排查用：任何一个打包步骤失败时，会把日志里的报错行写成「注解」，
+# 注解可以通过公开 API 读到（不需要登录），便于远程定位问题。
 on:
   push:
     tags:
@@ -22,20 +25,17 @@ jobs:
         include:
           - name: Windows 便携版
             os: windows-latest
-            command: npx electron-builder --win portable --publish never
             artifact: LifeQuest-windows
             glob: |
               release/*.exe
           - name: macOS (dmg + zip)
             os: macos-latest
-            command: npx electron-builder --mac dmg zip --publish never
             artifact: LifeQuest-macos
             glob: |
               release/*.dmg
               release/*.zip
           - name: Linux (AppImage + deb)
             os: ubuntu-latest
-            command: npx electron-builder --linux AppImage deb --publish never
             artifact: LifeQuest-linux
             glob: |
               release/*.AppImage
@@ -52,14 +52,12 @@ jobs:
       - name: 安装依赖
         run: npm ci
 
-      # AppImage 的打包工具（appimagetool）自己就是个 AppImage，需要 FUSE 才能跑；
-      # GitHub 的 Ubuntu runner 默认没有，装一下；装不上也没关系，下一步会用解包模式兜底。
-      # Ubuntu 24.04 里包名是 libfuse2t64，所以两条都试。
+      # AppImage 相关工具依赖 FUSE；Ubuntu 24.04 里包名是 libfuse2t64
       - name: 安装 Linux 打包依赖
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq fakeroot xz-utils libarchive-tools || true
+          sudo apt-get install -y -qq fakeroot xz-utils squashfs-tools libarchive-tools || true
           sudo apt-get install -y -qq libfuse2 || sudo apt-get install -y -qq libfuse2t64 || true
 
       - name: 类型检查
@@ -68,15 +66,71 @@ jobs:
       - name: 编译（Vite）
         run: npx electron-vite build
 
-      - name: 打包
+      # ---------- 打包：每个平台一步，失败不中断，便于把日志抓出来 ----------
+      - name: 打包 · Windows
+        id: pack-win
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: bash
         env:
-          # 个人项目没有代码签名证书：让 electron-builder 不要去找证书
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-          # 没有 FUSE 时，让 AppImage 相关的工具改成「解包运行」
+        run: |
+          mkdir -p ci-logs
+          npx electron-builder --win portable --publish never 2>&1 | tee ci-logs/pack.log
+          exit ${PIPESTATUS[0]}
+
+      - name: 打包 · macOS
+        id: pack-mac
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          mkdir -p ci-logs
+          npx electron-builder --mac dmg zip --publish never 2>&1 | tee ci-logs/pack.log
+          exit ${PIPESTATUS[0]}
+
+      - name: 打包 · Linux AppImage
+        id: pack-appimage
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           APPIMAGE_EXTRACT_AND_RUN: '1'
-          # 万一还是失败，日志里能看到细节
-          DEBUG: ${{ runner.os == 'Linux' && 'electron-builder' || '' }}
-        run: ${{ matrix.command }}
+        run: |
+          mkdir -p ci-logs
+          npx electron-builder --linux AppImage --publish never 2>&1 | tee ci-logs/pack.log
+          exit ${PIPESTATUS[0]}
+
+      - name: 打包 · Linux deb
+        id: pack-deb
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npx electron-builder --linux deb --publish never 2>&1 | tee -a ci-logs/pack.log
+          exit ${PIPESTATUS[0]}
+
+      # ---------- 把失败原因做成公开可读的注解 ----------
+      - name: 记录失败原因（注解）
+        if: always() && hashFiles('ci-logs/pack.log') != ''
+        shell: bash
+        run: |
+          echo "== 日志里的报错行 =="
+          grep -inE "error|cannot|failed|not found|no such|ENOENT|Please install|denied|✗|Error:" ci-logs/pack.log | tail -n 15 || true
+          ERR=$(grep -inE "error|cannot|failed|not found|no such|ENOENT|Please install|denied|✗|Error:" ci-logs/pack.log | tail -n 8 | tr '\n' '|' | tr -d '\r' | cut -c1-2500)
+          if [ -z "$ERR" ]; then ERR=$(tail -n 12 ci-logs/pack.log | tr '\n' '|' | tr -d '\r' | cut -c1-2500); fi
+          echo "::error title=打包失败原因::${ERR}"
+
+      - name: 如果有打包失败就让任务失败
+        if: steps.pack-win.outcome == 'failure' || steps.pack-mac.outcome == 'failure' || steps.pack-appimage.outcome == 'failure' || steps.pack-deb.outcome == 'failure'
+        run: |
+          echo "至少一个打包步骤失败，见上面的注解"
+          exit 1
 
       - name: 上传构建产物
         uses: actions/upload-artifact@v5
