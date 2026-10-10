@@ -73,10 +73,7 @@
     "mac": {
       "icon": "build/icon.png",
       "category": "public.app-category.productivity",
-      "target": [
-        { "target": "dmg", "arch": ["universal"] },
-        { "target": "zip", "arch": ["universal"] }
-      ]
+      "target": ["dmg", "zip"]
     },
     "dmg": {
       "artifactName": "LifeQuest-${version}-mac.${ext}",

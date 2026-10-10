@@ -93,7 +93,7 @@
 | 系统 | 文件 | 说明 |
 |---|---|---|
 | **Windows** | `LifeQuest-*-portable.exe` | 免安装，双击就能跑；数据落在 exe 同级的 `LifeQuest-Data/` |
-| **macOS** | `LifeQuest-*-mac.dmg` | 打开后把 LifeQuest 拖进「应用程序」；**通用版**，Intel 与 Apple 芯片都能用；数据在「文稿」目录下的 `LifeQuest-Data/` |
+| **macOS** | `LifeQuest-*-mac-x64.dmg` / `LifeQuest-*-mac-arm64.dmg` | Intel 芯片选 x64，Apple 芯片（M 系列）选 arm64；打开后拖进「应用程序」，数据在「文稿」目录下的 `LifeQuest-Data/` |
 | **Linux** | `LifeQuest-*-linux-x86_64.AppImage` | `chmod +x` 后直接运行；数据落在 AppImage 同级的 `LifeQuest-Data/`。也有 `.deb` |
 
 **首次运行的安全提示**（个人项目，没有购买代码签名证书，属于正常现象）：

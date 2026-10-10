@@ -89,8 +89,8 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
           mkdir -p ci-logs
-          # 不带 target/arch 参数，让 package.json 里的 mac.target（universal）生效
-          npx electron-builder --mac --publish never 2>&1 | tee ci-logs/pack.log
+          # 用 --x64 --arm64 明确构建两种芯片（命令行 arch 会覆盖配置里的 arch）
+          npx electron-builder --mac --x64 --arm64 --publish never 2>&1 | tee ci-logs/pack.log
           exit ${PIPESTATUS[0]}
 
       - name: 打包 · Linux AppImage
@@ -169,7 +169,8 @@ jobs:
             | 系统 | 文件 | 说明 |
             |---|---|---|
             | Windows | `LifeQuest-*-portable.exe` | 免安装，双击即用 |
-            | macOS | `LifeQuest-*-mac.dmg` | 通用版（Intel/Apple 芯片），打开后把 LifeQuest 拖进「应用程序」 |
+            | macOS (Intel) | `LifeQuest-*-mac-x64.dmg` | 打开后拖进「应用程序」 |
+            | macOS (Apple 芯片) | `LifeQuest-*-mac-arm64.dmg` | 打开后拖进「应用程序」 |
             | Linux | `LifeQuest-*-linux-x86_64.AppImage` | `chmod +x` 后直接运行 |
 
             **数据位置**：Windows 在 exe 同级的 `LifeQuest-Data/`；macOS 在「文稿」目录下的 `LifeQuest-Data/`；Linux 在 AppImage 同级的 `LifeQuest-Data/`。整个文件夹拷走就是完整备份。
