@@ -732,16 +732,7 @@ async function saveCustomPhase(): Promise<void> {
   await tasksStore.load()
 }
 
-/** 周横幅底色：取横幅那一周 7 天的配色做渐变，改心情/天气会跟着变 */
-const weekGradient = computed(() => {
-  const days = bannerDays.value
-  if (!days.length) return ''
-  const cols = days.map((d) => colorOf(d).bg)
-  const stops = cols
-    .map((c, i) => `${c} ${Math.round((i / Math.max(1, cols.length - 1)) * 100)}%`)
-    .join(', ')
-  return `linear-gradient(90deg, ${stops})`
-})
+/** 周横幅：色块用真实元素 + transform 跟着日带滑（不每帧重画渐变），文字浮在上面 */
 
 /** 当前视图内每天的颜色，按日期索引（避免模板里重复计算） */
 const colorMap = computed<Record<string, DayColor>>(() => {
@@ -839,11 +830,6 @@ const weekSummary = computed(() => {
   const [y, m, d] = weekStartStr.value.split('-').map(Number)
   return summarizeWeek(tasksStore.tasks, new Date(y, m - 1, d), skipDates.value)
 })
-
-/** 横幅底色：取横幅那一周 7 天的配色 */
-const bannerDays = computed(() =>
-  Array.from({ length: 7 }, (_, i) => addDays(weekStartStr.value, i))
-)
 
 const TAG_CLASS: Record<string, string> = {
   考试周: 'tag-exam',
@@ -1081,7 +1067,19 @@ function locate(t: Task): void {
 
     <!-- ========== 周视图：连续日带，滚轮左右滑 ========== -->
     <template v-else-if="mode === 'week'">
-      <div class="week-banner" :class="TAG_CLASS[weekSummary.tag]" :style="{ background: weekGradient }">
+      <div class="week-banner" :class="TAG_CLASS[weekSummary.tag]">
+        <!-- 和下面各列一一对应的色块，跟着日带一起滑 -->
+        <div class="wb-blocks" aria-hidden="true">
+          <div class="wb-track" :style="{ transform: `translateX(${-smoothOffset}px)` }">
+            <span
+              v-for="c in stripCols"
+              v-show="colVisible(c.index, 0.2)"
+              :key="`b${c.date}`"
+              class="wb-block"
+              :style="{ left: colLefts[c.index] + 2 + 'px', width: c.w - 4 + 'px', background: c.color.bg }"
+            ></span>
+          </div>
+        </div>
         <span class="wb-tag">{{ weekSummary.tag }}</span>
         <span v-if="semesterStore.weekOf(weekSummary.start)" class="wb-week">
           第 {{ semesterStore.weekOf(weekSummary.start) }} 周
@@ -1830,6 +1828,8 @@ function locate(t: Task): void {
 
 /* 周视图 */
 .week-banner {
+  position: relative;
+  overflow: hidden;
   display: flex;
   align-items: center;
   gap: 0.8rem;
@@ -1837,6 +1837,30 @@ function locate(t: Task): void {
   border-radius: 12px;
   margin-bottom: 0.9rem;
   background: var(--surface-2);
+}
+/* 色块层：和下面各列一一对应，跟着日带一起滑（只动 transform，交给合成器） */
+.wb-blocks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.wb-track {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+}
+.wb-block {
+  position: absolute;
+  top: 0;
+  height: 100%;
+}
+/* 文字浮在色块上面 */
+.wb-tag,
+.wb-week,
+.wb-meta,
+.wb-scroll {
+  position: relative;
+  z-index: 1;
 }
 .wb-tag {
   font-family: var(--font-display);
