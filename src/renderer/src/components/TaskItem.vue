@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, ref, nextTick } from 'vue'
 import type { Task } from '../../../shared/types'
 import { formatDate } from '../utils/helpers'
@@ -297,7 +297,16 @@ const dialColor = computed(() => GEM_COLOR[props.task.importance] ?? 'var(--text
   text-decoration: line-through;
 }
 .quest.imp-5 .inner {
-  background: linear-gradient(90deg, rgba(217, 80, 80, 0.1), var(--surface));
+  background: linear-gradient(90deg, rgba(217, 80, 80, 0.12), var(--surface));
+}
+.quest.imp-4 .inner {
+  background: linear-gradient(90deg, rgba(224, 123, 57, 0.1), var(--surface));
+}
+.quest.imp-3 .inner {
+  background: linear-gradient(90deg, rgba(217, 165, 43, 0.1), var(--surface));
+}
+.quest.imp-2 .inner {
+  background: linear-gradient(90deg, rgba(85, 168, 159, 0.1), var(--surface));
 }
 .quest.imp-1 {
   opacity: 0.72;

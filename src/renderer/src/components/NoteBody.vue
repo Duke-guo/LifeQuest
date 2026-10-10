@@ -136,13 +136,39 @@ function removeBlock(index: number, e: Event): void {
   emit('update:modelValue', next)
   if (editing.value === index) editing.value = null
 }
+
+/** - [ ] 清单：点复选框就切换打勾，并把源文改成 - [x] / - [ ] */
+function toggleTaskCheckbox(text: string, idx: number): string {
+  let seen = 0
+  return text.replace(/\[([ xX])\]/g, (m, c: string) => {
+    if (seen++ === idx) return c.toLowerCase() === 'x' ? '[ ]' : '[x]'
+    return m
+  })
+}
+
+function onRootClick(e: MouseEvent): void {
+  const t = e.target as HTMLElement
+  if (t.tagName !== 'INPUT') return
+  const box = t as HTMLInputElement
+  const blockEl = box.closest('.nb-block') as HTMLElement | null
+  if (!blockEl || blockEl.dataset.idx === undefined) return
+  const bi = Number(blockEl.dataset.idx)
+  const b = blocks.value[bi]
+  if (!b) return
+  const ti = Number(box.dataset.taskIdx ?? 0)
+  const nextText = toggleTaskCheckbox(b.text, ti)
+  if (nextText === b.text) return
+  const next = props.modelValue.slice(0, b.start) + nextText + props.modelValue.slice(b.end)
+  emit('update:modelValue', next)
+}
 </script>
 
 <template>
-  <div ref="rootRef" class="nb">
+  <div ref="rootRef" class="nb" @click="onRootClick">
     <div
       v-for="(b, i) in blocks"
       :key="b.key"
+      :data-idx="i"
       class="nb-block"
       :class="{ editing: editing === i }"
     >

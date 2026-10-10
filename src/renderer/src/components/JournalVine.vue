@@ -238,24 +238,12 @@ function openWeek(w: WeekNode): void {
               '--tilt': tilt(d.date),
               '--scale': d.date === today ? 1.3 : 1
             }"
-            :title="`${d.date} 周${weekdayOf(d.date)}`"
-            @click="pick(d.date)"
+            :title="`${d.date} 周${weekdayOf(d.date)}（点击进入日记）`"
+            @click="openDay(d.date)"
           >
             <span v-if="d.has" class="jv-num">{{ dayNum(d.date) }}</span>
             <span v-else class="jv-plus">＋</span>
           </button>
-
-          <div class="jv-entry-slot">
-            <button
-              v-if="selKey === d.date"
-              class="jv-entry"
-              :style="d.has ? entryStyle(d.date) : undefined"
-              :title="d.has ? '进入这天的日记' : '写这天的日记'"
-              @click="openDay(d.date)"
-            >
-              <AppIcon name="journal" :size="13" />
-            </button>
-          </div>
 
           <span class="vine-label" :class="{ on: selKey === d.date }">周{{ weekdayOf(d.date) }}</span>
         </div>
@@ -280,23 +268,12 @@ function openWeek(w: WeekNode): void {
             class="jv-node vine-fruit"
             :class="{ empty: !w.has, on: selKey === w.start, current: w.offset === 0 }"
             :style="{ '--tilt': tilt(w.start), '--scale': nodeScale(w.offset), opacity: nodeOpacity(w.offset) }"
-            :title="`${w.start} ~ ${w.end}`"
-            @click="pick(w.start)"
+            :title="`${w.start} ~ ${w.end}（点击打开周记）`"
+            @click="openWeek(w)"
           >
             <span v-if="w.has" class="jv-num sm">{{ w.short }}</span>
             <span v-else class="jv-plus">＋</span>
           </button>
-
-          <div class="jv-entry-slot">
-            <button
-              v-if="selKey === w.start"
-              class="jv-entry"
-              :title="w.has ? '打开这周的周记' : '写这周的周记'"
-              @click="openWeek(w)"
-            >
-              <AppIcon name="notes" :size="13" />
-            </button>
-          </div>
 
           <span class="vine-label" :class="{ on: selKey === w.start }">{{ w.label }}</span>
         </div>

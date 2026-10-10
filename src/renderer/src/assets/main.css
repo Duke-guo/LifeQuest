@@ -270,6 +270,23 @@ code {
 .md-body del {
   color: var(--text-3);
 }
+/* - [ ] 可打勾清单 */
+.md-body .md-task {
+  list-style: none;
+  margin-left: -1.4rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+.md-body .md-task input {
+  accent-color: var(--accent);
+  cursor: pointer;
+  margin: 0;
+}
+.md-body .md-task input:checked + span {
+  color: var(--text-3);
+  text-decoration: line-through;
+}
 /* 紧凑版（葡萄藤侧栏预览用） */
 .md-body.compact {
   font-size: 0.85rem;

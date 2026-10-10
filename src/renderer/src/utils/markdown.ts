@@ -55,6 +55,7 @@ export function renderMarkdown(src: string, resolve?: ImageResolver): string {
   const lines = (src ?? '').replace(/\r\n?/g, '\n').split('\n')
   const out: string[] = []
   let list: 'ul' | 'ol' | null = null
+  let taskIdx = 0
   let i = 0
 
   const closeList = (): void => {
@@ -121,7 +122,17 @@ export function renderMarkdown(src: string, resolve?: ImageResolver): string {
         out.push(`<${want}>`)
         list = want
       }
-      out.push(`<li>${inline((ul ?? ol)![1], resolve)}</li>`)
+      const body = (ul ?? ol)![1]
+      // - [ ] / - [x] 任务清单：渲染成真正的复选框
+      const task = /^\[([ xX])\]\s+(.*)$/.exec(body)
+      if (task) {
+        const checked = task[1].toLowerCase() === 'x'
+        out.push(
+          `<li class="md-task"><input type="checkbox" data-task-idx="${taskIdx++}" ${checked ? 'checked' : ''}><span>${inline(task[2], resolve)}</span></li>`
+        )
+      } else {
+        out.push(`<li>${inline(body, resolve)}</li>`)
+      }
       i++
       continue
     }

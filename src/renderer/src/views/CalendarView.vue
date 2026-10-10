@@ -1295,12 +1295,7 @@ function locate(t: Task): void {
   align-items: stretch;
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 0;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  overflow: hidden;
-  /* 整块共用同一条曲线裁下缘：下边界是一条连续曲线 */
-  clip-path: url(#weekCurve);
+  gap: 6px;
 }
 .week-wrap {
   position: relative;
