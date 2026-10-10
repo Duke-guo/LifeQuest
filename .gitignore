@@ -16,3 +16,9 @@ LifeQuest-Data/
 *.log
 .DS_Store
 Thumbs.db
+
+# 本地私人资料：不进仓库
+*.lnk
+大一上课程表.png
+北京大学26到27学年校历.jpg
+_private/

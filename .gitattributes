@@ -1,0 +1,19 @@
+# 让 git 统一换行，避免 Windows 上每次提交都出现 LF/CRLF 警告
+* text=auto eol=lf
+
+# 二进制文件不做换行转换、也不做 diff
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.exe binary
+*.zip binary
+
+# 锁文件不参与语言统计
+package-lock.json linguist-generated=true -diff
