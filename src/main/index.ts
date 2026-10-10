@@ -1,26 +1,91 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
-import { join } from 'path'
+import { app, shell, BrowserWindow, ipcMain, Menu, type BrowserWindowConstructorOptions, type MenuItemConstructorOptions } from 'electron'
+import { join, dirname } from 'path'
 import { writeFile, readFile } from 'fs/promises'
 import { setupIpc } from './ipc'
+import { resolveDataRoot } from './dataStore'
+
+const isMac = process.platform === 'darwin'
+
+/**
+ * 应用菜单。
+ * macOS 上「必须有」：没有菜单就没有 ⌘C/⌘V/⌘A/⌘Q 这些系统快捷键。
+ * Windows / Linux 上菜单栏默认隐藏（Alt 可唤出），但快捷键依然生效。
+ */
+function buildAppMenu(): void {
+  const template: MenuItemConstructorOptions[] = [
+    ...(isMac ? ([{ role: 'appMenu' }] as MenuItemConstructorOptions[]) : []),
+    {
+      label: '文件',
+      submenu: [
+        {
+          label: '打开数据文件夹',
+          click: () => void shell.openPath(resolveDataRoot())
+        },
+        { type: 'separator' },
+        isMac ? { role: 'close', label: '关闭窗口' } : { role: 'quit', label: '退出' }
+      ]
+    },
+    {
+      label: '编辑',
+      submenu: [
+        { role: 'undo', label: '撤销' },
+        { role: 'redo', label: '重做' },
+        { type: 'separator' },
+        { role: 'cut', label: '剪切' },
+        { role: 'copy', label: '复制' },
+        { role: 'paste', label: '粘贴' },
+        { role: 'selectAll', label: '全选' }
+      ]
+    },
+    {
+      label: '视图',
+      submenu: [
+        { role: 'reload', label: '重新载入' },
+        { role: 'toggleDevTools', label: '开发者工具' },
+        { type: 'separator' },
+        { role: 'resetZoom', label: '实际大小' },
+        { role: 'zoomIn', label: '放大' },
+        { role: 'zoomOut', label: '缩小' },
+        { type: 'separator' },
+        { role: 'togglefullscreen', label: '全屏' }
+      ]
+    },
+    { role: 'windowMenu', label: '窗口' },
+    {
+      label: '帮助',
+      submenu: [
+        {
+          label: '项目主页',
+          click: () => void shell.openExternal('https://github.com/GuoXudong/lifequest')
+        }
+      ]
+    }
+  ]
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
 
 function createWindow(): void {
-  const mainWindow = new BrowserWindow({
+  const options: BrowserWindowConstructorOptions = {
     width: 1280,
     height: 800,
     minWidth: 940,
     minHeight: 600,
     show: false,
     autoHideMenuBar: true,
-    // 自绘标题栏：顶部那三个窗口按钮由应用自己画（见 components/TitleBar.vue）
-    frame: false,
     backgroundColor: '#f6f4f4',
     title: 'LifeQuest',
+    // 标题栏：Windows / Linux 自己画（frame:false，见 components/TitleBar.vue）；
+    // macOS 用系统红绿灯（hiddenInset），把按钮嵌进同一条自绘栏里
+    ...(isMac
+      ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 14, y: 12 } }
+      : { frame: false }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true
     }
-  })
+  }
+  const mainWindow = new BrowserWindow(options)
 
   // 最大化状态同步给渲染进程（按钮图标要跟着变）
   const sendMax = (v: boolean): void => {
@@ -632,6 +697,7 @@ ipcMain.handle('window:isMaximized', (e) => windowOf(e)?.isMaximized() ?? false)
 
 app.whenReady().then(async () => {
   await setupIpc()
+  buildAppMenu()
   createWindow()
 
   app.on('activate', () => {

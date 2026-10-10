@@ -33,7 +33,7 @@ const steps = [
   {
     icon: 'notes',
     title: '数据属于你',
-    body: '所有数据都是 D 盘工作区里普通的 Markdown / JSON 文件，程序外也能打开、复制、备份。'
+    body: '所有数据都是本机文件夹里普通的 Markdown / JSON 文件：程序外也能打开、改、备份，整个文件夹拷过去就完成搬家。'
   }
 ]
 

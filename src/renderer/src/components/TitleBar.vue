@@ -2,9 +2,15 @@
 import { ref, onMounted } from 'vue'
 
 const maximized = ref(false)
+/** macOS 用系统红绿灯，就不再画右上角那三个按钮，并给左侧让出位置 */
+const isMac = ref(false)
+/** Windows / Linux 上自己的按钮才需要（浏览器预览环境也没有 window.api） */
+const showButtons = ref(false)
 
 onMounted(async () => {
   try {
+    isMac.value = window.api.platform === 'darwin'
+    showButtons.value = !isMac.value
     maximized.value = await window.api.win.isMaximized()
     window.api.win.onMaximizedChange((v) => (maximized.value = v))
   } catch {
@@ -25,11 +31,11 @@ function closeWindow(): void {
 </script>
 
 <template>
-  <div class="titlebar">
+  <div class="titlebar" :class="{ mac: isMac }">
     <span class="brand">LifeQuest</span>
     <span class="spacer"></span>
 
-    <div class="win-btns">
+    <div v-if="showButtons" class="win-btns">
       <button class="wb wb-min" title="最小化" @click="minimize">
         <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
           <path d="M3 8.5h10" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none" />
@@ -87,6 +93,10 @@ function closeWindow(): void {
   /* 整条可拖动窗口 */
   -webkit-app-region: drag;
   user-select: none;
+}
+/* macOS：左上角是系统红绿灯，给它们留出位置 */
+.titlebar.mac {
+  padding-left: 86px;
 }
 .brand {
   font-family: var(--font-display);

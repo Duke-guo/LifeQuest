@@ -35,14 +35,26 @@ function findExistingRoot(startDir: string): string | null {
 }
 
 export function defaultDataRoot(): string {
-  // 便携版：数据放在便携 exe 同级目录
+  // 便携版（Windows portable）：数据放在便携 exe 同级目录
   if (process.env.PORTABLE_EXECUTABLE_DIR) {
     return join(process.env.PORTABLE_EXECUTABLE_DIR, 'LifeQuest-Data')
+  }
+  // Linux AppImage：程序跑在只读的挂载点里，要按 AppImage 文件本身的位置放数据
+  if (process.env.APPIMAGE) {
+    const dir = dirname(process.env.APPIMAGE)
+    return findExistingRoot(dir) ?? join(dir, 'LifeQuest-Data')
   }
   // 从程序所在目录向上找已存在的 LifeQuest-Data：
   // 这样把程序放在工作区子目录（如 app/）时，数据仍落在工作区根目录；
   // 开发时（electron out/main/index.js）也不会另开一份 out/main/LifeQuest-Data
   const startDir = app.isPackaged ? dirname(app.getPath('exe')) : app.getAppPath()
+  // macOS：exe 在 .app 包内部，不能往包里写；先在 .app 附近找（方便绿色版放在一起），
+  // 找不到就用「文稿」目录，用户一眼能看到自己的数据
+  if (app.isPackaged && process.platform === 'darwin') {
+    const near = findExistingRoot(startDir)
+    if (near) return near
+    return join(app.getPath('documents'), 'LifeQuest-Data')
+  }
   return findExistingRoot(startDir) ?? join(startDir, 'LifeQuest-Data')
 }
 

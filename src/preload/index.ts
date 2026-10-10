@@ -3,6 +3,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 // 白名单 API：渲染进程唯一能触达主进程的入口
 const api = {
   ping: (): Promise<string> => ipcRenderer.invoke('ping'),
+  /** 当前平台：'win32' | 'darwin' | 'linux'（界面按平台调整标题栏/快捷键提示） */
+  platform: process.platform,
   dataRoot: (): Promise<string> => ipcRenderer.invoke('data:root'),
   readJson: (key: string): Promise<unknown> => ipcRenderer.invoke('data:readJson', key),
   writeJson: (key: string, data: unknown): Promise<boolean> => ipcRenderer.invoke('data:writeJson', key, data),

@@ -9,6 +9,8 @@ declare module '*.vue' {
 interface Window {
   api: {
     ping: () => Promise<string>
+    /** 'win32' | 'darwin' | 'linux' */
+    platform: string
     dataRoot: () => Promise<string>
     readJson: (key: string) => Promise<unknown>
     writeJson: (key: string, data: unknown) => Promise<boolean>

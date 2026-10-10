@@ -50,10 +50,12 @@
     "appId": "com.lifequest.app",
     "productName": "LifeQuest",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "files": ["out/**/*", "package.json"],
     "win": {
+      "icon": "build/icon.png",
       "target": [
         {
           "target": "portable",
@@ -63,6 +65,41 @@
     },
     "portable": {
       "artifactName": "LifeQuest-${version}-便携版.exe"
+    },
+    "mac": {
+      "icon": "build/icon.png",
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["x64", "arm64"]
+        }
+      ]
+    },
+    "dmg": {
+      "artifactName": "LifeQuest-${version}-mac-${arch}.${ext}",
+      "title": "LifeQuest ${version}",
+      "contents": [
+        { "x": 140, "y": 200, "type": "file" },
+        { "x": 400, "y": 200, "type": "link", "path": "/Applications" }
+      ]
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Utility",
+      "synopsis": "本地优先的生活管理应用：日记 / 日历 / 待办 / 笔记 / 计划",
+      "description": "LifeQuest 把日记、日历、待办、笔记、活动计划聚在一处，数据以普通 Markdown / JSON 文件存放在本机，游戏化只是可选外壳。",
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "deb", "arch": ["x64"] }
+      ]
+    },
+    "appImage": {
+      "artifactName": "LifeQuest-${version}-linux-x86_64.${ext}"
     }
   }
 }

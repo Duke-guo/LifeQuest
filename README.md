@@ -86,17 +86,27 @@
 
 ---
 
-## 下载即用（Windows）
+## 下载即用
 
-到 [Releases](../../releases) 页面下载 `LifeQuest-x.y.z-便携版.exe`：**免安装**，双击就能跑，数据落在 exe 同级的 `LifeQuest-Data/` 文件夹里，整个文件夹拷走就是完整备份。
+到 [Releases](../../releases) 页面下载对应系统的文件：
 
-> 首次运行 Windows 可能提示"未知发布者"（个人项目没买代码签名证书），点"更多信息 → 仍要运行"即可。
+| 系统 | 文件 | 说明 |
+|---|---|---|
+| **Windows** | `LifeQuest-*-便携版.exe` | 免安装，双击就能跑；数据落在 exe 同级的 `LifeQuest-Data/` |
+| **macOS** | `LifeQuest-*-mac-*.dmg` | 打开后把 LifeQuest 拖进「应用程序」；数据在「文稿」目录下的 `LifeQuest-Data/`（Intel 与 Apple 芯片都有） |
+| **Linux** | `LifeQuest-*-linux-x86_64.AppImage` | `chmod +x` 后直接运行；数据落在 AppImage 同级的 `LifeQuest-Data/`。也有 `.deb` |
 
-其他平台（macOS / Linux）目前需要**从源码运行**，见下一节。
+**首次运行的安全提示**（个人项目，没有购买代码签名证书，属于正常现象）：
+
+- Windows：「未知发布者」→ 点「更多信息 → 仍要运行」
+- macOS：右键 App → 「打开」；若提示"已损坏"，在终端执行 `xattr -cr /Applications/LifeQuest.app`
+- Linux：个别发行版上 AppImage 会报沙箱错误，用 `./LifeQuest-*.AppImage --no-sandbox` 启动
+
+想放到别处放数据？设环境变量 `LIFEQUEST_DATA_ROOT=/你的/目录` 即可，三个平台都支持。
 
 ## 从源码运行
 
-需要 Node.js 20+ 和 npm。
+需要 Node.js 20+ 和 npm（Windows / macOS / Linux 都可以）。
 
 ```bash
 git clone https://github.com/<你的用户名>/lifequest.git
@@ -110,17 +120,21 @@ npm run dev        # 开发模式（热更新）
 ```bash
 npm run typecheck  # TypeScript 检查
 npm run build      # 编译到 out/
-npm run dist       # 打包成 Windows 便携版（产物在 release/）
-npm run release    # 打包 + 把便携版复制到 app/
+npm run dist       # 打包成当前平台的安装包（产物在 release/）
+npm run release    # 打包 + （Windows）把便携版复制到 app/
 ```
+
+> 想改应用图标：编辑 `scripts/make-icon.cjs` 里的 SVG，跑 `npx electron scripts/make-icon.cjs` 生成 `build/icon.png`（1024×1024），三个平台的图标都会由它生成。
 
 ## 数据存在哪 & 隐私
 
-| | 位置 |
+| 平台 | 默认位置 |
 |---|---|
-| 便携版 | exe 同级的 `LifeQuest-Data/` |
+| Windows 便携版 | exe 同级的 `LifeQuest-Data/` |
+| macOS | 「文稿」下的 `LifeQuest-Data/`（若 App 旁边已有同名文件夹则优先用它，方便绿色携带） |
+| Linux AppImage | AppImage 文件同级的 `LifeQuest-Data/` |
 | 开发模式 | 工程根目录的 `LifeQuest-Data/`（会向上层目录查找已有的同名文件夹） |
-| 想自定义 | 设环境变量 `LIFEQUEST_DATA_ROOT=D:\某个目录` |
+| 想自定义 | 设环境变量 `LIFEQUEST_DATA_ROOT=/某个目录`（三平台通用） |
 
 目录结构（全是明文，随时可以手改）：
 
@@ -175,17 +189,20 @@ docs/            设计文档与截图
 
 ## 常见问题
 
+**Q：有哪些平台版本？**
+Windows（便携版 exe）、macOS（dmg，Intel 与 Apple 芯片）、Linux（AppImage / deb）都有，见 [Releases](../../releases)。三平台共用同一套代码，界面会按平台自适应（macOS 用系统红绿灯按钮，Windows / Linux 用自绘标题栏）。
+
+**Q：macOS 上提示「已损坏」或「无法验证开发者」？**
+个人项目没有购买 Apple 开发者证书（每年 99 美元），属于预期情况：右键 App → 打开；若仍被拦，执行 `xattr -cr /Applications/LifeQuest.app` 后再打开。
+
 **Q：换电脑怎么搬？**
-把整个 `LifeQuest-Data/` 文件夹拷过去，放在 exe 同级目录即可，格式是纯文本，跨版本向上迁移。
+把整个 `LifeQuest-Data/` 文件夹拷过去放到对应位置即可，格式是纯文本，跨版本向上迁移。
 
 **Q：会不会丢数据？**
 所有写入都是先落到本地文件；但请自行定期备份（复制 `LifeQuest-Data/` 即可）。删任务可以在「历史添加」里一键找回。
 
-**Q：为什么图标还是 Electron 默认的？**
-还没有设计稿，欢迎贡献一个（`build/icon.ico`，256×256 起）。
-
-**Q：能出 macOS / Linux 版吗？**
-代码是跨平台的（Electron），打包配置目前只有 Windows 便携版；欢迎提 PR 补 `mac` / `linux` 目标。
+**Q：能出手机版 / 网页版吗？**
+短期内不会：这个应用的前提是"数据在自己电脑上的普通文件里"，做成云服务就违背了初衷。
 
 ## 参与贡献
 
