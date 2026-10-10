@@ -1,6 +1,6 @@
 {
   "name": "lifequest",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "现实游戏化生活管理应用：日记 / 日历 / 待办 / 笔记 / 活动计划，本地优先，数据是自己的普通文件",
   "license": "MIT",
   "author": {
@@ -86,7 +86,6 @@
       ]
     },
     "dmg": {
-      "artifactName": "LifeQuest-${version}-mac.${ext}",
       "title": "LifeQuest ${version}",
       "contents": [
         {
