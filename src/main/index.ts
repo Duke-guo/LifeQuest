@@ -136,14 +136,32 @@ function createWindow(): void {
                 continue
               }
               if (label.startsWith('@wheel:')) {
-                // 在葡萄藤舞台上派发一次滚轮：@wheel:<deltaY>
-                const d = Number(label.slice(7)) || 0
+                // 派发滚轮：@wheel:<deltaY> 或 @wheel:<deltaY>@<次数>（逐帧派发并记录帧间隔）
+                const parts = label.slice(7).split('@')
+                const d = Number(parts[0]) || 0
+                const times = Math.max(1, Number(parts[1]) || 1)
                 const r = await mainWindow.webContents.executeJavaScript(
                   `(() => {
-                    const el = document.querySelector('.vine-stage')
-                    if (!el) return 'no vine-stage'
-                    el.dispatchEvent(new WheelEvent('wheel', { deltaY: ${d}, bubbles: true, cancelable: true }))
-                    return 'wheel ' + ${d}
+                    const el = document.querySelector('.strip-wrap') || document.querySelector('.vine-stage')
+                    if (!el) return 'no wheel target'
+                    const times = ${times}
+                    if (times <= 1) {
+                      el.dispatchEvent(new WheelEvent('wheel', { deltaY: ${d}, bubbles: true, cancelable: true }))
+                      return 'wheel ' + ${d}
+                    }
+                    window.__ft = []
+                    let last = performance.now()
+                    let n = 0
+                    const step = () => {
+                      const t = performance.now()
+                      window.__ft.push(t - last)
+                      last = t
+                      el.dispatchEvent(new WheelEvent('wheel', { deltaY: ${d}, bubbles: true, cancelable: true }))
+                      if (++n < times) requestAnimationFrame(step)
+                      else window.__ftDone = 1
+                    }
+                    requestAnimationFrame(step)
+                    return 'wheel x' + times
                   })()`
                 )
                 console.log('wheel ->', r)
@@ -300,15 +318,36 @@ function createWindow(): void {
                     .join(' ') + '\\n'
               }
               // 布局体检：格子是否被裁剪 / 页面是否溢出
-              const grid = document.querySelector('.grid, .week-grid')
+              const grid = document.querySelector('.grid, .week-grid, .strip-wrap')
               if (grid) {
-                const kids = [...grid.children]
+                const kids = [...grid.querySelectorAll(':scope > .week-col, :scope > .strip-clip .week-col')]
                 const clipped = kids.filter((c) => c.scrollHeight > c.clientHeight + 1).length
                 out +=
                   '[grid 高 ' + Math.round(grid.getBoundingClientRect().height) +
                   '，格子高 ' + kids.slice(0, 7).map((c) => Math.round(c.getBoundingClientRect().height)).join(',') +
                   '，被裁剪 ' + clipped +
                   '，页面溢出 ' + (document.documentElement.scrollHeight - window.innerHeight) + ']\\n'
+              }
+              // 连续日带体检：偏移、今天是否在正中、可见列数
+              const strip = document.querySelector('.strip-wrap')
+              if (strip) {
+                const cols = [...document.querySelectorAll('.week-col')]
+                const sr = strip.getBoundingClientRect()
+                const inView = cols.filter((c) => {
+                  const r = c.getBoundingClientRect()
+                  return r.right > sr.left + 1 && r.left < sr.right - 1
+                })
+                const todayCol = cols.find((c) => c.classList.contains('today'))
+                const tr = todayCol ? todayCol.getBoundingClientRect() : null
+                out +=
+                  '[日带 视口宽=' + Math.round(sr.width) + ' 总天=' + cols.length +
+                  ' 屏上=' + inView.length +
+                  ' 偏移=' + (document.querySelector('.week-flag-layer')?.getAttribute('data-offset') ?? '?') +
+                  ' 今天中心x=' + (tr ? Math.round(tr.left + tr.width / 2 - sr.left) : '今天不在屏上') +
+                  ']\\n'
+                const track = document.querySelector('.strip-track')
+                out += '[日带轨道 宽=' + (track ? Math.round(track.getBoundingClientRect().width) : '?') +
+                  ' 变换=' + (track ? getComputedStyle(track).transform.slice(0, 40) : '?') + ']\\n'
               }
               // 葡萄藤几何体检：每粒葡萄相对舞台的 top/left
               const stage = document.querySelector('.vine-stage')
@@ -443,12 +482,12 @@ function createWindow(): void {
                   ' bandRef=' + (layer ? layer.getAttribute('data-band') + '/' + layer.getAttribute('data-refs') : '?') +
                   ']\\n'
                 const fcols = [...document.querySelectorAll('.flag-col')]
-                const wrapEl = document.querySelector('.week-wrap')
+                const wrapEl = document.querySelector('.strip-wrap, .week-wrap')
                 out +=
-                  '[列对齐 网格: ' + cols.map((c) => Math.round(c.getBoundingClientRect().left) + '+' + Math.round(c.getBoundingClientRect().width)).join(' ') + ']\\n' +
-                  '[列对齐 旗标层: ' + fcols.map((c) => Math.round(c.getBoundingClientRect().left) + '+' + Math.round(c.getBoundingClientRect().width)).join(' ') + ']\\n' +
-                  '[列对齐 wrap.left=' + (wrapEl ? wrapEl.getBoundingClientRect().left.toFixed(1) : '?') +
-                  ' 列数=' + cols.length + ' geo=' + (layer ? layer.getAttribute('data-geo') : '?') + ']\\n'
+                  '[列对齐 网格首列: ' + (cols[0] ? Math.round(cols[0].getBoundingClientRect().left) + '+' + Math.round(cols[0].getBoundingClientRect().width) : '?') +
+                  ' 旗标首列: ' + (fcols[0] ? Math.round(fcols[0].getBoundingClientRect().left) + '+' + Math.round(fcols[0].getBoundingClientRect().width) : '?') +
+                  ' 视口left=' + (wrapEl ? wrapEl.getBoundingClientRect().left.toFixed(1) : '?') +
+                  ' 列数=' + cols.length + ']\\n'
                 out +=
                   '[截止旗标 ' + flags.length + ' 个: ' +
                   [...flags]
@@ -465,10 +504,12 @@ function createWindow(): void {
                     })
                     .join(' | ') + ']\\n'
               }
-              const wg = document.querySelector('.week-grid')
+              const wg = document.querySelector('.strip-clip, .week-grid')
               if (wg) {
                 const cp = getComputedStyle(wg).clipPath
-                out += '[周网格 裁剪=' + (cp && cp !== 'none' ? cp.slice(0, 24) : '无') + ' 列数=' + wg.children.length + ']\\n'
+                const track = document.querySelector('.strip-track')
+                out += '[日带裁剪=' + (cp && cp !== 'none' ? cp.slice(0, 24) : '无') +
+                  ' 总宽=' + (track ? Math.round(track.getBoundingClientRect().width) : '?') + ']\\n'
                 const path = document.querySelector('#weekCurve path')
                 if (path) {
                   const nums = (path.getAttribute('d') || '').match(/-?\\d+(\\.\\d+)?/g) || []

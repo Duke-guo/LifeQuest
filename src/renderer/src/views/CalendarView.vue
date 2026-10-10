@@ -70,6 +70,10 @@ onMounted(async () => {
     flashId.value = props.focusTaskId
     flashTimer = window.setTimeout(() => (flashId.value = null), 4200)
   }
+  // 进页面时把「要看的那一天」放到屏幕正中
+  await nextTick()
+  if (viewportRef.value?.clientWidth) viewportW.value = viewportRef.value.clientWidth
+  centerOn(mode.value === 'week' ? cursorIso.value : today, false)
 })
 
 onUnmounted(() => {
@@ -88,8 +92,13 @@ onMounted(() => {
   window.addEventListener('resize', measureAll)
   // 进场动画/字体迟到会让第一次量到的坐标偏掉，错开几个时间点重量
   for (const ms of [120, 400, 1000, 2000]) settleTimers.push(window.setTimeout(measureAll, ms))
-  // 换周/换模式后 DOM 结构不变，但文案可能变宽变高，重新量一次
-  watch([mode, () => weekDays.value[0]], () => measureAll())
+  // 切回周视图、或点 ‹ › / 今天 换了日期：把目标那天滑到屏幕正中
+  watch([mode, cursorIso], async ([m]) => {
+    if (m !== 'week') return
+    await nextTick()
+    if (viewportRef.value?.clientWidth) viewportW.value = viewportRef.value.clientWidth
+    centerOn(cursorIso.value)
+  })
 })
 
 const today = toDateStr(new Date())
@@ -108,7 +117,11 @@ watch(
 
 const visibleRange = computed<[string, string]>(() => {
   if (mode.value === 'day') return [cursorIso.value, cursorIso.value]
-  if (mode.value === 'week') return [weekDays.value[0], weekDays.value[6]]
+  // 周视图现在是连续日带：事件要覆盖整段窗口，不然滚出去的日子就空了
+  if (mode.value === 'week') {
+    const days = stripDays.value
+    return [days[0], days[days.length - 1]]
+  }
   const first = toDateStr(new Date(year.value, month.value, 1))
   const last = toDateStr(new Date(year.value, month.value + 1, 0))
   return [first, last]
@@ -157,31 +170,106 @@ function autoLabel(date: string): string {
   return busyTier(loadScore(date), eventsOn(date).length, deadlinePressure(eventsOn(date), today))
 }
 
-/** 周视图：所有列等高，整块用一条连续曲线裁出光滑下边缘；卡片之间留空隙、带圆角 */
+// ---------- 连续日带（周视图）：一列一天，靠滚轮左右连贯滑动，不再一周一屏 ----------
 const WEEK_COL_H = 312
 const WEEK_FLAT = 0.84
+/** 一列的宽度与间距（固定列宽，屏幕上一次能看到 7~8 天） */
+const COL_W = 132
+const COL_GAP = 6
+const PITCH = COL_W + COL_GAP
+/** 一次渲染多少天；滚到窗口边缘时整段平移，位移用像素补偿，视觉上完全不动 */
+const WINDOW_DAYS = 70
+
 function weekCurveY(x: number, center: number | null): number {
   if (center === null) return WEEK_FLAT
   const k = (x - center) / 0.34
   return WEEK_FLAT + (1 - WEEK_FLAT) * Math.exp(-k * k)
 }
 
-/** 曲线最低点：悬停时连续跟随鼠标（rAF 平滑），没悬停时本周=今天、非本周=拉平 */
-const hoverDay = ref<number | null>(null)
+function addDays(date: string, n: number): string {
+  const [y, m, d] = date.split('-').map(Number)
+  return toDateStr(new Date(y, m - 1, d + n))
+}
+
+/** 窗口里的第一天：默认从今天往前 5 周开始 */
+const stripStart = ref(addDays(today, -35))
+const stripDays = computed(() =>
+  Array.from({ length: WINDOW_DAYS }, (_, i) => addDays(stripStart.value, i))
+)
+
+const viewportRef = ref<HTMLElement | null>(null)
+const viewportW = ref(960)
+/** 目标偏移与平滑偏移（像素）：滚轮改目标，rAF 追上去 */
+const targetOffset = ref(0)
+const smoothOffset = ref(0)
+
+function maxOffset(): number {
+  return Math.max(0, stripDays.value.length * PITCH - COL_GAP - viewportW.value)
+}
+function clampOffset(v: number): number {
+  return Math.min(maxOffset(), Math.max(0, v))
+}
+/** 某一天在这一段里的横向中心（像素） */
+function colCenter(i: number): number {
+  return i * PITCH + COL_W / 2
+}
+
+/** 把某一天滑到视口正中 */
+function centerOn(date: string, animate = true): void {
+  const i = stripDays.value.indexOf(date)
+  if (i < 0) return
+  const want = clampOffset(colCenter(i) - viewportW.value / 2)
+  targetOffset.value = want
+  if (!animate) smoothOffset.value = want
+}
+
+/** 视口正中落在第几列（可能是小数） */
+const centerColIdx = computed(
+  () => (smoothOffset.value + viewportW.value / 2 - COL_W / 2) / PITCH
+)
+
+/** 视口正中对应的日期：周横幅跟着它走 */
+const stripCenterDate = computed(() => {
+  const i = Math.round(centerColIdx.value)
+  const days = stripDays.value
+  return days[Math.max(0, Math.min(days.length - 1, i))] ?? today
+})
+
+/** 滑到窗口边缘就把整段平移过去：像素同步补偿，屏幕上完全看不出跳变 */
+function maybeShiftWindow(): void {
+  const c = centerColIdx.value
+  const margin = 14
+  if (c >= margin && c <= WINDOW_DAYS - 1 - margin) return
+  const shift = Math.round(c - (WINDOW_DAYS - 1) / 2)
+  if (!shift) return
+  stripStart.value = addDays(stripStart.value, shift)
+  targetOffset.value = clampOffset(targetOffset.value - shift * PITCH)
+  smoothOffset.value -= shift * PITCH
+}
+
+/** 曲线最低点：悬停时连续跟随鼠标（rAF 平滑），没悬停时突出今天 */
+const hoverCol = ref<number | null>(null)
 const targetCenter = ref<number | null>(null)
 const smoothCenter = ref<number | null>(null)
 
-function onWeekMove(e: MouseEvent): void {
-  const wrap = e.currentTarget as HTMLElement
-  const rect = wrap.getBoundingClientRect()
-  const x = (e.clientX - rect.left) / rect.width
-  targetCenter.value = Math.max(0, Math.min(1, x))
-  hoverDay.value = Math.max(0, Math.min(6, Math.floor(x * 7)))
+function onStripMove(e: MouseEvent): void {
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+  targetCenter.value = x
+  const i = Math.floor((smoothOffset.value + x * rect.width) / PITCH)
+  hoverCol.value = i >= 0 && i < stripDays.value.length ? i : null
 }
 
-function onWeekLeave(): void {
+function onStripLeave(): void {
   targetCenter.value = null
-  hoverDay.value = null
+  hoverCol.value = null
+}
+
+/** 滚轮左右滑（纵向滚轮也当横向用，这是最顺的方向） */
+function onStripWheel(e: WheelEvent): void {
+  const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
+  if (!d) return
+  targetOffset.value = clampOffset(targetOffset.value + d)
 }
 
 let rafId = 0
@@ -189,6 +277,7 @@ let bandTick = 0
 let measureTimer = 0
 const settleTimers: number[] = []
 function tick(): void {
+  // 曲线最低点
   const t = targetCenter.value
   const s = smoothCenter.value
   if (t === null) {
@@ -199,21 +288,34 @@ function tick(): void {
     smoothCenter.value = s + (t - s) * 0.2
     if (Math.abs(t - s) < 0.0004) smoothCenter.value = t
   }
-  // 每 30 帧（约半秒）复核一次实测值，兼顾字体迟到、滚动条出现等布局变化
-  if (++bandTick >= 30) {
+  // 横向滚动平滑跟随
+  const dt = targetOffset.value
+  const ds = smoothOffset.value
+  if (Math.abs(dt - ds) > 0.4) {
+    const next = ds + (dt - ds) * 0.2
+    smoothOffset.value = Math.abs(dt - next) < 0.4 ? dt : next
+  } else if (ds !== dt) {
+    smoothOffset.value = dt
+  }
+  // 每 20 帧复核一次实测值（字体迟到、窗口缩放），顺便检查要不要平移窗口
+  if (++bandTick >= 20) {
     bandTick = 0
     measureAll()
+    maybeShiftWindow()
   }
   rafId = requestAnimationFrame(tick)
 }
 
 const curveCenter = computed<number | null>(() => {
   if (smoothCenter.value !== null) return smoothCenter.value
-  const ti = weekDays.value.indexOf(today)
-  return ti < 0 ? null : (ti + 0.5) / 7
+  const i = stripDays.value.indexOf(today)
+  if (i < 0) return null
+  const x = (colCenter(i) - smoothOffset.value) / viewportW.value
+  if (x < -0.06 || x > 1.06) return null
+  return Math.min(1, Math.max(0, x))
 })
 
-/** 整块网格的裁剪路径（objectBoundingBox 坐标，一条光滑曲线） */
+/** 日带的裁剪路径：整条下边缘一条光滑曲线（裁剪挂在视口层，不随滚动移动） */
 const weekClipPath = computed(() => {
   const center = curveCenter.value
   const N = 56
@@ -229,41 +331,41 @@ const weekClipPath = computed(() => {
   return pts.join(' ')
 })
 
-/** 旗标的可插区间上沿：这一列的日程文字起始处（表头/性质条之下），实测得到 */
+/** 某一列在屏幕上对应的曲线高度比例（0..1） */
+function colCurveY(i: number): number {
+  const x = (colCenter(i) - smoothOffset.value) / viewportW.value
+  return weekCurveY(Math.min(1, Math.max(0, x)), curveCenter.value)
+}
+/** 这一列现在在屏幕上看得到吗（只给可见的列做实测，省开销） */
+function colVisible(i: number, pad = 0.25): boolean {
+  const x = (colCenter(i) - smoothOffset.value) / viewportW.value
+  return x > -pad && x < 1 + pad
+}
+
+/** 旗标可插区间上沿：日程文字起始处（实测；列宽统一，取可见列的即可） */
 const eventsRefs = ref<HTMLElement[]>([])
 const flagBandTop = ref(104)
 
-/** 各真实列相对旗标层的 left/width：列宽由内容决定、七列不等宽，所以要一列一列量 */
-const colRefs = ref<HTMLElement[]>([])
-const colGeo = ref<{ left: number; width: number }[]>([])
-function measureColGeo(): void {
-  const list = (colRefs.value ?? []).filter((el) => el && el.isConnected)
-  if (!list.length) return
-  const wrap = list[0].closest('.week-wrap')
-  if (!wrap) return
-  const base = wrap.getBoundingClientRect().left
-  const next = list.map((el) => {
-    const r = el.getBoundingClientRect()
-    return { left: r.left - base, width: r.width }
-  })
-  const same =
-    next.length === colGeo.value.length &&
-    next.every((g, i) => Math.abs(g.left - colGeo.value[i].left) < 0.5 && Math.abs(g.width - colGeo.value[i].width) < 0.5)
-  if (!same) colGeo.value = next
-}
-
-/** 三样实测一起做：旗子可插区上沿、文字行区间、各列真实坐标 */
+/** 窗口宽度 + 可见列的文字行区间：窗口缩放/滚动时重量 */
 function measureAll(): void {
+  const w = viewportRef.value?.clientWidth
+  if (w && Math.abs(w - viewportW.value) > 0.5) {
+    viewportW.value = w
+    // 窗口变宽后可能超出可滚范围，夹回来
+    targetOffset.value = clampOffset(targetOffset.value)
+    smoothOffset.value = clampOffset(smoothOffset.value)
+  }
   measureFlagBand()
   measureRowBands()
-  measureColGeo()
 }
 
 function measureFlagBand(): void {
   const list = eventsRefs.value
   if (!list || !list.length) return
   let t = 0
-  for (const el of list) {
+  for (let i = 0; i < list.length; i++) {
+    if (!colVisible(i)) continue
+    const el = list[i]
     if (!el || !el.isConnected) continue
     const v = el.offsetTop || 0
     if (v > t) t = v
@@ -271,13 +373,13 @@ function measureFlagBand(): void {
   if (t > 0 && Math.abs(t - flagBandTop.value) > 0.5) flagBandTop.value = t
 }
 
-/** 这一列要插的旗子（按时间排序），供模板与落点计算共用 */
-const weekFlags = computed<DeadlineFlag[][]>(() => weekDays.value.map((d) => flagsOn(d)))
+/** 这一列要插的旗子（按时间排序） */
+const weekFlags = computed<DeadlineFlag[][]>(() => stripDays.value.map((d) => flagsOn(d)))
 
 /** 同一列里旗子的竖直落点（像素）：按时间排好后，太近的往下错开，整体不越过曲线 */
 const FLAG_GAP = 24
 function flagTops(list: DeadlineFlag[], i: number): number[] {
-  const visibleH = weekCurveY((i + 0.5) / 7, curveCenter.value) * WEEK_COL_H
+  const visibleH = colCurveY(i) * WEEK_COL_H
   const top = Math.min(flagBandTop.value, Math.max(24, visibleH - 40))
   const bottom = Math.max(top + 20, visibleH - 14)
   const n = list.length
@@ -302,7 +404,7 @@ function flagTopAt(i: number, fi: number): string {
  * 和日视图时间轴「重叠就只画一条线」是同一个原则，避免把日程文字盖掉。
  */
 function flagCompact(i: number, fi: number): boolean {
-  if (hoverDay.value === i) return false
+  if (hoverCol.value === i) return false
   const t = flagTops(weekFlags.value[i] ?? [], i)[fi]
   if (t === undefined) return false
   const bands = rowBands.value[i] ?? []
@@ -315,8 +417,12 @@ function measureRowBands(): void {
   const list = eventsRefs.value
   if (!list || !list.length) return
   const map: Record<number, [number, number][]> = {}
-  list.forEach((el, i) => {
-    if (!el || !el.isConnected) return
+  let changed = false
+  for (let i = 0; i < list.length; i++) {
+    // 只量屏幕上看得见的列，70 列全量测太浪费
+    if (!colVisible(i)) continue
+    const el = list[i]
+    if (!el || !el.isConnected) continue
     const bands: [number, number][] = []
     for (const c of Array.from(el.children)) {
       if (!c.classList.contains('dot')) continue
@@ -324,8 +430,21 @@ function measureRowBands(): void {
       bands.push([r.offsetTop, r.offsetTop + r.offsetHeight])
     }
     map[i] = bands
-  })
-  rowBands.value = map
+  }
+  const prev = rowBands.value
+  const keys = Object.keys(map)
+  if (keys.length !== Object.keys(prev).length) changed = true
+  else {
+    for (const k of keys) {
+      const a = map[Number(k)]
+      const b = prev[Number(k)]
+      if (!b || a.length !== b.length || a.some((v, j) => v[0] !== b[j][0] || v[1] !== b[j][1])) {
+        changed = true
+        break
+      }
+    }
+  }
+  if (changed) rowBands.value = map
 }
 
 /** 这一天的截止型事项（画成插入旗标） */
@@ -524,9 +643,9 @@ async function saveCustomPhase(): Promise<void> {
   await tasksStore.load()
 }
 
-/** 周横幅底色：取本周 7 天的配色做渐变，改心情/天气会跟着变 */
+/** 周横幅底色：取横幅那一周 7 天的配色做渐变，改心情/天气会跟着变 */
 const weekGradient = computed(() => {
-  const days = weekDays.value
+  const days = bannerDays.value
   if (!days.length) return ''
   const cols = days.map((d) => colorOf(d).bg)
   const stops = cols
@@ -541,10 +660,68 @@ const colorMap = computed<Record<string, DayColor>>(() => {
   if (mode.value === 'month') {
     for (const c of monthCells.value) if (c.inMonth) map[c.date] = colorOf(c.date)
   } else if (mode.value === 'week') {
-    for (const d of weekDays.value) map[d] = colorOf(d)
+    for (const d of stripDays.value) map[d] = colorOf(d)
   }
   return map
 })
+
+/** 日带上每一列要显示的东西，一次算好，模板里直接取（滚动时不重复计算） */
+interface StripCol {
+  date: string
+  index: number
+  left: number
+  isToday: boolean
+  isSunday: boolean
+  weekNo: number | null
+  color: DayColor
+  count: number
+  hours: number
+  busy: string
+  busyClass: string
+  busyStyle: Record<string, string> | undefined
+  phaseClass: string
+  phaseText: string
+  grade: DayGrade | null
+  gradeTitle: string
+  weather: string | null
+  mood: string | null
+  events: Array<{ id: string; kind: string; label: string; refId: string }>
+}
+
+const stripCols = computed<StripCol[]>(() =>
+  stripDays.value.map((d, i) => {
+    const evs = eventsOn(d)
+    const j = journalIndex.on(d)
+    const custom = dayNotes.busyOf(d)
+    const color = colorOf(d)
+    return {
+      date: d,
+      index: i,
+      left: i * PITCH,
+      isToday: d === today,
+      isSunday: weekdayOf(d) === '日',
+      weekNo: semesterStore.weekOf(d),
+      color,
+      count: evs.length,
+      hours: loadScore(d),
+      busy: busyLabel(d),
+      busyClass: busyClass(d),
+      busyStyle: custom && custom !== '' ? undefined : { background: color.chipBg, color: color.chipFg },
+      phaseClass: PHASE_CLASS[dayPhase(d)],
+      phaseText: phaseText(d),
+      grade: gradeOf(d),
+      gradeTitle: gradeTitle(d),
+      weather: j?.weather ?? null,
+      mood: j?.mood ?? null,
+      events: evs.map((e) => ({
+        id: e.id,
+        kind: e.kind,
+        refId: e.refId,
+        label: `${e.time ? e.time + ' ' : ''}${e.title}`
+      }))
+    }
+  })
+)
 
 // ---------- 月视图 ----------
 const monthCells = computed(() => {
@@ -560,21 +737,22 @@ const monthCells = computed(() => {
 })
 
 // ---------- 周视图 ----------
-const weekStart = computed(() => {
-  const d = new Date(cursor.value)
-  d.setDate(d.getDate() - d.getDay())
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+/** 周横幅跟着「视口正中那一天」所在的那一周走 */
+const weekStartStr = computed(() => {
+  const d = stripCenterDate.value
+  const [y, m, day] = d.split('-').map(Number)
+  const dt = new Date(y, m - 1, day)
+  return toDateStr(new Date(y, m - 1, day - dt.getDay()))
 })
 
-const weekDays = computed(() =>
-  Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(weekStart.value.getFullYear(), weekStart.value.getMonth(), weekStart.value.getDate() + i)
-    return toDateStr(d)
-  })
-)
+const weekSummary = computed(() => {
+  const [y, m, d] = weekStartStr.value.split('-').map(Number)
+  return summarizeWeek(tasksStore.tasks, new Date(y, m - 1, d), skipDates.value)
+})
 
-const weekSummary = computed(() =>
-  summarizeWeek(tasksStore.tasks, weekStart.value, skipDates.value)
+/** 横幅底色：取横幅那一周 7 天的配色 */
+const bannerDays = computed(() =>
+  Array.from({ length: 7 }, (_, i) => addDays(weekStartStr.value, i))
 )
 
 const TAG_CLASS: Record<string, string> = {
@@ -641,6 +819,8 @@ const slideClass = computed(() => (slideDir.value === 'next' ? 'slide-next' : 's
 
 function goToday(): void {
   cursor.value = new Date()
+  // 光标本来就在今天时 watch 不会触发，这里直接把它滑回正中
+  if (mode.value === 'week') centerOn(today)
 }
 
 function drillTo(date: string): void {
@@ -662,6 +842,7 @@ const title = computed(() => {
     const [y, m, d] = cursorIso.value.split('-').map(Number)
     return `${y} 年 ${m} 月 ${d} 日 · 星期${WEEKDAY_CN[new Date(y, m - 1, d).getDay()]}`
   }
+  // 连续日带：标题写「屏幕正中那一天的所在周」
   if (mode.value === 'week') return `${weekSummary.value.start} ~ ${weekSummary.value.end}`
   return `${year.value} 年 ${month.value + 1} 月`
 })
@@ -808,7 +989,7 @@ function locate(t: Task): void {
       </p>
     </template>
 
-    <!-- ========== 周视图 ========== -->
+    <!-- ========== 周视图：连续日带，滚轮左右滑 ========== -->
     <template v-else-if="mode === 'week'">
       <div class="week-banner" :class="TAG_CLASS[weekSummary.tag]" :style="{ background: weekGradient }">
         <span class="wb-tag">{{ weekSummary.tag }}</span>
@@ -819,120 +1000,123 @@ function locate(t: Task): void {
           共 {{ weekSummary.taskCount }} 项 · 日程 {{ weekSummary.scheduleCount }} 个 · 合计
           {{ weekSummary.hours }} 小时 · 重要度合计 {{ weekSummary.score }}
         </span>
+        <span class="wb-scroll">滚轮左右滑 · 今天是中间那一列</span>
       </div>
-      <div class="week-wrap" @mousemove="onWeekMove" @mouseleave="onWeekLeave">
-      <svg class="week-clip-defs" aria-hidden="true"><defs><clipPath id="weekCurve" clipPathUnits="objectBoundingBox"><path :d="weekClipPath" /></clipPath></defs></svg>
-      <div class="week-grid" :key="`w${animKey}`" :class="slideClass" @wheel.prevent="onWheel">
-        <div
-          v-for="(d, i) in weekDays"
-          ref="colRefs"
-          :key="d"
-          class="week-col"
-          :class="{ today: d === today, 'curve-peak': hoverDay === i }"
-          :style="{ background: colorMap[d]?.bg }"
-          :title="`点这里进日视图：可改这一天的性质、忙碌程度，并增删当天的安排`"
-          @click="drillTo(d)"
-        >
-          <span
-            v-if="gradeOf(d)"
-            class="grade"
-            :class="`g-${gradeOf(d)!.grade}`"
-            :title="gradeTitle(d)"
-          >
-            {{ gradeOf(d)!.grade }}
-          </span>
-          <div class="wc-head">
-            <span class="wc-wd">周{{ weekdayOf(d) }}</span>
-            <span class="wc-date">{{ d.slice(5) }}</span>
-          </div>
 
-          <div class="wc-body">
-            <span
-              class="busy"
-              :class="busyClass(d)"
-              :style="
-                dayNotes.busyOf(d)
-                  ? undefined
-                  : { background: colorMap[d]?.chipBg, color: colorMap[d]?.chipFg }
-              "
+      <div
+        ref="viewportRef"
+        class="strip-wrap"
+        :style="{ height: WEEK_COL_H + 'px' }"
+        @wheel.prevent="onStripWheel"
+        @mousemove="onStripMove"
+        @mouseleave="onStripLeave"
+      >
+        <svg class="week-clip-defs" aria-hidden="true">
+          <defs>
+            <clipPath id="weekCurve" clipPathUnits="objectBoundingBox"><path :d="weekClipPath" /></clipPath>
+          </defs>
+        </svg>
+
+        <!-- 卡片层：整条下边缘被一条连续曲线裁掉 -->
+        <div class="strip-clip">
+          <div class="strip-track" :style="{ transform: `translateX(${-smoothOffset}px)` }">
+            <div
+              v-for="c in stripCols"
+              :key="c.date"
+              class="week-col"
+              :class="{ today: c.isToday, hovered: hoverCol === c.index }"
+              :style="{ left: c.left + 'px', width: COL_W + 'px', background: c.color.bg }"
+              :title="`点这里进日视图：可改这一天的性质、忙碌程度，并增删当天的安排`"
+              @click="drillTo(c.date)"
             >
-              {{ busyLabel(d) }}
-            </span>
-            <span class="wc-count">{{ eventsOn(d).length }} 项 · {{ Math.round(loadScore(d)) }}h</span>
-            <span class="icons">
+              <span v-if="c.isSunday && c.weekNo" class="week-no">第{{ c.weekNo }}周</span>
               <span
-                v-if="journalIndex.on(d)?.weather"
-                class="ico"
-                :style="{ color: WEATHER_META[journalIndex.on(d)!.weather!].color }"
+                v-if="c.grade"
+                class="grade"
+                :class="`g-${c.grade.grade}`"
+                :title="c.gradeTitle"
               >
-                <AppIcon :name="journalIndex.on(d)!.weather!" :size="13" />
+                {{ c.grade.grade }}
               </span>
-              <span
-                v-if="journalIndex.on(d)?.mood"
-                class="ico"
-                :style="{ color: MOOD_META[journalIndex.on(d)!.mood!].color }"
-              >
-                <AppIcon :name="`mood-${journalIndex.on(d)!.mood}`" :size="13" />
-              </span>
-            </span>
-          </div>
+              <div class="wc-head">
+                <span class="wc-wd">周{{ weekdayOf(c.date) }}</span>
+                <span class="wc-date">{{ c.date.slice(5) }}</span>
+              </div>
 
-          <div class="wc-phase" :class="PHASE_CLASS[dayPhase(d)]">
-            {{ phaseText(d) }}
-          </div>
+              <div class="wc-body">
+                <span class="busy" :class="c.busyClass" :style="c.busyStyle">{{ c.busy }}</span>
+                <span class="wc-count">{{ c.count }} 项 · {{ Math.round(c.hours) }}h</span>
+                <span class="icons">
+                  <span v-if="c.weather" class="ico" :style="{ color: WEATHER_META[c.weather].color }">
+                    <AppIcon :name="c.weather" :size="13" />
+                  </span>
+                  <span v-if="c.mood" class="ico" :style="{ color: MOOD_META[c.mood].color }">
+                    <AppIcon :name="`mood-${c.mood}`" :size="13" />
+                  </span>
+                </span>
+              </div>
 
-          <div ref="eventsRefs" class="wc-events">
-            <span
-              v-for="e in eventsOn(d).slice(0, hoverDay === i ? 12 : 5)"
-              :key="e.id"
-              class="dot"
-              :class="[`k-${e.kind}`, { flash: flashId && e.refId === flashId }]"
-            >
-              {{ e.time ? e.time + ' ' : '' }}{{ e.title }}
-            </span>
-            <span v-if="eventsOn(d).length > (hoverDay === i ? 12 : 5)" class="more">+{{ eventsOn(d).length - (hoverDay === i ? 12 : 5) }}</span>
+              <div class="wc-phase" :class="c.phaseClass">{{ c.phaseText }}</div>
+
+              <div ref="eventsRefs" class="wc-events">
+                <span
+                  v-for="e in c.events.slice(0, hoverCol === c.index ? 12 : 5)"
+                  :key="e.id"
+                  class="dot"
+                  :class="[`k-${e.kind}`, { flash: flashId && e.refId === flashId }]"
+                >
+                  {{ e.label }}
+                </span>
+                <span v-if="c.events.length > (hoverCol === c.index ? 12 : 5)" class="more">
+                  +{{ c.events.length - (hoverCol === c.index ? 12 : 5) }}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- 截止旗标单独一层：不受裁剪影响，绝不会被曲线切掉 -->
-      <div class="week-flag-layer" :data-band="Math.round(flagBandTop)" :data-refs="eventsRefs.length" :data-geo="colGeo.map((g) => Math.round(g.left) + 'x' + Math.round(g.width)).join(' ')">
+        <!-- 截止旗标单独一层：跟着日带一起滑，但不受曲线裁剪 -->
         <div
-          v-for="(d, i) in weekDays"
-          :key="`f${d}`"
-          class="flag-col"
-          :style="
-            colGeo[i]
-              ? { left: colGeo[i].left + 'px', width: colGeo[i].width + 'px' }
-              : { display: 'none' }
-          "
+          class="week-flag-layer"
+          :style="{ transform: `translateX(${-smoothOffset}px)` }"
+          :data-band="Math.round(flagBandTop)"
+          :data-refs="eventsRefs.length"
+          :data-offset="Math.round(smoothOffset)"
         >
-          <span
-            v-for="(f, fi) in weekFlags[i]"
-            :key="f.id"
-            class="flag"
-            :class="{ done: f.done, compact: flagCompact(i, fi) }"
-            :style="{ top: flagTopAt(i, fi) }"
-            :title="`${f.done ? '已完成 · ' : '截止 '}${f.time === '24:00' ? '当天 24:00' : f.time} · ${f.title}`"
+          <div
+            v-for="c in stripCols"
+            :key="`f${c.date}`"
+            class="flag-col"
+            :style="{ left: c.left + 'px', width: COL_W + 'px' }"
           >
-            <i class="flag-pin"></i>
-            <em class="flag-text">{{ f.done ? '已完成' : f.time === '24:00' ? '24:00' : f.time }}</em>
-          </span>
+            <span
+              v-for="(f, fi) in weekFlags[c.index]"
+              :key="f.id"
+              class="flag"
+              :class="{ done: f.done, compact: flagCompact(c.index, fi) }"
+              :style="{ top: flagTopAt(c.index, fi) }"
+              :title="`${f.done ? '已完成 · ' : '截止 '}${f.time === '24:00' ? '当天 24:00' : f.time} · ${f.title}`"
+            >
+              <i class="flag-pin"></i>
+              <em class="flag-text">{{ f.done ? '已完成' : f.time === '24:00' ? '24:00' : f.time }}</em>
+            </span>
+          </div>
         </div>
-      </div>
       </div>
 
       <p class="month-tip">
-        滚轮翻周 · 点任意一列进入<b>日视图</b>：可以改<b>这一天的性质</b>（上课 / 周末 / 放假停课 / 考试 / 空白）、
-        增删当天安排、给每件事填上几点到几点，还能一键写这天的日记。
+        滚轮左右滑动看前后几天 · 鼠标悬停处曲线下沉，松开就突出<b>今天</b> · 点任意一列进入<b>日视图</b>：可以改
+        <b>这一天的性质</b>（上课 / 周末 / 放假停课 / 考试 / 空白）、增删当天安排、给每件事填上几点到几点，还能一键写这天的日记。
       </p>
 
-      <!-- 横向的日记葡萄藤：串起本周每天的日记，滚轮切到周记 -->
+      <!-- 横向的日记葡萄藤：和上面的日带是同一条连续藤，共用同一个偏移 -->
       <JournalVine
-        :week-start="weekSummary.start"
-        :week-end="weekSummary.end"
-        :days="weekDays"
+        :days="stripDays"
+        :offset="smoothOffset"
+        :col-width="COL_W"
+        :gap="COL_GAP"
         :colors="colorMap"
+        :start="stripStart"
         @open-journal="(v: string) => emit('openJournal', v)"
         @open-note="(v: string) => emit('openNote', v)"
       />
@@ -1588,26 +1772,31 @@ function locate(t: Task): void {
 .tag-holiday .wb-tag {
   color: #7d52b8;
 }
-.week-grid {
-  align-items: stretch;
-  display: grid;
-  /* 故意用 1fr 而不是 minmax(0,1fr)：列宽由内容决定，长标题的列更宽，看着有呼吸感。
-     旗标层不再靠并行网格对齐，改为按各列实测坐标定位（见 measureColGeo）。 */
-  grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
-  /* 整块用一条连续曲线裁下缘：光滑的下边缘 + 卡片间空隙 */
+/* ---------- 连续日带：一列一天，滚轮左右滑 ---------- */
+.strip-wrap {
+  position: relative;
+  overflow: hidden;
+}
+/* 裁剪挂在视口这一层：曲线固定在屏幕上，不跟内容一起滚 */
+.strip-clip {
+  position: absolute;
+  inset: 0;
   clip-path: url(#weekCurve);
 }
-/* 旗标层的定位基准：必须就是周网格本身，否则 top 会相对别的祖先计算，旗子会飘到错误高度 */
-.week-wrap {
-  position: relative;
+.strip-track {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
 }
-/* 旗标层：一层透明的定位容器，下面每一列的位置/宽度都从真实列量出来 */
+/* 旗标层：跟日带用同一个偏移一起滑，但不吃曲线裁剪 */
 .week-flag-layer {
   position: absolute;
   inset: 0;
+  left: 0;
+  right: 0;
   pointer-events: none;
   z-index: 4;
+  will-change: transform;
 }
 .flag-col {
   position: absolute;
@@ -1627,21 +1816,36 @@ function locate(t: Task): void {
   height: 0;
 }
 .week-col {
+  position: absolute;
+  top: 0;
   height: 312px;
-  position: relative;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
   padding: 8px;
   cursor: pointer;
+  box-sizing: border-box;
   transition: box-shadow 0.16s ease, border-color 0.16s ease;
 }
-.week-col:hover {
-  z-index: 3;
+.week-col.hovered {
+  border-color: var(--accent);
 }
 .week-col.today {
-  background: var(--accent-soft);
   box-shadow: inset 0 0 0 2px var(--accent);
+}
+/* 周日（一周的第一列）标一下第几周，连续日带里好认 */
+.week-no {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  font-size: 0.62rem;
+  color: var(--text-3);
+  font-family: var(--font-num);
+}
+.wb-scroll {
+  margin-left: auto;
+  font-size: 0.74rem;
+  color: var(--text-3);
 }
 .wc-head {
   position: relative;
