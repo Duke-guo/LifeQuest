@@ -32,6 +32,10 @@ export function eventsFromTasks(
   for (const t of tasks) {
     if (!t.due || t.status === 'archived') continue
 
+    // 「停课日」只对课表类日程生效：放假不等于不用交作业，
+    // 否则把 ddl 落在节假日就整个从日历上消失了
+    const skipped = (d: string): boolean => t.kind === 'schedule' && !!skipDates?.has(d)
+
     const mode = t.repeat && t.repeat !== 'none' ? t.repeat : null
     let emitted = false
 
@@ -42,7 +46,7 @@ export function eventsFromTasks(
       if (until >= from) {
         const dates = expandRepeat(t.due, mode, t.repeatUntil ?? null, from, until)
         dates.forEach((d, i) => {
-          if (skipDates?.has(d)) return
+          if (skipped(d)) return
           out.push(makeEvent(t, d, `-r${i}`))
         })
       }
@@ -59,7 +63,7 @@ export function eventsFromTasks(
       const until = rangeEnd && (!untilRaw || untilRaw > rangeEnd) ? rangeEnd : untilRaw
       if (!until || until < from) return
       expandRepeat(c.due, c.repeat, untilRaw, from, until).forEach((d, i) => {
-        if (skipDates?.has(d)) return
+        if (skipped(d)) return
         out.push(makeEvent(t, d, `-c${ci}-${i}`, c))
       })
       emitted = true
@@ -72,7 +76,7 @@ export function eventsFromTasks(
         if (!o.date) return
         if (rangeStart && o.date < rangeStart) return
         if (rangeEnd && o.date > rangeEnd) return
-        if (skipDates?.has(o.date)) return
+        if (skipped(o.date)) return
         out.push(makeEvent(t, o.date, `-o${i}`, o))
       })
       emitted = true
@@ -86,7 +90,7 @@ export function eventsFromTasks(
     // 否则调用方只要「某一天的时长/件数」，就会被别的日子的单次事项污染
     if (rangeStart && t.due < rangeStart) continue
     if (rangeEnd && t.due > rangeEnd) continue
-    if (skipDates?.has(t.due)) continue
+    if (skipped(t.due)) continue
     out.push(makeEvent(t, t.due, ''))
   }
   return out
@@ -191,10 +195,12 @@ export function deadlineTimeOf(e: CalendarEvent, t?: Task): string {
  * 单次 → 它自己的日期；重复 → 从 from 起最近的一次（跳过停课日）。
  */
 export function nextOccurrence(task: Task, from: string, skipDates?: Set<string>): string | null {
+  // 同 eventsFromTasks：停课日只对课表类日程生效
+  const skipped = (d: string): boolean => task.kind === 'schedule' && !!skipDates?.has(d)
   const occDates = (task.occurrences ?? [])
     .map((o) => o.date)
     .filter(Boolean)
-    .filter((d) => !skipDates?.has(d))
+    .filter((d) => !skipped(d))
   const future = occDates.filter((d) => d >= from).sort()
   if (future.length) return future[0]
 
@@ -207,7 +213,7 @@ export function nextOccurrence(task: Task, from: string, skipDates?: Set<string>
   if (until && until < from) return null // 这一轮已经结束了
   const hardEnd = until ?? toStr(addDays(parseLocal(from), 400))
   const dates = expandRepeat(task.due, mode, until, from, hardEnd)
-  for (const d of dates) if (!skipDates?.has(d)) return d
+  for (const d of dates) if (!skipped(d)) return d
   return null
 }
 

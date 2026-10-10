@@ -212,6 +212,16 @@ function createWindow(): void {
                 await new Promise((res) => setTimeout(res, 260))
                 continue
               }
+              if (label.startsWith('@eval:')) {
+                // 通用逃生口：直接执行一段渲染进程 JS（不加引号、不要逗号，避免和分隔符冲突）
+                const code = label.slice(6)
+                const r = await mainWindow.webContents.executeJavaScript(
+                  `(() => { ${code}; return 'evaled' })()`
+                )
+                console.log('eval ->', r)
+                await new Promise((res) => setTimeout(res, 600))
+                continue
+              }
               if (label.startsWith('@wait:')) {
                 const ms = Number(label.slice(6)) || 1000
                 await new Promise((res) => setTimeout(res, ms))
@@ -407,6 +417,10 @@ function createWindow(): void {
                   ' 可插区上沿=' + (document.querySelector('.wc-events') ? document.querySelector('.wc-events').offsetTop : '?') +
                   ' bandRef=' + (layer ? layer.getAttribute('data-band') + '/' + layer.getAttribute('data-refs') : '?') +
                   ']\\n'
+                const fcols = [...document.querySelectorAll('.flag-col')]
+                out +=
+                  '[列对齐 网格: ' + cols.map((c) => Math.round(c.getBoundingClientRect().left) + '+' + Math.round(c.getBoundingClientRect().width)).join(' ') + ']\\n' +
+                  '[列对齐 旗标层: ' + fcols.map((c) => Math.round(c.getBoundingClientRect().left) + '+' + Math.round(c.getBoundingClientRect().width)).join(' ') + ']\\n'
                 out +=
                   '[截止旗标 ' + flags.length + ' 个: ' +
                   [...flags]

@@ -235,13 +235,42 @@ function measureFlagBand(): void {
   if (t > 0 && Math.abs(t - flagBandTop.value) > 0.5) flagBandTop.value = t
 }
 
-/** 旗标位置：夹在这一列实际露出的高度内（曲线之上），不会被裁掉 */
-function flagTop(f: DeadlineFlag, i: number): string {
+/** 这一列要插的旗子（按时间排序），供模板与落点计算共用 */
+const weekFlags = computed<DeadlineFlag[][]>(() => weekDays.value.map((d) => flagsOn(d)))
+
+/** 同一列里旗子的竖直落点（像素）：按时间排好后，太近的往下错开，整体不越过曲线 */
+const FLAG_GAP = 24
+function flagTops(list: DeadlineFlag[], i: number): number[] {
   const visibleH = weekCurveY((i + 0.5) / 7, curveCenter.value) * WEEK_COL_H
   const top = Math.min(flagBandTop.value, Math.max(24, visibleH - 40))
   const bottom = Math.max(top + 20, visibleH - 14)
-  const wanted = top + f.pos * (bottom - top)
-  return Math.round(Math.min(Math.max(wanted, top), bottom)) + 'px'
+  const n = list.length
+  const gap = n > 1 ? Math.min(FLAG_GAP, Math.max(16, (bottom - top) / (n - 1))) : 0
+  const out: number[] = []
+  for (let k = 0; k < n; k++) {
+    const wanted = top + list[k].pos * (bottom - top)
+    const minY = k === 0 ? top : out[k - 1] + gap
+    out.push(Math.max(minY, Math.min(wanted, bottom)))
+  }
+  const over = n ? out[n - 1] - bottom : 0
+  if (over > 0) for (let k = 0; k < n; k++) out[k] = Math.max(top, out[k] - over)
+  return out
+}
+
+function flagTopAt(i: number, fi: number): string {
+  return Math.round(flagTops(weekFlags.value[i] ?? [], i)[fi] ?? flagBandTop.value) + 'px'
+}
+
+/**
+ * 旗子正好落在一行文字上时，只留小旗、把时刻收起来（鼠标移到这一列再展开）——
+ * 和日视图时间轴「重叠就只画一条线」是同一个原则，避免把日程文字盖掉。
+ */
+function flagCompact(i: number, fi: number): boolean {
+  if (hoverDay.value === i) return false
+  const t = flagTops(weekFlags.value[i] ?? [], i)[fi]
+  if (t === undefined) return false
+  const bands = rowBands.value[i] ?? []
+  return bands.some(([a, b]) => t > a - 10 && t < b + 10)
 }
 
 /** 每列里文字行占用的竖直区间（相对列顶），用来判断旗子会不会压在文字上 */
@@ -261,17 +290,6 @@ function measureRowBands(): void {
     map[i] = bands
   })
   rowBands.value = map
-}
-
-/**
- * 旗子正好落在一行文字上时，只留小旗、把时刻收起来（鼠标移到这一列再展开）——
- * 和日视图时间轴「重叠就只画一条线」是同一个原则，避免把日程文字盖掉。
- */
-function flagCompact(f: DeadlineFlag, i: number): boolean {
-  if (hoverDay.value === i) return false
-  const t = parseFloat(flagTop(f, i))
-  const bands = rowBands.value[i] ?? []
-  return bands.some(([a, b]) => t > a - 10 && t < b + 10)
 }
 
 /** 这一天的截止型事项（画成插入旗标） */
@@ -307,10 +325,6 @@ function flagsOn(date: string): DeadlineFlag[] {
     })
   }
   out.sort((a, b) => a.pos - b.pos)
-  // 落点太近就往下错开，避免旗标叠在一起
-  for (let i = 1; i < out.length; i++) {
-    if (out[i].pos - out[i - 1].pos < 0.07) out[i].pos = Math.min(0.98, out[i - 1].pos + 0.07)
-  }
   return out
 }
 
@@ -802,11 +816,11 @@ function locate(t: Task): void {
       <div class="week-flag-layer" :data-band="Math.round(flagBandTop)" :data-refs="eventsRefs.length">
         <div v-for="(d, i) in weekDays" :key="`f${d}`" class="flag-col">
           <span
-            v-for="f in flagsOn(d)"
+            v-for="(f, fi) in weekFlags[i]"
             :key="f.id"
             class="flag"
-            :class="{ done: f.done, compact: flagCompact(f, i) }"
-            :style="{ top: flagTop(f, i) }"
+            :class="{ done: f.done, compact: flagCompact(i, fi) }"
+            :style="{ top: flagTopAt(i, fi) }"
             :title="`${f.done ? '已完成 · ' : '截止 '}${f.time === '24:00' ? '当天 24:00' : f.time} · ${f.title}`"
           >
             <i class="flag-pin"></i>
@@ -1384,7 +1398,8 @@ function locate(t: Task): void {
 .week-grid {
   align-items: stretch;
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  /* minmax(0,1fr)：不理会内容的最小宽度，7 列永远等宽（否则长标题会把列撑宽、列宽不齐） */
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 6px;
   /* 整块用一条连续曲线裁下缘：光滑的下边缘 + 卡片间空隙 */
   clip-path: url(#weekCurve);
@@ -1397,7 +1412,8 @@ function locate(t: Task): void {
   position: absolute;
   inset: 0;
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  /* 必须和 .week-grid 用同一套轨道定义，否则旗子会横向错位、插到隔壁列上 */
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 6px;
   pointer-events: none;
   z-index: 4;
