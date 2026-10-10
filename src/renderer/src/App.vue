@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import HomeView from './views/HomeView.vue'
 import TasksView from './views/TasksView.vue'
@@ -170,7 +170,7 @@ function onTeleport(date: string, target: 'journal' | 'calendar'): void {
         @open-calendar="openCalendar"
       />
       <NotesView v-else-if="active === 'notes'" />
-      <JournalView v-else-if="active === 'journal'" />
+      <JournalView v-else-if="active === 'journal'" @open-note="openNote" />
       <PlansView v-else-if="active === 'plans'" />
       <SeasonsView v-else-if="active === 'seasons'" />
       <GraphView v-else-if="active === 'graph'" @open-note="openNote" />

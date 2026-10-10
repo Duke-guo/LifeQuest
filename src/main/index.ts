@@ -391,6 +391,12 @@ function createWindow(): void {
                 const cs = getComputedStyle(cane)
                 out += '[主藤 颜色=' + cs.stroke + ' 宽度=' + cs.strokeWidth + ']\\n'
               }
+              // 笔记预览框体检：宽度是否收窄
+              const pv = document.querySelector('.vine-preview')
+              if (pv) {
+                const pr = pv.getBoundingClientRect()
+                out += '[笔记预览 宽=' + Math.round(pr.width) + ' 高=' + Math.round(pr.height) + ']\\n'
+              }
               // 长详情是否被收成一行
               const desc = document.querySelector('.desc')
               if (desc) {

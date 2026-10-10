@@ -24,6 +24,7 @@ const activeNode = ref(0)
 let lock = 0
 
 const containerRef = ref<HTMLElement | null>(null)
+const previewBodyRef = ref<HTMLElement | null>(null)
 const containerW = ref(0)
 
 const COL_W = 230
@@ -216,6 +217,14 @@ function onWheel(e: WheelEvent): void {
   clampNode(activeNode.value)
 }
 
+/** 预览框里的滚轮只滚预览正文，绝不让页面跟着动 */
+function onPreviewWheel(e: WheelEvent): void {
+  const el = previewBodyRef.value
+  if (!el) return
+  const d = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX
+  el.scrollTop += d
+}
+
 /** 支线：点葡萄选中 */
 
 function onKey(e: KeyboardEvent): void {
@@ -344,7 +353,7 @@ function openNode(n: VineNode): void {
       </div>
     </div>
 
-    <aside v-if="activeNote" class="vine-preview">
+    <aside v-if="activeNote" class="vine-preview" @wheel.prevent.stop="onPreviewWheel">
       <div class="pv-head">
         <span class="pv-date">{{ activeNote.date || '' }}</span>
         <button class="pv-open" @click="active && openNode(active)">打开编辑</button>
@@ -353,8 +362,8 @@ function openNode(n: VineNode): void {
       <div class="pv-stars">
         <AppIcon v-for="i in activeNote.rating" :key="i" name="star" :size="12" />
       </div>
-      <div v-if="activeNote.content" class="pv-body md-body compact" v-html="renderedContent"></div>
-      <pre v-else class="pv-body">（这篇还没有正文）</pre>
+      <div v-if="activeNote.content" ref="previewBodyRef" class="pv-body md-body compact" v-html="renderedContent"></div>
+      <pre v-else ref="previewBodyRef" class="pv-body">（这篇还没有正文）</pre>
     </aside>
     </div>
   </div>
@@ -445,7 +454,8 @@ function openNode(n: VineNode): void {
   border: 1px solid var(--border);
 }
 .vine-preview {
-  width: 320px;
+  /* 预览框收窄，别和主舞台抢地方 */
+  width: 250px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
