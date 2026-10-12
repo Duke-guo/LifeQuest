@@ -27,6 +27,8 @@ export const dataApi = {
   getRoot: (): Promise<string> => window.api.dataRoot(),
   getVersion: (): Promise<string> => window.api.version(),
   checkUpdate: (): Promise<UpdateCheckResult> => window.api.checkUpdate(),
+  updateState: (): Promise<UpdateCheckResult | null> => window.api.updateState(),
+  onUpdateChanged: (cb: (state: UpdateCheckResult) => void): void => window.api.onUpdateChanged(cb),
   openExternal: (url: string): Promise<boolean> => window.api.openExternal(url),
 
   readSettings: async (): Promise<Settings | null> =>

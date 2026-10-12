@@ -6,14 +6,17 @@ declare module '*.vue' {
   export default component
 }
 
+type UpdateCheckResult =
+  | { ok: true; current: string; latest: string; hasUpdate: boolean; url: string; notes: string }
+  | { ok: false; error: string }
+
 interface Window {
   api: {
     ping: () => Promise<string>
     version: () => Promise<string>
-    checkUpdate: () => Promise<
-      | { ok: true; current: string; latest: string; hasUpdate: boolean; url: string; notes: string }
-      | { ok: false; error: string }
-    >
+    checkUpdate: () => Promise<UpdateCheckResult>
+    updateState: () => Promise<UpdateCheckResult | null>
+    onUpdateChanged: (cb: (state: UpdateCheckResult) => void) => void
     openExternal: (url: string) => Promise<boolean>
     /** 'win32' | 'darwin' | 'linux' */
     platform: string

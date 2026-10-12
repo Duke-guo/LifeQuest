@@ -29,6 +29,7 @@ import { useSemesterStore } from './stores/semester'
 import { useSeasonsStore } from './stores/seasons'
 import { useGamificationStore } from './stores/gamification'
 import { useConfirmStore } from './stores/confirm'
+import { useUpdateStore } from './stores/update'
 import { applyTheme } from './utils/theme'
 
 type View =
@@ -74,6 +75,7 @@ const semesterStore = useSemesterStore()
 const seasonsStore = useSeasonsStore()
 const gStore = useGamificationStore()
 const confirm = useConfirmStore()
+const updateStore = useUpdateStore()
 
 const canGoBack = computed(() => backStack.value.length > 0)
 const backTarget = computed(() =>
@@ -90,6 +92,7 @@ onMounted(async () => {
   applyTheme(settingsStore.settings?.theme)
   await tasksStore.load()
   hasDemoData.value = await hasDemo()
+  void updateStore.init()
   window.addEventListener('keydown', onKey)
 })
 

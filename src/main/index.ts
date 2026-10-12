@@ -1,7 +1,7 @@
 import { app, shell, BrowserWindow, ipcMain, Menu, type BrowserWindowConstructorOptions, type MenuItemConstructorOptions } from 'electron'
 import { join, dirname } from 'path'
 import { writeFile, readFile } from 'fs/promises'
-import { setupIpc } from './ipc'
+import { setupIpc, startupUpdateCheck } from './ipc'
 import { resolveDataRoot } from './dataStore'
 
 const isMac = process.platform === 'darwin'
@@ -699,6 +699,8 @@ app.whenReady().then(async () => {
   await setupIpc()
   buildAppMenu()
   createWindow()
+  // 后台静默检查更新（结果会推给渲染层，有新版时在头像/设置处显示红点）
+  startupUpdateCheck()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

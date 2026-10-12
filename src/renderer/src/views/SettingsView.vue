@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useSettingsStore } from '../stores/settings'
+import { useUpdateStore } from '../stores/update'
 import { dataApi } from '../services/data'
 import { applyTheme, type Theme } from '../utils/theme'
 import AppIcon from '../components/AppIcon.vue'
@@ -12,11 +13,19 @@ const store = useSettingsStore()
 const dataRoot = ref('')
 const exportMsg = ref('')
 const aiSaved = ref('')
+const updateStore = useUpdateStore()
 const version = ref('')
-const updateState = ref<'idle' | 'checking' | 'latest' | 'available' | 'error'>('idle')
-const updateMsg = ref('')
-const latestVersion = ref('')
-const releaseUrl = ref('')
+
+const hasUpdate = computed(() => updateStore.state?.ok === true && updateStore.state.hasUpdate)
+const latestVersion = computed(() => (updateStore.state?.ok ? updateStore.state.latest : ''))
+const releaseUrl = computed(() => (updateStore.state?.ok ? updateStore.state.url : ''))
+const updateMsg = computed(() => {
+  const s = updateStore.state
+  if (!s) return ''
+  if (s.ok) return s.hasUpdate ? `发现新版 v${s.latest}（当前 v${s.current}）` : `已是最新版本（v${s.current}）`
+  return s.error
+})
+const isUpdateError = computed(() => updateStore.state?.ok === false)
 
 onMounted(async () => {
   await store.load()
@@ -84,24 +93,7 @@ async function doExport(): Promise<void> {
 }
 
 async function checkUpdate(): Promise<void> {
-  if (updateState.value === 'checking') return
-  updateState.value = 'checking'
-  updateMsg.value = ''
-  const res = await dataApi.checkUpdate()
-  if (res.ok) {
-    if (res.hasUpdate) {
-      updateState.value = 'available'
-      latestVersion.value = res.latest
-      releaseUrl.value = res.url
-      updateMsg.value = `发现新版 v${res.latest}（当前 v${res.current}）`
-    } else {
-      updateState.value = 'latest'
-      updateMsg.value = `已是最新版本（v${res.current}）`
-    }
-  } else {
-    updateState.value = 'error'
-    updateMsg.value = res.error
-  }
+  await updateStore.check()
 }
 
 async function openRelease(): Promise<void> {
@@ -205,11 +197,11 @@ async function openRelease(): Promise<void> {
       <section class="card">
         <h3>关于 / 更新</h3>
         <p class="row">当前版本：<code>v{{ version }}</code></p>
-        <button class="btn" :disabled="updateState === 'checking'" @click="checkUpdate">
-          {{ updateState === 'checking' ? '正在检查…' : '检查更新' }}
+        <button class="btn" :disabled="updateStore.checking" @click="checkUpdate">
+          {{ updateStore.checking ? '正在检查…' : '检查更新' }}
         </button>
-        <p v-if="updateMsg" class="msg" :class="{ err: updateState === 'error' }">{{ updateMsg }}</p>
-        <button v-if="updateState === 'available'" class="btn alt" @click="openRelease">
+        <p v-if="updateMsg" class="msg" :class="{ err: isUpdateError }">{{ updateMsg }}</p>
+        <button v-if="hasUpdate" class="btn alt" @click="openRelease">
           去 GitHub 下载 v{{ latestVersion }}
         </button>
       </section>

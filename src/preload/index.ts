@@ -8,6 +8,12 @@ const api = {
   version: (): Promise<string> => ipcRenderer.invoke('app:version'),
   /** 查 GitHub Releases 最新版本（手动触发） */
   checkUpdate: (): Promise<UpdateCheckResult> => ipcRenderer.invoke('update:check'),
+  /** 读取后台已查到的更新状态（可能为 null，表示还没查到） */
+  updateState: (): Promise<UpdateCheckResult | null> => ipcRenderer.invoke('update:state'),
+  /** 订阅后台检查完成的通知 */
+  onUpdateChanged: (cb: (state: UpdateCheckResult) => void): void => {
+    ipcRenderer.on('update:changed', (_e, state: UpdateCheckResult) => cb(state))
+  },
   /** 用系统浏览器打开外链 */
   openExternal: (url: string): Promise<boolean> => ipcRenderer.invoke('app:openExternal', url),
   /** 当前平台：'win32' | 'darwin' | 'linux'（界面按平台调整标题栏/快捷键提示） */

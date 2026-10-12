@@ -1,4 +1,4 @@
-import { ipcMain, dialog, shell, app } from 'electron'
+import { ipcMain, dialog, shell, app, BrowserWindow } from 'electron'
 import { join, relative, isAbsolute } from 'path'
 import { request as httpsRequest } from 'https'
 import { request as httpRequest } from 'http'
@@ -16,7 +16,7 @@ import {
   copyAttachment,
   type DataPaths
 } from './dataStore'
-import type { Settings } from '../shared/types'
+import type { Settings, UpdateCheckResult } from '../shared/types'
 
 let dataRoot = ''
 let paths: DataPaths
@@ -182,6 +182,52 @@ function getText(url: string, timeoutMs: number): Promise<{ status: number; text
   })
 }
 
+// 最近一次检查结果缓存（供渲染层拉取），并发请求复用同一次 in-flight
+let latestUpdate: UpdateCheckResult | null = null
+let inFlight: Promise<UpdateCheckResult> | null = null
+
+async function fetchLatestRelease(): Promise<UpdateCheckResult> {
+  try {
+    const { status, text } = await getText(GITHUB_LATEST, 10000)
+    if (status !== 200) return { ok: false, error: `GitHub 返回 ${status}` }
+    const json = JSON.parse(text) as { tag_name?: string; html_url?: string; body?: string }
+    const latest = (json.tag_name || '').replace(/^v/, '')
+    const current = app.getVersion()
+    return {
+      ok: true,
+      current,
+      latest,
+      hasUpdate: latest !== '' && isNewer(latest, current),
+      url: json.html_url || RELEASES_URL,
+      notes: (json.body || '').slice(0, 2000)
+    }
+  } catch (e) {
+    return { ok: false, error: `检查更新失败：${(e as Error).message}` }
+  }
+}
+
+/** 查一次最新版本，缓存并广播给所有窗口；并发调用复用同一次请求 */
+function checkForUpdate(): Promise<UpdateCheckResult> {
+  if (inFlight) return inFlight
+  inFlight = fetchLatestRelease()
+    .then((r) => {
+      latestUpdate = r
+      for (const w of BrowserWindow.getAllWindows()) {
+        w.webContents.send('update:changed', r)
+      }
+      return r
+    })
+    .finally(() => {
+      inFlight = null
+    })
+  return inFlight
+}
+
+/** 启动时后台静默检查一次（不阻塞、不弹窗；结果缓存在 latestUpdate 供渲染层拉取） */
+export function startupUpdateCheck(): void {
+  void checkForUpdate()
+}
+
 function register(): void {  ipcMain.handle('data:root', () => dataRoot)
 
   ipcMain.handle('data:readJson', (_e, key: string) => {
@@ -331,25 +377,9 @@ function register(): void {  ipcMain.handle('data:root', () => dataRoot)
     return true
   })
 
-  ipcMain.handle('update:check', async () => {
-    try {
-      const { status, text } = await getText(GITHUB_LATEST, 10000)
-      if (status !== 200) return { ok: false, error: `GitHub 返回 ${status}` }
-      const json = JSON.parse(text) as { tag_name?: string; html_url?: string; body?: string }
-      const latest = (json.tag_name || '').replace(/^v/, '')
-      const current = app.getVersion()
-      return {
-        ok: true,
-        current,
-        latest,
-        hasUpdate: latest !== '' && isNewer(latest, current),
-        url: json.html_url || RELEASES_URL,
-        notes: (json.body || '').slice(0, 2000)
-      }
-    } catch (e) {
-      return { ok: false, error: `检查更新失败：${(e as Error).message}` }
-    }
-  })
+  ipcMain.handle('update:check', () => checkForUpdate())
+
+  ipcMain.handle('update:state', () => latestUpdate)
 }
 
 /** 防目录穿越：解析后的路径必须落在数据根目录内 */

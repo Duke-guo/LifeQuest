@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import AppIcon from './AppIcon.vue'
+import { useUpdateStore } from '../stores/update'
 
 const props = defineProps<{ hasDemo?: boolean }>()
 const emit = defineEmits<{ openSettings: []; openGuide: []; toggleDemo: [] }>()
 
 const open = ref(false)
+const updateStore = useUpdateStore()
 
 function goSettings(): void {
   open.value = false
@@ -25,6 +27,7 @@ function goDemo(): void {
   <div class="guide-root">
     <button class="avatar" :class="{ open }" @click="open = !open" title="菜单 / 新手导引">
       <AppIcon name="compass" :size="24" />
+      <span v-if="updateStore.hasUpdate" class="dot" title="有新版本可更新" />
     </button>
 
     <transition name="drawer">
@@ -41,6 +44,7 @@ function goDemo(): void {
         <button class="drawer-item" @click="goSettings">
           <AppIcon name="settings" :size="19" />
           <span>设置</span>
+          <em v-if="updateStore.hasUpdate" class="new">新版</em>
         </button>
         <button class="drawer-item" disabled title="后续版本">
           <AppIcon name="user" :size="19" />
@@ -61,6 +65,7 @@ function goDemo(): void {
   z-index: 95;
 }
 .avatar {
+  position: relative;
   width: 46px;
   height: 46px;
   border-radius: 50%;
@@ -72,6 +77,16 @@ function goDemo(): void {
   align-items: center;
   justify-content: center;
   box-shadow: var(--shadow);
+}
+.dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--danger);
+  border: 2px solid var(--surface);
 }
 .avatar.open {
   transform: rotate(90deg);
@@ -126,6 +141,15 @@ function goDemo(): void {
   color: var(--text-3);
   background: var(--surface-2);
   padding: 1px 6px;
+  border-radius: 8px;
+}
+.new {
+  margin-left: auto;
+  font-style: normal;
+  font-size: 0.72rem;
+  color: #fff;
+  background: var(--danger);
+  padding: 1px 7px;
   border-radius: 8px;
 }
 .drawer-enter-active,
