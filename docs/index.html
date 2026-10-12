@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LifeQuest · 把现实生活当成一场可以自己定规则的游戏</title>
+<meta name="description" content="LifeQuest 是一个本地优先的生活管理桌面应用：日记、日历、待办、笔记、活动计划一处聚合。数据全部存在你自己电脑里，免费、开源、支持 Windows / macOS / Linux。" />
+<meta property="og:title" content="LifeQuest · 本地优先的生活管理应用" />
+<meta property="og:description" content="日记 / 日历 / 待办 / 笔记 / 计划，一处聚合。数据是你自己电脑里的普通文件。免费开源，三平台可用。" />
+<meta property="og:image" content="screenshots/02-week.png" />
+<style>
+  :root {
+    --accent: #cf4a3c;
+    --accent-dark: #b13729;
+    --accent-soft: #fbeae6;
+    --ink: #2b2220;
+    --ink-2: #6b5f5a;
+    --ink-3: #998a83;
+    --paper: #f6f4f4;
+    --card: #ffffff;
+    --border: #e9e0da;
+    --gold: #d99c2b;
+    --green: #55a89f;
+    --radius: 18px;
+    --shadow: 0 10px 30px rgba(90, 50, 40, 0.08);
+  }
+  @font-face {
+    font-family: 'ZCOOL KuaiLe';
+    src: url('fonts/zcool-kuaile.woff2') format('woff2');
+    font-display: swap;
+  }
+  @font-face {
+    font-family: 'Baloo 2';
+    src: url('fonts/baloo2-700.woff2') format('woff2');
+    font-display: swap;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--ink);
+    background: var(--paper);
+    line-height: 1.7;
+  }
+  a { color: inherit; }
+  img { max-width: 100%; display: block; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+  .display { font-family: 'ZCOOL KuaiLe', sans-serif; }
+  .num { font-family: 'Baloo 2', sans-serif; }
+
+  /* ---------- 导航 ---------- */
+  nav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(246, 244, 244, 0.86);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+  }
+  nav .inner { display: flex; align-items: center; gap: 14px; height: 62px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.05rem; }
+  .brand img { width: 30px; height: 30px; border-radius: 8px; }
+  nav .links { margin-left: auto; display: flex; gap: 18px; font-size: 0.9rem; color: var(--ink-2); }
+  nav .links a { text-decoration: none; }
+  nav .links a:hover { color: var(--accent); }
+  .gh-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid var(--border); background: #fff; color: var(--ink);
+    padding: 7px 14px; border-radius: 999px; text-decoration: none; font-size: 0.9rem;
+  }
+  .gh-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ---------- Hero ---------- */
+  .hero {
+    position: relative; overflow: hidden;
+    padding: 72px 0 64px; text-align: center;
+    background:
+      radial-gradient(900px 420px at 50% -20%, var(--accent-soft), transparent 70%),
+      var(--paper);
+  }
+  .hero .tag {
+    display: inline-block; font-size: 0.8rem; color: var(--accent);
+    border: 1px solid rgba(207,74,60,0.35); background: #fff;
+    border-radius: 999px; padding: 4px 14px; margin-bottom: 20px;
+  }
+  .hero h1 { font-size: clamp(1.9rem, 4.6vw, 3.1rem); margin: 0 0 16px; line-height: 1.25; letter-spacing: 0.01em; }
+  .hero p.sub { font-size: 1.12rem; color: var(--ink-2); max-width: 640px; margin: 0 auto 30px; }
+  .hero p.sub b { color: var(--accent); }
+  .cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 13px 26px; border-radius: 14px; text-decoration: none;
+    font-weight: 600; font-size: 1rem; transition: transform .12s ease, box-shadow .12s ease;
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 8px 0 var(--accent-soft), 0 10px 22px rgba(207,74,60,.25); }
+  .btn-ghost { background: #fff; color: var(--ink); border: 1.5px solid var(--border); }
+  .hero .os-note { margin-top: 16px; font-size: 0.82rem; color: var(--ink-3); }
+  .hero-shot { margin: 46px auto 0; max-width: 880px; }
+  .hero-shot img { border-radius: var(--radius); box-shadow: var(--shadow); border: 1px solid var(--border); }
+
+  /* ---------- 区块 ---------- */
+  section { padding: 64px 0; }
+  .sec-head { text-align: center; max-width: 640px; margin: 0 auto 44px; }
+  .sec-head h2 { font-size: clamp(1.5rem, 3vw, 2.1rem); margin: 0 0 10px; }
+  .sec-head p { color: var(--ink-2); margin: 0; }
+  .alt { background: #fdfaf7; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+
+  /* 特性网格 */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 22px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 22px; box-shadow: var(--shadow);
+  }
+  .card h3 { margin: 0 0 6px; font-size: 1.12rem; }
+  .card .emoji { font-size: 1.5rem; }
+  .card p { color: var(--ink-2); font-size: 0.92rem; margin: 0 0 14px; }
+  .card img { border-radius: 12px; border: 1px solid var(--border); }
+
+  /* 数据属于你 */
+  .privacy { text-align: center; }
+  .privacy .big { font-size: clamp(1.4rem, 3vw, 2rem); margin: 0 0 14px; }
+  .privacy .points { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin-top: 26px; }
+  .point { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 14px 20px; font-size: 0.92rem; color: var(--ink-2); }
+  .point b { color: var(--ink); display: block; margin-bottom: 2px; }
+
+  /* 下载区 */
+  .dl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; }
+  .dl-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; text-align: center; }
+  .dl-card .os { font-size: 1.6rem; }
+  .dl-card h3 { margin: 8px 0 4px; }
+  .dl-card p { color: var(--ink-3); font-size: 0.84rem; min-height: 40px; margin: 0 0 16px; }
+  .dl-card .btn { justify-content: center; font-size: 0.92rem; padding: 11px 20px; }
+
+  /* FAQ */
+  .faq { max-width: 720px; margin: 0 auto; }
+  .faq-item { border-bottom: 1px solid var(--border); padding: 16px 0; }
+  .faq-item b { display: block; margin-bottom: 4px; }
+  .faq-item p { margin: 0; color: var(--ink-2); font-size: 0.94rem; }
+  .faq-item code { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px; font-size: 0.85em; }
+
+  footer { padding: 40px 0 56px; text-align: center; color: var(--ink-3); font-size: 0.86rem; }
+  footer .f-links { display: flex; gap: 18px; justify-content: center; margin-bottom: 12px; }
+  footer a { color: var(--ink-2); text-decoration: none; }
+  footer a:hover { color: var(--accent); }
+
+  @media (max-width: 560px) {
+    nav .links { display: none; }
+    .hero { padding: 48px 0 44px; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap inner">
+    <span class="brand"><img src="icon.png" alt="LifeQuest 图标" /> LifeQuest</span>
+    <div class="links">
+      <a href="#features">功能</a>
+      <a href="#privacy">数据属于你</a>
+      <a href="#download">下载</a>
+      <a href="#faq">常见问题</a>
+    </div>
+    <a class="gh-btn" href="https://github.com/Duke-guo/LifeQuest" target="_blank" rel="noopener">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="tag">免费 · 开源 · MIT · Windows / macOS / Linux</span>
+    <h1 class="display">把现实生活，当成一场<br />你可以自己定规则的游戏</h1>
+    <p class="sub">日记 · 日历 · 待办 · 笔记 · 活动计划，一处聚合。<br />最重要的是：<b>数据全部存在你自己电脑里</b>，不联网、不上传、没有账号。</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/Duke-guo/LifeQuest/releases/latest" target="_blank" rel="noopener">⬇ 立即下载</a>
+      <a class="btn btn-ghost" href="https://github.com/Duke-guo/LifeQuest" target="_blank" rel="noopener">查看源码</a>
+    </div>
+    <div class="os-note">游戏化只是可选外壳 —— 没有排行榜、没有断签惩罚、没有强制任务。</div>
+    <div class="hero-shot"><img src="screenshots/02-week.png" alt="LifeQuest 周视图：一条连续的时间带" /></div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="display">几个让我自己离不开的设计</h2>
+      <p>不是另一个打卡 App，而是一个想陪你认真生活的工具。</p>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <span class="emoji">🗓️</span>
+        <h3>日历是一条「连续的时间带」</h3>
+        <p>一列一天，滚轮左右连贯滑动，不再一页一周。进页面自动把今天放中间，鼠标悬停处下边缘会平缓下沉。</p>
+        <img src="screenshots/02-week.png" alt="周视图" loading="lazy" />
+      </div>
+      <div class="card">
+        <span class="emoji">⚑</span>
+        <h3>截止任务会自己冒头</h3>
+        <p>只填一个截止时间的任务，从今天起每天出现在「截止清单」里，越接近截止，显示的重要度自动抬高。</p>
+        <img src="screenshots/04-tasks.png" alt="任务页与截止清单" loading="lazy" />
+      </div>
+      <div class="card">
+        <span class="emoji">📝</span>
+        <h3>Markdown 笔记，点哪写哪</h3>
+        <p>正文按段落分块，点一块就地变成输入框，不用在「编辑 / 预览」之间切。支持任务清单、代码块、图片、附件。</p>
+        <img src="screenshots/05-notes-vine.png" alt="笔记葡萄藤" loading="lazy" />
+      </div>
+      <div class="card">
+        <span class="emoji">🌤️</span>
+        <h3>日记与日历互相染色</h3>
+        <p>每天记的天气和心情，会变成日历上这一天的颜色。每日日记和周记在同一页，一条藤串起所有日子。</p>
+        <img src="screenshots/06-journal.png" alt="日记页" loading="lazy" />
+      </div>
+      <div class="card">
+        <span class="emoji">⏱️</span>
+        <h3>日视图：时间轴 + 截止压迫带</h3>
+        <p>一天的时间轴，日程按时间块排。截止事项是一条横线加一小块渐变，越接近截止颜色越深。</p>
+        <img src="screenshots/03-day.png" alt="日视图" loading="lazy" />
+      </div>
+      <div class="card">
+        <span class="emoji">🕸️</span>
+        <h3>知识地图</h3>
+        <p>把笔记、任务、标签之间的关联画成一张网，关联越多的节点自动聚得越近。</p>
+        <img src="screenshots/07-graph.png" alt="知识地图" loading="lazy" />
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="privacy" class="alt privacy">
+  <div class="wrap">
+    <p class="big display">你的数据，是你自己的</p>
+    <p style="color:var(--ink-2);max-width:640px;margin:0 auto">没有云服务、没有账号体系、没有「服务关停就全没了」的焦虑。所有数据都是你能直接打开、复制、备份、带走的普通文件。</p>
+    <div class="points">
+      <div class="point"><b>📁 纯文件存储</b>Markdown + JSON，随手可改</div>
+      <div class="point"><b>🔒 默认离线</b>唯一联网功能是 AI 识图，且可关闭</div>
+      <div class="point"><b>🚚 搬家无忧</b>整个文件夹拷走即完整备份</div>
+      <div class="point"><b>🧩 无强制</b>游戏化只是皮肤，失败不惩罚</div>
+    </div>
+  </div>
+</section>
+
+<section id="download">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="display">下载即用</h2>
+      <p>到 GitHub Releases 选你对应系统的文件。全部免费。</p>
+    </div>
+    <div class="dl-grid">
+      <div class="dl-card">
+        <div class="os">🪟</div>
+        <h3>Windows</h3>
+        <p>便携版 exe，免安装双击即用。数据在 exe 同级目录。</p>
+        <a class="btn btn-primary" href="https://github.com/Duke-guo/LifeQuest/releases/latest" target="_blank" rel="noopener">下载 Windows 版</a>
+      </div>
+      <div class="dl-card">
+        <div class="os">🍎</div>
+        <h3>macOS</h3>
+        <p>Intel 选 x64，Apple 芯片（M 系列）选 arm64。数据在「文稿」目录。</p>
+        <a class="btn btn-primary" href="https://github.com/Duke-guo/LifeQuest/releases/latest" target="_blank" rel="noopener">下载 macOS 版</a>
+      </div>
+      <div class="dl-card">
+        <div class="os">🐧</div>
+        <h3>Linux</h3>
+        <p>AppImage 免安装，也有 .deb。数据在 AppImage 同级目录。</p>
+        <a class="btn btn-primary" href="https://github.com/Duke-guo/LifeQuest/releases/latest" target="_blank" rel="noopener">下载 Linux 版</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="faq" class="alt">
+  <div class="wrap faq">
+    <div class="sec-head"><h2 class="display">常见问题</h2></div>
+    <div class="faq-item"><b>为什么第一次打开被系统拦住？</b><p>因为没买代码签名证书（个人项目，正常）。Windows 选「更多信息 → 仍要运行」；macOS 右键 App → 打开；若提示已损坏执行 <code>xattr -cr /Applications/LifeQuest.app</code>。</p></div>
+    <div class="faq-item"><b>我的数据存在哪？</b><p>Windows 在 exe 同级 <code>LifeQuest-Data/</code>；macOS 在「文稿/LifeQuest-Data」；Linux 在 AppImage 同级。想换位置设环境变量 <code>LIFEQUEST_DATA_ROOT</code>。</p></div>
+    <div class="faq-item"><b>会联网上传我的数据吗？</b><p>不会。默认完全离线。只有「AI 识图」会用你填的 API Key 把你贴的图片发给你指定的模型服务，默认关闭。</p></div>
+    <div class="faq-item"><b>能出手机版吗？</b><p>短期内不会 —— 这个应用的前提是「数据是自己电脑里的普通文件」，做成云服务就违背了初衷。</p></div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="f-links">
+      <a href="https://github.com/Duke-guo/LifeQuest" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/Duke-guo/LifeQuest/releases/latest" target="_blank" rel="noopener">Releases</a>
+      <a href="https://github.com/Duke-guo/LifeQuest/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+    </div>
+    <p>LifeQuest · 开源 · 本地优先 · 用 Electron + Vue 3 制作</p>
+  </div>
+</footer>
+
+</body>
+</html>
