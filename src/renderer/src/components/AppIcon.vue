@@ -139,5 +139,21 @@ defineProps<{ name: string; size?: number }>()
       <path d="M4 8.5h3l1.5-2h7L17 8.5h3v10H4z" />
       <circle cx="12" cy="13" r="3.2" />
     </template>
+    <template v-else-if="name === 'attach'">
+      <path d="M20.5 11.5l-7.8 7.8a5 5 0 0 1-7.1-7.1l8.5-8.5a3.2 3.2 0 0 1 4.5 4.5l-8.5 8.5a1.6 1.6 0 0 1-2.3-2.3l7.4-7.4" />
+    </template>
+    <template v-else-if="name === 'trash'">
+      <path d="M4.5 7h15M9.5 7V4.5h5V7" />
+      <path d="M6.5 7l1 12.5h9L17.5 7" />
+      <path d="M10.5 10.5v6M13.5 10.5v6" />
+    </template>
+    <template v-else-if="name === 'refresh'">
+      <path d="M20 12a8 8 0 1 1-2.6-5.9" />
+      <path d="M20 4.5V11h-6.2" />
+    </template>
+    <template v-else-if="name === 'clock'">
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.2V12l3.4 2" />
+    </template>
   </svg>
 </template>

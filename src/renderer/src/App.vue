@@ -14,13 +14,21 @@ import RadialMenu from './components/RadialMenu.vue'
 import TitleBar from './components/TitleBar.vue'
 import GuideDrawer from './components/GuideDrawer.vue'
 import GuideModal from './components/GuideModal.vue'
+import HelpModal from './components/HelpModal.vue'
 import ReminderBanner from './components/ReminderBanner.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import AppIcon from './components/AppIcon.vue'
+import { HELPS } from './utils/helps'
+import { hasDemo, loadDemo, clearDemo } from './utils/demoData'
 import { useTasksStore } from './stores/tasks'
 import { useSettingsStore } from './stores/settings'
 import { useJournalStore } from './stores/journal'
 import { useNotesStore } from './stores/notes'
+import { useJournalIndexStore } from './stores/journalIndex'
+import { useSemesterStore } from './stores/semester'
+import { useSeasonsStore } from './stores/seasons'
+import { useGamificationStore } from './stores/gamification'
+import { useConfirmStore } from './stores/confirm'
 import { applyTheme } from './utils/theme'
 
 type View =
@@ -61,16 +69,27 @@ const tasksStore = useTasksStore()
 const settingsStore = useSettingsStore()
 const journalStore = useJournalStore()
 const notesStore = useNotesStore()
+const journalIndex = useJournalIndexStore()
+const semesterStore = useSemesterStore()
+const seasonsStore = useSeasonsStore()
+const gStore = useGamificationStore()
+const confirm = useConfirmStore()
 
 const canGoBack = computed(() => backStack.value.length > 0)
 const backTarget = computed(() =>
   backStack.value.length ? VIEW_NAMES[backStack.value[backStack.value.length - 1]] : ''
 )
 
+/** 每页「?」说明 */
+const showHelp = ref(false)
+/** 是否已载入示例数据 */
+const hasDemoData = ref(false)
+
 onMounted(async () => {
   await settingsStore.load()
   applyTheme(settingsStore.settings?.theme)
   await tasksStore.load()
+  hasDemoData.value = await hasDemo()
   window.addEventListener('keydown', onKey)
 })
 
@@ -133,12 +152,41 @@ function onTeleport(date: string, target: 'journal' | 'calendar'): void {
   if (target === 'journal') void openJournal(date)
   else openCalendar(date)
 }
+
+/** 示例数据载入/清空后，把各 store 重新读一遍，当前页面立刻跟着变 */
+async function reloadAll(): Promise<void> {
+  await Promise.all([
+    tasksStore.load(),
+    journalIndex.load(),
+    semesterStore.load(),
+    seasonsStore.load(),
+    notesStore.list(),
+    gStore.refresh()
+  ])
+}
+
+async function toggleDemo(): Promise<void> {
+  if (hasDemoData.value) {
+    const ok = await confirm.ask({
+      title: '清空示例数据？',
+      message: '只会删掉带「示例」前缀的内容',
+      detail: '示例赛季、任务、计划、笔记、日记会一起移除；你自己加的东西不受影响。',
+      confirmText: '清空示例'
+    })
+    if (!ok) return
+    await clearDemo()
+  } else {
+    await loadDemo()
+  }
+  await reloadAll()
+  hasDemoData.value = await hasDemo()
+}
 </script>
 
 <template>
   <div class="app">
-    <TitleBar />
-    <GuideDrawer @open-settings="showSettings = true" @open-guide="showGuide = true" />
+    <TitleBar :view-name="VIEW_NAMES[active]" @help="showHelp = true" />
+    <GuideDrawer :has-demo="hasDemoData" @open-settings="showSettings = true" @open-guide="showGuide = true" @toggle-demo="toggleDemo" />
 
     <main class="content">
       <transition name="back-fade">
@@ -184,7 +232,8 @@ function onTeleport(date: string, target: 'journal' | 'calendar'): void {
     <!-- 全局确认框：删除等破坏性操作都会走它 -->
     <ConfirmDialog />
 
-    <GuideModal v-if="showGuide" @close="showGuide = false" />
+    <GuideModal v-if="showGuide" :has-demo="hasDemoData" @close="showGuide = false" @demo="toggleDemo" />
+    <HelpModal v-if="showHelp" :help="HELPS[active]" @close="showHelp = false" />
     <SettingsView v-if="showSettings" @close="showSettings = false" />
   </div>
 </template>

@@ -5,6 +5,7 @@ import { useSemesterStore } from '../stores/semester'
 import { useTasksStore } from '../stores/tasks'
 import { useConfirmStore } from '../stores/confirm'
 import AppIcon from '../components/AppIcon.vue'
+import DateField from '../components/DateField.vue'
 
 const store = usePlansStore()
 const semesterStore = useSemesterStore()
@@ -102,6 +103,14 @@ async function createPlan(): Promise<void> {
         <h3><AppIcon name="calendar" :size="17" /> 学期计划（校历）</h3>
         <span class="sem-sub">日历的颜色条与「第几周」都来自这里</span>
       </div>
+      <p class="hint">
+        这里是整个学期的骨架，填好之后会同时影响四处：
+        <b>① 日历上的「第几周」</b>（开学日所在那周算第 1 周）；
+        <b>② 放假当天的课自动停</b>（下面「假期」里勾了停课的日子，那天的课不会排出来）；
+        <b>③ 首页的学期进度条与「距期末还有几天」</b>；
+        <b>④ 一天的性质</b>（上课 / 周末 / 考试 / 放假）自动判断。
+        换学期时改这里即可，历史数据不受影响。
+      </p>
 
       <div class="grid">
         <label class="field">
@@ -110,19 +119,19 @@ async function createPlan(): Promise<void> {
         </label>
         <label class="field">
           <span>开学日（第 1 周周一）</span>
-          <input v-model="sem.start" type="date" />
+          <DateField v-model="sem.start" />
         </label>
         <label class="field">
           <span>教学结束</span>
-          <input v-model="sem.teachingEnd" type="date" />
+          <DateField v-model="sem.teachingEnd" />
         </label>
         <label class="field">
           <span>考试周开始</span>
-          <input v-model="sem.examStart" type="date" />
+          <DateField v-model="sem.examStart" />
         </label>
         <label class="field">
           <span>考试周结束</span>
-          <input v-model="sem.examEnd" type="date" />
+          <DateField v-model="sem.examEnd" />
         </label>
       </div>
 
@@ -136,18 +145,18 @@ async function createPlan(): Promise<void> {
         <div class="holiday-head">停课日（这些日期不排课）</div>
         <div v-for="h in sem.holidays" :key="h.id" class="holiday-row">
           <input v-model="h.name" class="h-name" />
-          <input v-model="h.start" type="date" />
+          <DateField v-model="h.start" />
           <span class="dash">~</span>
-          <input v-model="h.end" type="date" />
+          <DateField v-model="h.end" />
           <button class="icon-btn" @click="removeHoliday(h.id, h.name)">
             <AppIcon name="close" :size="14" />
           </button>
         </div>
         <div class="holiday-row new">
           <input v-model="hName" class="h-name" placeholder="新增假期名（如 国庆节）" />
-          <input v-model="hStart" type="date" />
+          <DateField v-model="hStart" />
           <span class="dash">~</span>
-          <input v-model="hEnd" type="date" />
+          <DateField v-model="hEnd" />
           <button class="ghost-mini" @click="addHoliday">＋ 添加</button>
         </div>
       </div>
@@ -161,6 +170,11 @@ async function createPlan(): Promise<void> {
     <!-- ===== 活动计划 ===== -->
     <section class="card">
       <h3>新建活动计划</h3>
+      <p class="hint">
+        给一段时间定一个主题（复习周、比赛、旅行、实习…）。保存后它会<b>铺满这段日期的每一天</b>：
+        月视图每天多一条靛蓝小标签、周/日视图里显示成一条计划，提醒你这段时间的主线是什么。
+        计划不占时间轴、也不计时长，所以不会把那几天标成「很忙」——它的作用是<b>把主题摆在那儿</b>。
+      </p>
       <div class="grid">
         <label class="field grow">
           <span>计划名</span>
@@ -168,11 +182,11 @@ async function createPlan(): Promise<void> {
         </label>
         <label class="field">
           <span>开始</span>
-          <input v-model="start" type="date" />
+          <DateField v-model="start" />
         </label>
         <label class="field">
           <span>结束</span>
-          <input v-model="end" type="date" />
+          <DateField v-model="end" />
         </label>
       </div>
       <div class="row">
@@ -212,6 +226,20 @@ h3 {
 .sem-sub {
   font-size: 0.76rem;
   color: var(--text-3);
+}
+/* 说明块：告诉用户"填了之后会发生什么" */
+.hint {
+  margin: 0 0 0.8rem;
+  padding: 0.6rem 0.8rem;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  background: var(--accent-soft);
+  color: var(--text-2);
+  font-size: 0.82rem;
+  line-height: 1.75;
+}
+.hint b {
+  color: var(--accent);
 }
 .grid {
   display: flex;

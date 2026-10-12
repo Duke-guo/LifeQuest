@@ -225,3 +225,15 @@ export async function readImageFile(filePath: string): Promise<string> {
   const mime = MIME[ext] ?? 'application/octet-stream'
   return `data:${mime};base64,${buf.toString('base64')}`
 }
+
+/** 把一个外部文件复制进 assets（附件），返回存储文件名；用原名 + 时间戳避免重名 */
+export async function copyAttachment(assetsDir: string, srcPath: string): Promise<string> {
+  await fs.mkdir(assetsDir, { recursive: true })
+  const fileName = srcPath.split(/[\\/]/).pop() || 'file'
+  const ext = extname(fileName)
+  const base = ext ? fileName.slice(0, -ext.length) : fileName
+  const safe = base.replace(/[^\w\u4e00-\u9fa5.-]/g, '_').slice(0, 40)
+  const filename = `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}${ext}`
+  await fs.copyFile(srcPath, join(assetsDir, filename))
+  return filename
+}

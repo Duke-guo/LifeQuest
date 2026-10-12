@@ -36,8 +36,9 @@ export interface LinksFile {
 }
 
 // ===================== 任务 / 日程（B14） =====================
-/** 重复方式；以 due 为首次日期，按 repeatUntil 截止 */
-export type RepeatMode = 'none' | 'daily' | 'weekdays' | 'weekly' | 'biweekly' | 'monthly'
+/** 重复方式；以 due 为首次日期，按 repeatUntil 截止
+ *  every-n = 每 N 天一次（N 存在 repeatEvery 里） */
+export type RepeatMode = 'none' | 'daily' | 'weekdays' | 'weekly' | 'biweekly' | 'monthly' | 'every-n'
 
 export type TaskType = 'main' | 'side' | 'daily'
 export type TaskStatus = 'todo' | 'doing' | 'done' | 'archived'
@@ -56,10 +57,14 @@ export interface TaskChain {
   /** 这条链的起点日期，决定落在星期几 */
   due: string
   repeat: RepeatMode
+  /** repeat = 'every-n' 时：隔几天一次 */
+  repeatEvery?: number | null
   repeatUntil?: string | null
   startTime?: string | null
   endTime?: string | null
   location?: string | null
+  /** 这条链单独排掉的日期（停课 / 调休） */
+  skipOccurrences?: string[]
 }
 
 export interface Task {
@@ -86,8 +91,12 @@ export interface Task {
   remindMinutes: number | null
   /** 重复方式：见 RepeatMode；空/ none 表示单次 */
   repeat?: RepeatMode
+  /** repeat = 'every-n' 时：隔几天一次（1 = 每天） */
+  repeatEvery?: number | null
   /** 重复截止日期（含当天）；空表示不限 */
   repeatUntil?: string | null
+  /** 手动排掉的某几次（放假 / 停课 / 老师调课）：这些日期不算发生，也不计入进度 */
+  skipOccurrences?: string[]
   /** 不规律的重复：逐次列出日期（可与 repeat 并存，各自都会排进日历） */
   occurrences?: TaskOccurrence[]
   /** 额外的重复链：一个任务多条（一周两节课就是两条链） */
@@ -96,6 +105,10 @@ export interface Task {
   tagIds: string[]
   /** 关联的笔记 id（日程 ↔ 笔记） */
   linkedNoteIds: string[]
+  /** 是否在首页「重要提醒」里展示（像考试这类重要事项） */
+  showOnHome?: boolean
+  /** 重复任务「哪几次已完成」：存具体日期，勾一次加一天，不影响后面的次数 */
+  doneDates?: string[]
   createdAt: string
   completedAt: string | null
 }
@@ -132,6 +145,7 @@ export interface AchievementCondition {
   value: number
 }
 
+/** 旧版成就定义（保留兼容，不再用于展示） */
 export interface Achievement {
   id: string
   name: string
@@ -141,9 +155,26 @@ export interface Achievement {
   reward: { xp: number }
 }
 
+/** 自定义成就：用户自己定的目标，统计某个维度 */
+export type AchievementMetric = 'tasks' | 'daily' | 'notes' | 'journals'
+
+export interface CustomAchievement {
+  id: string
+  name: string
+  metric: AchievementMetric
+  target: number
+  /** 关联的赛季 id：选了就只统计那个赛季区间内的数据；空 = 全局 */
+  seasonId?: string | null
+}
+
 export interface AchievementsFile {
   schemaVersion: number
+  /** 旧字段，保留兼容（可忽略） */
   achievements: Achievement[]
+  /** 里程碑首次点亮的日期：id -> YYYY-MM-DD */
+  unlocked: Record<string, string>
+  /** 用户自定义成就 */
+  custom: CustomAchievement[]
 }
 
 // ===================== 设置 =====================
@@ -269,6 +300,18 @@ export interface HistoryEntry {
 export interface HistoryFile {
   schemaVersion: number
   entries: HistoryEntry[]
+}
+
+// ===================== 示例数据（首次体验模板） =====================
+/** 记录「示例数据」到底创建了哪些东西，方便一键清空且不误伤真实数据 */
+export interface DemoFile {
+  schemaVersion: number
+  loaded: boolean
+  seasonIds: string[]
+  taskIds: string[]
+  planIds: string[]
+  noteFiles: string[]
+  journalDates: string[]
 }
 
 // ===================== 日历事件（B6 / B7 / B9 / B13） =====================

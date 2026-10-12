@@ -1,12 +1,14 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useTasksStore } from '../stores/tasks'
 import { useSeasonsStore } from '../stores/seasons'
 import { useTagsStore } from '../stores/tags'
 import { useConfirmStore } from '../stores/confirm'
-import { findConflicts, REPEAT_LABELS, REPEAT_OPTIONS, type Conflict } from '../utils/schedule'
+import { findConflicts, repeatLabel, everyNDays, REPEAT_LABELS, REPEAT_OPTIONS, type Conflict } from '../utils/schedule'
 import { toDateStr } from '../utils/helpers'
 import AppIcon from './AppIcon.vue'
+import DateField from './DateField.vue'
+import TimeField from './TimeField.vue'
 import OccurrenceEditor from './OccurrenceEditor.vue'
 import ChainEditor from './ChainEditor.vue'
 import type { Task, TaskType, TaskKind, RepeatMode, TaskOccurrence, TaskChain } from '../../../shared/types'
@@ -31,7 +33,10 @@ const dueTime = ref(props.task.dueTime ?? '')
 const location = ref(props.task.location ?? '')
 const remindMinutes = ref(props.task.remindMinutes ?? 0)
 const repeat = ref<RepeatMode>(props.task.repeat ?? 'none')
+const repeatEvery = ref(props.task.repeatEvery ?? 2)
 const repeatUntil = ref(props.task.repeatUntil ?? '')
+/** 手动排掉的那几次（放假 / 停课 / 老师调课）：在这里也能删掉重来 */
+const skipOccurrences = ref<string[]>([...(props.task.skipOccurrences ?? [])])
 const occurrences = ref<TaskOccurrence[]>([...(props.task.occurrences ?? [])])
 const chains = ref<TaskChain[]>([...(props.task.chains ?? [])])
 const parentId = ref(props.task.parentId ?? '')
@@ -41,6 +46,8 @@ const parentOptions = computed(() =>
 )
 const seasonId = ref(props.task.seasonId ?? '')
 const description = ref(props.task.description ?? '')
+/** 是否在首页「重要提醒」里展示（考试这类重要事项） */
+const showOnHome = ref(props.task.showOnHome ?? false)
 const tagInput = ref('')
 const tagIds = ref<string[]>([...(props.task.tagIds ?? [])])
 
@@ -67,7 +74,9 @@ function candidate(): Task {
     endTime: kind.value === 'schedule' ? endTime.value || null : null,
     location: location.value.trim() || null,
     repeat: repeat.value,
+    repeatEvery: repeat.value === 'every-n' ? everyNDays({ repeatEvery: repeatEvery.value }) : null,
     repeatUntil: repeat.value !== 'none' && repeatUntil.value ? repeatUntil.value : null,
+    skipOccurrences: [...skipOccurrences.value].sort(),
     occurrences: occurrences.value.filter((o) => o.date),
     parentId: parentId.value || null,
     chains: chains.value.filter((c) => c.due && c.repeat !== 'none')
@@ -94,6 +103,7 @@ async function save(force = false): Promise<void> {
   t.seasonId = seasonId.value || null
   t.description = description.value
   t.tagIds = [...tagIds.value]
+  t.showOnHome = showOnHome.value
   await store.persist()
   saved.value = '已保存'
   window.setTimeout(() => (saved.value = ''), 1500)
@@ -166,6 +176,11 @@ function removeTag(id: string): void {
             <option :value="1">1 · 低</option>
           </select>
         </label>
+        <label class="field home-field">
+          <input v-model="showOnHome" type="checkbox" />
+          <span>在首页展示</span>
+          <em class="field-hint">考试这类重要事项，在首页给一条提醒</em>
+        </label>
         <label class="field">
           <span>赛季</span>
           <select v-model="seasonId">
@@ -178,19 +193,19 @@ function removeTag(id: string): void {
       <div class="grid">
         <label class="field">
           <span>{{ kind === 'schedule' ? '日期' : '截止日期' }}</span>
-          <input v-model="due" type="date" />
+          <DateField v-model="due" placeholder="选择日期" />
         </label>
         <label class="field">
           <span>开始时间</span>
-          <input v-model="startTime" type="time" />
+          <TimeField v-model="startTime" placeholder="未定" />
         </label>
         <label class="field">
           <span>结束时间</span>
-          <input v-model="endTime" type="time" />
+          <TimeField v-model="endTime" placeholder="未定" end-of-day />
         </label>
         <label v-if="kind === 'task'" class="field" title="留空 = 当天 24:00；日历上会插一面小旗">
           <span>截止时刻</span>
-          <input v-model="dueTime" type="time" />
+          <TimeField v-model="dueTime" placeholder="24:00" end-of-day />
         </label>
         <label class="field">
           <span>地点</span>
@@ -222,10 +237,33 @@ function removeTag(id: string): void {
             <option v-for="m in REPEAT_OPTIONS" :key="m" :value="m">{{ REPEAT_LABELS[m] }}</option>
           </select>
         </label>
+        <label v-if="repeat === 'every-n'" class="field every-field">
+          <span>隔几天一次</span>
+          <span class="every-wrap">
+            每 <input v-model.number="repeatEvery" type="number" min="1" max="180" class="every-num" /> 天
+          </span>
+        </label>
         <label v-if="repeat !== 'none'" class="field">
           <span>重复截止</span>
-          <input v-model="repeatUntil" type="date" />
+          <DateField v-model="repeatUntil" placeholder="不限" />
         </label>
+      </div>
+
+      <!-- 排掉的那几次：放假 / 调课 -->
+      <div v-if="skipOccurrences.length" class="field skip-block">
+        <span>已排掉的 {{ skipOccurrences.length }} 次（不会出现在日历上，也不算进度）</span>
+        <span class="skip-chips">
+          <span v-for="d in skipOccurrences" :key="d" class="skip-chip">
+            {{ d }}
+            <button class="skip-x" title="恢复这一次" @click="skipOccurrences = skipOccurrences.filter((x) => x !== d)">
+              ✕
+            </button>
+          </span>
+        </span>
+        <em class="field-hint">
+          想排掉某一次：任务卡上的日历按钮 → 在那一行点垃圾桶。这里点 ✕ 是撤销（恢复）。
+          重复方式：{{ repeatLabel(repeat, repeatEvery) }}
+        </em>
       </div>
 
       <!-- 多条重复链 -->
@@ -347,6 +385,71 @@ h2 {
   flex-direction: row;
   align-items: center;
   flex-wrap: wrap;
+}
+/* 「每 N 天」的输入：小方框，不占满整行 */
+.every-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  font-size: 0.84rem;
+  color: var(--text-2);
+}
+.every-num {
+  width: 58px;
+  text-align: center;
+  font-family: var(--font-num);
+}
+/* 已排掉的次数：小圆片，点 ✕ 恢复 */
+.skip-block {
+  gap: 0.35rem;
+}
+.skip-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.skip-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  padding: 2px 6px 2px 9px;
+  font-family: var(--font-num);
+  font-size: 0.78rem;
+  color: var(--text-2);
+  text-decoration: line-through;
+}
+.skip-x {
+  border: none;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 0.7rem;
+  text-decoration: none;
+}
+.skip-x:hover {
+  color: var(--accent);
+}
+/* 「在首页展示」：复选框和文字横排 */
+.field.home-field {
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding-top: 0.4rem;
+}
+.field.home-field input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+.field-hint {
+  flex-basis: 100%;
+  font-style: normal;
+  font-size: 0.7rem;
+  color: var(--text-3);
 }
 .kind-hint {
   margin: -0.3rem 0 0;

@@ -2,7 +2,8 @@
 import { ref } from 'vue'
 import AppIcon from './AppIcon.vue'
 
-const emit = defineEmits<{ openSettings: []; openGuide: [] }>()
+const props = defineProps<{ hasDemo?: boolean }>()
+const emit = defineEmits<{ openSettings: []; openGuide: []; toggleDemo: [] }>()
 
 const open = ref(false)
 
@@ -13,6 +14,10 @@ function goSettings(): void {
 function goGuide(): void {
   open.value = false
   emit('openGuide')
+}
+function goDemo(): void {
+  open.value = false
+  emit('toggleDemo')
 }
 </script>
 
@@ -28,6 +33,10 @@ function goGuide(): void {
         <button class="drawer-item" @click="goGuide">
           <AppIcon name="guide" :size="19" />
           <span>新手导引</span>
+        </button>
+        <button class="drawer-item" @click="goDemo">
+          <AppIcon name="sparkle" :size="19" />
+          <span>{{ props.hasDemo ? '清空示例数据' : '载入示例数据' }}</span>
         </button>
         <button class="drawer-item" @click="goSettings">
           <AppIcon name="settings" :size="19" />

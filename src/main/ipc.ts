@@ -1,4 +1,4 @@
-import { ipcMain, dialog } from 'electron'
+import { ipcMain, dialog, shell } from 'electron'
 import { join, relative, isAbsolute } from 'path'
 import { request as httpsRequest } from 'https'
 import { request as httpRequest } from 'http'
@@ -13,6 +13,7 @@ import {
   deleteFile,
   saveImageFile,
   readImageFile,
+  copyAttachment,
   type DataPaths
 } from './dataStore'
 import type { Settings } from '../shared/types'
@@ -33,6 +34,7 @@ export async function setupIpc(): Promise<void> {
   JSON_FILES.semester = join(paths.config, 'semester.json')
   JSON_FILES.daynotes = join(paths.config, 'daynotes.json')
   JSON_FILES.history = join(paths.config, 'history.json')
+  JSON_FILES.demo = join(paths.config, 'demo.json')
   JSON_FILES.tasks = join(paths.tasks, 'tasks.json')
   JSON_FILES.plans = join(paths.plans, 'plans.json')
   register()
@@ -177,6 +179,29 @@ function register(): void {  ipcMain.handle('data:root', () => dataRoot)
   ipcMain.handle('data:readImage', (_e, filename: string) => readImageFile(join(paths.assets, filename)))
 
   ipcMain.handle('data:deleteImage', async (_e, filename: string) => {
+    await deleteFile(join(paths.assets, filename))
+    return true
+  })
+
+  // ---- 笔记附件（选文件复制进 assets）----
+  ipcMain.handle('data:attachFile', async () => {
+    const res = await dialog.showOpenDialog({
+      title: '选择一个附件',
+      properties: ['openFile']
+    })
+    if (res.canceled || !res.filePaths[0]) return { canceled: true }
+    const src = res.filePaths[0]
+    const file = await copyAttachment(paths.assets, src)
+    const name = src.split(/[\\/]/).pop() || file
+    return { canceled: false, name, file }
+  })
+
+  ipcMain.handle('data:openAttachment', async (_e, filename: string) => {
+    const err = await shell.openPath(join(paths.assets, filename))
+    return err === ''
+  })
+
+  ipcMain.handle('data:deleteAttachment', async (_e, filename: string) => {
     await deleteFile(join(paths.assets, filename))
     return true
   })

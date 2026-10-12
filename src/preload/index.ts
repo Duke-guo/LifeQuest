@@ -20,6 +20,13 @@ const api = {
   readImage: (filename: string): Promise<string> => ipcRenderer.invoke('data:readImage', filename),
   deleteImage: (filename: string): Promise<boolean> => ipcRenderer.invoke('data:deleteImage', filename),
 
+  // 笔记附件
+  attachFile: (): Promise<{ canceled: boolean; name?: string; file?: string }> =>
+    ipcRenderer.invoke('data:attachFile'),
+  openAttachment: (filename: string): Promise<boolean> => ipcRenderer.invoke('data:openAttachment', filename),
+  deleteAttachment: (filename: string): Promise<boolean> =>
+    ipcRenderer.invoke('data:deleteAttachment', filename),
+
   // AI 识图
   aiImageToTasks: (
     dataUrl: string

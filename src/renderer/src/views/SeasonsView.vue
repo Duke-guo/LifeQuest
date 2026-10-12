@@ -3,9 +3,10 @@ import { ref, onMounted } from 'vue'
 import { useSeasonsStore, derivePhase } from '../stores/seasons'
 import { useGamificationStore } from '../stores/gamification'
 import { useConfirmStore } from '../stores/confirm'
-import { dataApi } from '../services/data'
 import AppIcon from '../components/AppIcon.vue'
-import type { Season, SeasonType } from '../../../shared/types'
+import DateField from '../components/DateField.vue'
+import SeasonReviewModal from '../components/SeasonReviewModal.vue'
+import type { Season, SeasonType, AchievementMetric } from '../../../shared/types'
 
 const seasonsStore = useSeasonsStore()
 const gStore = useGamificationStore()
@@ -27,7 +28,14 @@ const type = ref<SeasonType>('main')
 const start = ref('')
 const end = ref('')
 const categories = ref('')
-const reviewMsg = ref('')
+
+const reviewSeason = ref<Season | null>(null)
+
+/** 自定义成就表单 */
+const customName = ref('')
+const customMetric = ref<AchievementMetric>('tasks')
+const customTarget = ref(10)
+const customSeasonId = ref<string>('')
 
 onMounted(async () => {
   await seasonsStore.load()
@@ -54,56 +62,21 @@ async function createSeason(): Promise<void> {
   await gStore.refresh()
 }
 
-async function generateReview(season: Season): Promise<void> {
-  const tasksFile = await dataApi.readTasks()
-  const tasks = tasksFile?.tasks ?? []
-  const inSeason = tasks.filter((t) => {
-    if (t.seasonId === season.id) return true
-    if (t.completedAt) {
-      const d = t.completedAt.slice(0, 10)
-      return d >= season.start && d <= season.end
-    }
-    return false
-  })
-  const done = inSeason.filter((t) => t.status === 'done')
-  const rate = inSeason.length ? Math.round((done.length / inSeason.length) * 100) : 0
-  const journals = await dataApi.listFiles('journal', '.md')
-  const journalsInRange = journals.filter((f) => {
-    const d = f.replace('.md', '')
-    return d >= season.start && d <= season.end
-  })
-  const notes = await dataApi.listFiles('notes', '.md')
-  const timeline = done
-    .filter((t) => t.completedAt)
-    .sort((a, b) => (a.completedAt! < b.completedAt! ? -1 : 1))
+async function addCustom(): Promise<void> {
+  if (!customName.value.trim()) return
+  await gStore.addCustom(customName.value, customMetric.value, customTarget.value, customSeasonId.value || null)
+  customName.value = ''
+}
 
-  const lines = [
-    `# ${season.name} · 赛季回顾`,
-    '',
-    `- 类型：${season.type === 'main' ? '主线' : '支线'}`,
-    `- 时间：${season.start} ~ ${season.end}（${derivePhase(season.start, season.end)}）`,
-    `- 类别：${season.categories.join('、') || '无'}`,
-    '',
-    '## 统计',
-    `- 任务：完成 ${done.length} / ${inSeason.length}（完成率 ${rate}%）`,
-    `- 日记：${journalsInRange.length} 篇`,
-    `- 笔记：${notes.length} 篇（总计）`,
-    '',
-    '## 成就',
-    ...gStore.achievements.map(
-      (a) => `- [${a.achieved ? '已达成' : '未达成'}] ${a.name}（${a.progress}/${a.target}）`
-    ),
-    '',
-    '## 完成时间轴',
-    ...(timeline.length ? timeline.map((t) => `- ${t.completedAt!.slice(0, 10)} ${t.title}`) : ['（暂无完成记录）']),
-    '',
-    '## 亮点与待改进',
-    `- 亮点：${done.length >= 3 ? '任务完成度不错，保持节奏' : '已经起步，继续积累'}`,
-    `- 待改进：${inSeason.length - done.length > 0 ? `还有 ${inSeason.length - done.length} 个任务待完成` : '本季任务已全部完成'}`
-  ]
+function seasonName(id: string | null | undefined): string {
+  if (!id) return ''
+  return seasonsStore.seasons.find((s) => s.id === id)?.name ?? ''
+}
 
-  await dataApi.writeMarkdown(`archive/${season.id}-回顾.md`, lines.join('\n'))
-  reviewMsg.value = `回顾已生成：archive/${season.id}-回顾.md`
+/** 称号阶梯的进度条：向下一档走多少了 */
+function ladderPct(t: { value: number; nextNeed: number | null }): number {
+  if (!t.nextNeed) return 100
+  return Math.max(6, Math.min(100, Math.round((t.value / t.nextNeed) * 100)))
 }
 </script>
 
@@ -117,21 +90,76 @@ async function generateReview(season: Season): Promise<void> {
     </header>
 
     <section class="growth card">
-      <h3>成长概览</h3>
-      <p class="level">Lv.{{ gStore.level }} · {{ gStore.xp }} XP</p>
+      <div class="title-hero">
+        <div class="title-main">
+          <span class="title-kicker">你现在是</span>
+          <span class="title-name">{{ gStore.mainTitle }}</span>
+        </div>
+        <span class="level-corner" title="等级只作装饰，不作为压力">Lv.{{ gStore.level }} · {{ gStore.xp }} XP</span>
+      </div>
+
+      <div class="ladders">
+        <div v-for="t in gStore.titles" :key="t.label" class="ladder">
+          <div class="ladder-head">
+            <span class="ladder-label">{{ t.label }}</span>
+            <span class="ladder-name">{{ t.name }}</span>
+          </div>
+          <div class="ladder-bar"><i :style="{ width: ladderPct(t) + '%' }"></i></div>
+          <span class="ladder-next">
+            {{ t.nextName ? `下一步「${t.nextName}」（${t.nextNeed}）` : '已达最高' }}
+          </span>
+        </div>
+      </div>
+
+      <h4 class="sec-title">里程碑</h4>
       <div class="achievements">
         <div
-          v-for="a in gStore.achievements"
+          v-for="a in gStore.milestones"
           :key="a.id"
           class="badge"
           :class="{ achieved: a.achieved }"
+          :title="a.unlockedAt ? `点亮于 ${a.unlockedAt}` : ''"
         >
           <div class="badge-name">
-            <AppIcon :name="a.achieved ? 'star' : 'lock'" :size="15" />
+            <AppIcon :name="a.achieved ? a.icon : 'lock'" :size="15" />
             {{ a.name }}
           </div>
-          <div class="badge-desc">{{ a.desc }}（{{ a.progress }}/{{ a.target }}）</div>
+          <div class="badge-desc">{{ a.desc }}</div>
+          <div class="badge-bar"><i :style="{ width: Math.min(100, Math.round((a.progress / a.target) * 100)) + '%' }"></i></div>
+          <div class="badge-meta">{{ a.achieved ? '已点亮' : `${a.progress}/${a.target}` }}</div>
         </div>
+      </div>
+
+      <h4 class="sec-title">自定义成就</h4>
+      <div v-if="gStore.custom.length" class="custom-list">
+        <div
+          v-for="a in gStore.custom"
+          :key="a.id"
+          class="custom-chip"
+          :class="{ achieved: a.achieved }"
+        >
+          <span>{{ a.achieved ? '★' : '○' }} {{ a.name }}</span>
+          <span class="custom-meta">
+            {{ gStore.METRIC_LABEL[a.metric] }} {{ Math.min(a.progress, a.target) }}/{{ a.target }}
+            <template v-if="a.seasonId"> · {{ seasonName(a.seasonId) }}</template>
+          </span>
+          <button class="custom-x" title="删除这个目标" @click="gStore.removeCustom(a.id)">✕</button>
+        </div>
+      </div>
+      <div class="custom-add">
+        <input v-model="customName" placeholder="这个赛季我想做到…（如：读完 3 本闲书）" />
+        <select v-model="customMetric">
+          <option value="tasks">完成任务</option>
+          <option value="daily">每日打卡</option>
+          <option value="notes">写笔记</option>
+          <option value="journals">写日记</option>
+        </select>
+        <input v-model.number="customTarget" type="number" min="1" max="999" class="target" />
+        <select v-model="customSeasonId" title="只统计这个赛季区间内的数据；选「全局」就不分赛季">
+          <option value="">全局（不分赛季）</option>
+          <option v-for="s in seasonsStore.seasons" :key="s.id" :value="s.id">{{ s.name }}</option>
+        </select>
+        <button class="add-btn" @click="addCustom">添加目标</button>
       </div>
     </section>
 
@@ -147,12 +175,11 @@ async function generateReview(season: Season): Promise<void> {
           <div v-if="s.categories.length" class="season-cats">类别：{{ s.categories.join('、') }}</div>
         </div>
         <div class="season-actions">
-          <button class="review-btn" @click="generateReview(s)">生成回顾</button>
+          <button class="review-btn" @click="reviewSeason = s">生成回顾</button>
           <button class="del" @click="removeSeason(s)">✕</button>
         </div>
       </div>
       <div v-if="seasonsStore.seasons.length === 0" class="empty">还没有赛季，下面创建一个</div>
-      <p v-if="reviewMsg" class="msg">{{ reviewMsg }}</p>
     </section>
 
     <section class="create card">
@@ -165,35 +192,102 @@ async function generateReview(season: Season): Promise<void> {
         </select>
       </div>
       <div class="form-row">
-        <input v-model="start" type="date" title="开始日期" />
+        <DateField v-model="start" title="开始日期" />
         <span>~</span>
-        <input v-model="end" type="date" title="结束日期" />
+        <DateField v-model="end" title="结束日期" />
       </div>
       <div class="form-row">
         <input v-model="categories" placeholder="类别（逗号分隔，如：打卡计划, 期末考核）" />
         <button class="add-btn" @click="createSeason">创建</button>
       </div>
     </section>
+
+    <SeasonReviewModal v-if="reviewSeason" :season="reviewSeason" @close="reviewSeason = null" />
   </div>
 </template>
 
 <style scoped>
-.level {
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: var(--accent);
-  margin: 0.5rem 0 1rem;
+/* 称号为主，等级藏角落 */
+.title-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.title-main {
+  display: flex;
+  flex-direction: column;
+}
+.title-kicker {
+  font-size: 0.8rem;
+  color: var(--text-3);
+}
+.title-name {
   font-family: var(--font-display);
+  font-size: 2rem;
+  color: var(--accent);
+  line-height: 1.15;
+}
+.level-corner {
+  font-size: 0.74rem;
+  color: var(--text-3);
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.ladders {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.8rem;
+  margin: 0.9rem 0 1rem;
+}
+.ladder-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.ladder-label {
+  font-size: 0.74rem;
+  color: var(--text-3);
+}
+.ladder-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+.ladder-bar {
+  height: 6px;
+  background: var(--surface-2);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 0.3rem;
+}
+.ladder-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+.ladder-next {
+  font-size: 0.72rem;
+  color: var(--text-3);
+}
+.sec-title {
+  margin: 1rem 0 0.5rem;
+  font-family: var(--font-display);
+  color: var(--text-2);
 }
 .achievements {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 0.7rem;
 }
 .badge {
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 0.75rem;
+  padding: 0.7rem;
   color: var(--text-3);
 }
 .badge.achieved {
@@ -206,10 +300,90 @@ async function generateReview(season: Season): Promise<void> {
   display: flex;
   align-items: center;
   gap: 0.35rem;
+  color: var(--text);
+}
+.badge.achieved .badge-name {
+  color: var(--accent-text);
 }
 .badge-desc {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   margin-top: 0.2rem;
+}
+.badge-bar {
+  height: 5px;
+  background: var(--surface-2);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 0.5rem;
+}
+.badge-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+}
+.badge-meta {
+  font-size: 0.72rem;
+  margin-top: 0.25rem;
+}
+.custom-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.custom-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  padding: 3px 6px 3px 10px;
+  font-size: 0.82rem;
+  color: var(--text-2);
+}
+.custom-chip.achieved {
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.custom-meta {
+  font-size: 0.72rem;
+  color: var(--text-3);
+}
+.custom-x {
+  border: none;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 0.72rem;
+}
+.custom-x:hover {
+  color: var(--danger);
+}
+.custom-add {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.6rem;
+  flex-wrap: wrap;
+}
+.custom-add input,
+.custom-add select {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+}
+.custom-add input[placeholder] {
+  flex: 1;
+  min-width: 200px;
+}
+.custom-add .target {
+  width: 64px;
+  text-align: center;
+  font-family: var(--font-num);
 }
 .season-row {
   display: flex;
@@ -256,11 +430,6 @@ async function generateReview(season: Season): Promise<void> {
 .del:hover {
   color: var(--danger);
 }
-.msg {
-  color: var(--success);
-  font-size: 0.85rem;
-  margin-top: 0.5rem;
-}
 .form-row {
   display: flex;
   gap: 0.5rem;
@@ -288,5 +457,12 @@ async function generateReview(season: Season): Promise<void> {
   border-radius: 10px;
   cursor: pointer;
   font-weight: 600;
+}
+.empty {
+  color: var(--text-3);
+  padding: 1rem 0;
+}
+h3 {
+  font-size: 1.1rem;
 }
 </style>

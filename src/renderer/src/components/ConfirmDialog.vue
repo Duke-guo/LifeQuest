@@ -49,7 +49,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 .cf-mask {
   position: fixed;
   inset: 0;
-  z-index: 400;
+  /* 要比任何弹窗都高：确认框可能从任务弹窗、编辑弹窗里弹出来 */
+  z-index: 600;
   background: rgba(20, 14, 13, 0.5);
   backdrop-filter: blur(3px);
   display: flex;

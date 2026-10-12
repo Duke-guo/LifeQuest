@@ -79,11 +79,20 @@ export const useSemesterStore = defineStore('semester', () => {
     return set
   })
 
-  /** 第几周（开学日为第 1 周周一）；不在学期内返回 null */
+  /** 第几周（开学日所在的那一周算第 1 周，按「周日起始」对齐）；不在学期内返回 null */
   function weekOf(date: string): number | null {
     const s = semester.value.start
-    if (!s || date < s) return null
-    return Math.floor(diffDays(date, s) / 7) + 1
+    if (!s) return null
+    // 开学日所在那周（周日起始）就是第 1 周：先各自归到周日，再相减
+    const sundayOf = (d: string): string => {
+      const dt = parseLocal(d)
+      return toDateStr(new Date(dt.getFullYear(), dt.getMonth(), dt.getDate() - dt.getDay()))
+    }
+    const firstWeek = sundayOf(s)
+    const thisWeek = sundayOf(date)
+    const w = Math.floor(diffDays(thisWeek, firstWeek) / 7) + 1
+    if (w < 1) return null
+    return w
   }
 
   /** 某天的角色：开学前 / 上课 / 考试 / 放假 / 周末 / 学期结束

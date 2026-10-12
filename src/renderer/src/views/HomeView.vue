@@ -91,7 +91,9 @@ const todayHours = computed(() =>
 
 const todayColor = computed(() => {
   const j = journalIndex.on(today)
-  return computeDayColor(today, todayHours.value, todayTasks.value.length, j?.mood, j?.weather)
+  const evs = eventsFromTasks(tasksStore.tasks, today, today, semesterStore.noClassDates)
+  const star = evs.some((e) => (e.meta?.importance ?? 0) >= 5)
+  return computeDayColor(today, todayHours.value, todayTasks.value.length, j?.mood, j?.weather, 0, star)
 })
 
 const todayJournal = computed(() => journalIndex.on(today))
@@ -127,13 +129,14 @@ const weekDays = computed(() => {
     const evs = eventsFromTasks(tasksStore.tasks, ds, ds, semesterStore.noClassDates)
     const hours = evs.reduce((s, e) => s + eventHours(e), 0)
     const j = journalIndex.on(ds)
+    const star = evs.some((e) => (e.meta?.importance ?? 0) >= 5)
     return {
       date: ds,
       label,
       num: cur.getDate(),
       count: evs.length,
       hours,
-      color: computeDayColor(ds, hours, evs.length, j?.mood, j?.weather),
+      color: computeDayColor(ds, hours, evs.length, j?.mood, j?.weather, 0, star),
       isToday: ds === today
     }
   })
@@ -141,8 +144,14 @@ const weekDays = computed(() => {
 
 const weekHours = computed(() => weekDays.value.reduce((s, d) => s + d.hours, 0))
 
-/** 最近写过的日记（倒序） */
-const recentJournals = computed(() => [...journalIndex.entries].reverse().slice(0, 5))
+/** 最近三天的日记（今天 + 前两天），够回顾又不会堆一屏 */
+const recentJournals = computed(() => {
+  const from = toDateStr(new Date(Date.now() - 2 * 86400000))
+  return journalIndex.entries
+    .filter((e) => e.date >= from && e.date <= today)
+    .sort((a, b) => (a.date < b.date ? 1 : -1))
+    .slice(0, 3)
+})
 
 /** 接下来 14 天里的重要事项 */
 const upcoming = computed(() => {
@@ -164,8 +173,15 @@ const upcoming = computed(() => {
 /** 还在盯着的截止任务：首页只摆两周内的，逾期的一并露出来 */
 const deadlines = computed(() => upcomingDeadlines(tasksStore.tasks, today, 14, 14))
 
+/** 「在首页展示」的重要事项（考试这类），按日期升序 */
+const homeStars = computed(() =>
+  tasksStore.tasks
+    .filter((t) => t.showOnHome && t.status !== 'done' && t.status !== 'archived')
+    .sort((a, b) => (a.due ?? '9999').localeCompare(b.due ?? '9999'))
+)
+
 async function toggleTask(t: Task): Promise<void> {
-  await tasksStore.setStatus(t.id, t.status === 'done' ? 'todo' : 'done')
+  await tasksStore.toggleDone(t.id, today)
 }
 
 /** 一键为今天这节课写笔记 */
@@ -189,6 +205,11 @@ async function removeTask(t: Task): Promise<void> {
 function locate(t: Task): void {
   const date = nextOccurrence(t, today, semesterStore.noClassDates) ?? t.due
   if (date) emit('openCalendar', date, 'week', t.id)
+}
+
+/** 从「这件事都会在哪几天出现」的窗口里选了某一天 → 去那一周 */
+function locateOn(t: Task, date: string): void {
+  emit('openCalendar', date, 'week', t.id)
 }
 </script>
 
@@ -230,6 +251,27 @@ function locate(t: Task): void {
       </div>
     </header>
 
+    <!-- 重要提醒：自己勾了「在首页展示」的事项（考试等） -->
+    <section v-if="homeStars.length" class="card ddl-card">
+      <div class="card-head">
+        <h3>★ 重要提醒</h3>
+        <span class="card-sub">这些是你标记为「在首页展示」的事项</span>
+      </div>
+      <div class="ddl-list">
+        <div
+          v-for="t in homeStars"
+          :key="`hs-${t.id}`"
+          class="ddl-row star-row"
+          title="点一下去日历定位到这一天"
+          @click="locate(t)"
+        >
+          <span class="ddl-badge star-badge">重要</span>
+          <span class="ddl-title">{{ t.title }}</span>
+          <span class="ddl-when">{{ t.due ? t.due.slice(5) + (t.dueTime ? ' ' + t.dueTime : '') : '未定日期' }}</span>
+        </div>
+      </div>
+    </section>
+
     <!-- 临近截止：每天露一次脸，直到交掉 -->
     <section v-if="deadlines.length" class="card ddl-card">
       <div class="card-head">
@@ -265,11 +307,13 @@ function locate(t: Task): void {
           :key="t.id"
           :task="t"
           :today="today"
+          :date="today"
           @toggle="toggleTask(t)"
           @edit="editing = t"
           @remove="removeTask(t)"
           @note="writeNote(t)"
               @locate="locate(t)"
+          @locate-on="(d: string) => locateOn(t, d)"
               @edit-child="editing = $event"
         />
       </section>
@@ -336,11 +380,11 @@ function locate(t: Task): void {
       </div>
     </div>
 
-    <!-- 最近日记（全宽，写得多了就自然填满页面） -->
-    <section v-if="recentJournals.length" class="card recent">
+    <!-- 最近日记（只显示最近三天；这三天没写就给个入口，不留白块） -->
+    <section class="card recent">
       <div class="card-head">
         <h3>最近日记</h3>
-        <span class="card-sub">点一条继续写</span>
+        <span class="card-sub">最近三天</span>
       </div>
       <div
         v-for="j in recentJournals"
@@ -356,6 +400,9 @@ function locate(t: Task): void {
         </span>
         <span class="jr-text">{{ j.preview || '（还没写内容）' }}</span>
         <span v-if="j.date === today" class="jr-flag">今天</span>
+      </div>
+      <div v-if="recentJournals.length === 0" class="jr-empty" @click="emit('openJournal', today)">
+        最近三天还没写日记 —— 点这里写今天这篇
       </div>
     </section>
 
@@ -505,6 +552,14 @@ function locate(t: Task): void {
   color: var(--danger);
   font-weight: 600;
 }
+/* 重要提醒：金色星标 */
+.ddl-row.star-row {
+  border-color: rgba(217, 156, 43, 0.35);
+}
+.ddl-badge.star-badge {
+  background: rgba(217, 156, 43, 0.2);
+  color: #9a6b10;
+}
 .card-head h3 {
   font-size: 1.02rem;
 }
@@ -620,6 +675,17 @@ function locate(t: Task): void {
 }
 .recent {
   margin-top: 1.1rem;
+}
+.jr-empty {
+  padding: 0.5rem;
+  border-radius: 9px;
+  color: var(--text-3);
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+.jr-empty:hover {
+  background: var(--surface-2);
+  color: var(--accent);
 }
 .jr {
   display: flex;

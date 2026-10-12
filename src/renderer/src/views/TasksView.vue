@@ -5,11 +5,13 @@ import { useSeasonsStore } from '../stores/seasons'
 import { useTagsStore } from '../stores/tags'
 import { useSemesterStore } from '../stores/semester'
 import { useConfirmStore } from '../stores/confirm'
-import { findConflicts, conflictsOn, eventsFromTasks, nextOccurrence, REPEAT_LABELS, REPEAT_OPTIONS, type Conflict } from '../utils/schedule'
+import { findConflicts, conflictsOn, eventsFromTasks, nextOccurrence, repeatLabel, everyNDays, REPEAT_LABELS, REPEAT_OPTIONS, type Conflict } from '../utils/schedule'
 import { toDateStr } from '../utils/helpers'
 import { upcomingDeadlines } from '../utils/deadline'
 import TaskItem from '../components/TaskItem.vue'
 import TaskEditModal from '../components/TaskEditModal.vue'
+import DateField from '../components/DateField.vue'
+import TimeField from '../components/TimeField.vue'
 import AddHistory from '../components/AddHistory.vue'
 import AiImportPanel from '../components/AiImportPanel.vue'
 import OccurrenceEditor from '../components/OccurrenceEditor.vue'
@@ -45,6 +47,7 @@ const remindMinutes = ref(0)
 const dueTime = ref('')
 const description = ref('')
 const repeat = ref<RepeatMode>('none')
+const repeatEvery = ref(2)
 const repeatUntil = ref('')
 /** 不规律重复：逐次日期 */
 const occurrences = ref<TaskOccurrence[]>([])
@@ -90,6 +93,15 @@ function tasksOn(dateStr: string): Task[] {
 
 /** 今天 */
 const todayTasks = computed(() => tasksOn(todayStr))
+
+/** 日历上有安排的日子：给日期面板画个小点，「这天已经有课了」一眼可见 */
+const markedDates = computed(() => {
+  const now = new Date()
+  const from = toDateStr(new Date(now.getFullYear(), now.getMonth() - 1, 1))
+  const to = toDateStr(new Date(now.getFullYear(), now.getMonth() + 3, 0))
+  const evs = eventsFromTasks(store.tasks, from, to, semesterStore.noClassDates)
+  return [...new Set(evs.map((e) => e.date))]
+})
 
 /** 明天：提前一天看得见，好安排 */
 const tomorrowStr = computed(() => {
@@ -140,6 +152,7 @@ async function submit(force = false): Promise<void> {
     description: description.value.trim(),
     tagIds: tagIds.value,
     repeat: repeat.value,
+    repeatEvery: repeat.value === 'every-n' ? everyNDays({ repeatEvery: repeatEvery.value }) : null,
     repeatUntil: repeat.value !== 'none' && repeatUntil.value ? repeatUntil.value : null,
     occurrences: occurrences.value.filter((o) => o.date),
     chains: chains.value.filter((c) => c.due && c.repeat !== 'none')
@@ -199,6 +212,11 @@ function locate(t: Task): void {
   const date = nextOccurrence(t, todayStr, semesterStore.noClassDates) ?? t.due
   if (date) emit('openCalendar', date, 'week', t.id)
 }
+
+/** 从「这件事都会在哪几天出现」的窗口里选了某一天 → 去那一周 */
+function locateOn(t: Task, date: string): void {
+  emit('openCalendar', date, 'week', t.id)
+}
 </script>
 
 <template>
@@ -251,13 +269,17 @@ function locate(t: Task): void {
           <option :value="2">2 · 次要</option>
           <option :value="1">1 · 低</option>
         </select>
-        <input v-model="due" type="date" :title="kind === 'schedule' ? '日期' : '截止日期'" />
-        <input v-model="startTime" type="time" :title="kind === 'schedule' ? '开始时间' : '填开始时间即成为日程'" />
+        <DateField v-model="due" :title="kind === 'schedule' ? '日期' : '截止日期'" :marks="markedDates" />
+        <TimeField
+          v-model="startTime"
+          :title="kind === 'schedule' ? '开始时间' : '填开始时间即成为日程'"
+          placeholder="开始"
+        />
         <span class="dash">–</span>
-        <input v-model="endTime" type="time" title="结束时间" />
+        <TimeField v-model="endTime" title="结束时间（可以选 24:00 = 到当天结束）" placeholder="结束" end-of-day />
         <label v-if="kind === 'task'" class="inline-field" title="只有截止时间的事项：日历上会插一面小旗，留空＝当天 24:00">
           <span>截止时刻</span>
-          <input v-model="dueTime" type="time" />
+          <TimeField v-model="dueTime" placeholder="24:00" end-of-day />
         </label>
         <input v-model="location" class="loc-input" placeholder="地点（可选）" />
         <label class="inline-field">
@@ -286,13 +308,18 @@ function locate(t: Task): void {
             <option v-for="m in REPEAT_OPTIONS" :key="m" :value="m">{{ REPEAT_LABELS[m] }}</option>
           </select>
         </label>
+        <label v-if="repeat === 'every-n'" class="inline-field every-field">
+          <span>每</span>
+          <input v-model.number="repeatEvery" type="number" min="1" max="180" class="every-num" />
+          <span>天一次</span>
+        </label>
         <template v-if="repeat !== 'none'">
           <label class="inline-field">
             <span>截止</span>
-            <input v-model="repeatUntil" type="date" />
+            <DateField v-model="repeatUntil" placeholder="不限" />
           </label>
           <span class="range-hint">
-            从上面的日期起「{{ REPEAT_LABELS[repeat] }}」重复到截止日（留空表示不限）
+            从上面的日期起「{{ repeatLabel(repeat, repeatEvery) }}」重复到截止日（留空表示不限）
           </span>
         </template>
       </div>
@@ -374,11 +401,13 @@ function locate(t: Task): void {
         :key="t.id"
         :task="t"
         :today="todayStr"
-        @toggle="store.setStatus(t.id, t.status === 'done' ? 'todo' : 'done')"
+        :date="todayStr"
+        @toggle="store.toggleDone(t.id, todayStr)"
         @remove="removeTask(t)"
         @edit="editing = t"
         @note="writeNote(t)"
         @locate="locate(t)"
+        @locate-on="(d: string) => locateOn(t, d)"
               @edit-child="editing = $event"
       />
     </section>
@@ -392,11 +421,13 @@ function locate(t: Task): void {
         :key="`tm-${t.id}`"
         :task="t"
         :today="todayStr"
-        @toggle="store.setStatus(t.id, t.status === 'done' ? 'todo' : 'done')"
+        :date="tomorrowStr"
+        @toggle="store.toggleDone(t.id, tomorrowStr)"
         @remove="removeTask(t)"
         @edit="editing = t"
         @note="writeNote(t)"
         @locate="locate(t)"
+        @locate-on="(d: string) => locateOn(t, d)"
         @edit-child="editing = $event"
       />
     </section>
@@ -412,11 +443,13 @@ function locate(t: Task): void {
         :key="`ddl-${t.id}`"
         :task="t"
         :today="todayStr"
-        @toggle="store.setStatus(t.id, t.status === 'done' ? 'todo' : 'done')"
+        :date="todayStr"
+        @toggle="store.toggleDone(t.id, todayStr)"
         @remove="removeTask(t)"
         @edit="editing = t"
         @note="writeNote(t)"
         @locate="locate(t)"
+        @locate-on="(d: string) => locateOn(t, d)"
         @edit-child="editing = $event"
       />
     </section>
@@ -430,11 +463,12 @@ function locate(t: Task): void {
           :key="t.id"
           :task="t"
           :today="todayStr"
-          @toggle="store.setStatus(t.id, t.status === 'done' ? 'todo' : 'done')"
+          @toggle="store.toggleDone(t.id, todayStr)"
           @remove="removeTask(t)"
           @edit="editing = t"
           @note="writeNote(t)"
         @locate="locate(t)"
+        @locate-on="(d: string) => locateOn(t, d)"
               @edit-child="editing = $event"
         />
       </section>

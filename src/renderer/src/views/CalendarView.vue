@@ -170,9 +170,26 @@ function loadScore(date: string): number {
   return eventsOn(date).reduce((s, e) => s + eventHours(e), 0)
 }
 
+/** 这天有没有 5 星事项（考试、重要活动）：有就不算「空闲」 */
+function hasStar(date: string): boolean {
+  return eventsOn(date).some((e) => (e.meta?.importance ?? 0) >= 5)
+}
+
+/** 这天铺着的活动计划名（活动计划是「一段时间」，每天都会出现） */
+function plansOn(date: string): string[] {
+  return eventsOn(date)
+    .filter((e) => e.kind === 'plan')
+    .map((e) => e.title)
+}
+
 /** 算法默认档位（按当天安排的总时长；阈值统一在 utils/dayColor.ts） */
 function autoLabel(date: string): string {
-  return busyTier(loadScore(date), eventsOn(date).length, deadlinePressure(eventsOn(date), today))
+  return busyTier(
+    loadScore(date),
+    eventsOn(date).length,
+    deadlinePressure(eventsOn(date), today),
+    hasStar(date)
+  )
 }
 
 // ---------- 连续日带（周视图）：一列一天，靠滚轮左右连贯滑动，不再一周一屏 ----------
@@ -623,7 +640,15 @@ function busyClass(date: string): string {
 /** 每天的颜色：色相=忙碌程度，饱和度=心情，明度=天气 */
 function colorOf(date: string): DayColor {
   const j = journalIndex.on(date)
-  return computeDayColor(date, loadScore(date), eventsOn(date).length, j?.mood, j?.weather)
+  return computeDayColor(
+    date,
+    loadScore(date),
+    eventsOn(date).length,
+    j?.mood,
+    j?.weather,
+    0,
+    hasStar(date)
+  )
 }
 
 async function saveBusy(): Promise<void> {
@@ -858,16 +883,21 @@ const TAG_CLASS: Record<string, string> = {
 // ---------- 日视图时间轴 ----------
 const HOURS = Array.from({ length: 18 }, (_, i) => i + 6)
 
-function topOf(time: string): number {
-  const [h, m] = time.split(':').map(Number)
-  return ((h - 6) * 60 + (m || 0)) * (56 / 60)
+/** 06:00 为时间轴顶端、24:00 为底端（一天 18 小时） */
+const DAY_MIN = 18 * 60
+function minuteIn(day: string): number {
+  const [h, m] = day.split(':').map(Number)
+  return Math.max(0, Math.min(DAY_MIN, (h - 6) * 60 + (m || 0)))
 }
-
+function topOf(time: string): number {
+  return Math.min(minuteIn(time), DAY_MIN - 30) * (56 / 60)
+}
 function heightOf(start: string, end: string): number {
-  const [sh, sm] = start.split(':').map(Number)
-  const [eh, em] = end.split(':').map(Number)
-  const mins = eh * 60 + (em || 0) - (sh * 60 + (sm || 0))
-  return Math.max(26, mins * (56 / 60))
+  const s = minuteIn(start)
+  const e = minuteIn(end)
+  const mins = Math.max(26, e > s ? e - s : 26)
+  // 选到 24:00（当天结束）时别让色块冲出时间轴：底边压在 24:00 那条线上
+  return Math.min(mins, DAY_MIN - s) * (56 / 60)
 }
 
 const daySchedules = computed(() => eventsOn(cursorIso.value).filter((e) => e.kind === 'schedule' && e.time))
@@ -957,7 +987,8 @@ async function quickAdd(): Promise<void> {
 }
 
 async function toggleTask(t: Task): Promise<void> {
-  await tasksStore.setStatus(t.id, t.status === 'done' ? 'todo' : 'done')
+  // 日视图里勾的是「光标这一天」那一次，不会把整个重复任务都标成完成
+  await tasksStore.toggleDone(t.id, cursorIso.value)
 }
 
 /** 一键为这天的这节课写笔记（会自动关联，并出现在葡萄藤对应学科上） */
@@ -981,6 +1012,11 @@ async function removeTask(t: Task): Promise<void> {
 function locate(t: Task): void {
   const date = nextOccurrence(t, today, skipDates.value) ?? t.due
   if (date) emit('openCalendar', date, 'week', t.id)
+}
+
+/** 从「这件事都会在哪几天出现」的窗口里选了某一天 → 去那一周 */
+function locateOn(t: Task, date: string): void {
+  emit('openCalendar', date, 'week', t.id)
 }
 </script>
 
@@ -1070,6 +1106,10 @@ function locate(t: Task): void {
             </div>
             <div class="phase-bar" :class="PHASE_CLASS[dayPhase(c.date)]">
               {{ phaseText(c.date) }}
+            </div>
+            <!-- 活动计划：这一天铺着的计划，一眼可见（不然只有个计数看不出名堂） -->
+            <div v-if="plansOn(c.date).length" class="plan-bar" :title="plansOn(c.date).join('、')">
+              📌 {{ plansOn(c.date)[0] }}<template v-if="plansOn(c.date).length > 1"> +{{ plansOn(c.date).length - 1 }}</template>
             </div>
           </template>
         </div>
@@ -1236,14 +1276,24 @@ function locate(t: Task): void {
     <!-- ========== 日视图（左时间轴 + 右可编辑侧栏） ========== -->
     <template v-else>
       <div class="day-layout">
-        <div class="timeline" :key="`d${animKey}`" :class="slideClass" @wheel.prevent="onWheel">
-          <!-- 截止压迫带：从零点铺到截止那一刻，越接近截止越深 -->
+        <div class="day-main">
+          <!-- 这一天的活动计划（跨天的时间段） -->
+          <div v-if="plansOn(cursorIso).length" class="plan-strip">
+            <span v-for="p in plansOn(cursorIso)" :key="p" class="plan-chip">📌 {{ p }}</span>
+            <span class="plan-strip-hint">计划是「一段时间」，会铺满这些天，不会占时间轴</span>
+          </div>
+          <div class="timeline" :key="`d${animKey}`" :class="slideClass" @wheel.prevent="onWheel">
+          <!-- 截止压迫带：只占截止时刻上方约一小时，越接近截止越深 -->
           <div
             v-for="d in dayDeadlines"
             v-show="!d.overlap && !d.done"
             :key="`fill-${d.id}`"
             class="ddl-fill"
-            :style="{ height: d.y + 'px', background: ddlFill(d) }"
+            :style="{
+              top: Math.max(0, d.y - 56) + 'px',
+              height: Math.min(56, d.y) + 'px',
+              background: ddlFill(d)
+            }"
           ></div>
 
           <div v-for="h in HOURS" :key="h" class="hour-row">
@@ -1273,6 +1323,7 @@ function locate(t: Task): void {
             <span class="ddl-text">
               {{ d.done ? '✓ 已完成' : d.time === '24:00' ? '当天 24:00' : d.time }} 截止 · {{ d.title }}
             </span>
+          </div>
           </div>
         </div>
 
@@ -1339,21 +1390,23 @@ function locate(t: Task): void {
               :key="t.id"
               :task="t"
               :today="today"
+              :date="cursorIso"
               :flash="flashId === t.id"
               @toggle="toggleTask(t)"
               @edit="editing = t"
               @remove="removeTask(t)"
               @note="writeNote(t)"
               @locate="locate(t)"
+              @locate-on="(d: string) => locateOn(t, d)"
               @edit-child="editing = $event"
             />
 
             <div class="quick-add">
               <input v-model="newTitle" class="qa-title" placeholder="新增当天的安排…" @keyup.enter="quickAdd" />
               <div class="qa-row">
-                <input v-model="newStart" type="time" />
+                <TimeField v-model="newStart" placeholder="开始" />
                 <span class="dash">–</span>
-                <input v-model="newEnd" type="time" />
+                <TimeField v-model="newEnd" placeholder="结束" end-of-day />
                 <select v-model.number="newImp">
                   <option :value="5">★5</option>
                   <option :value="4">★4</option>
@@ -1625,6 +1678,21 @@ function locate(t: Task): void {
   background: rgba(120, 140, 170, 0.22);
   color: #4a5a72;
 }
+/* 活动计划条：靛蓝，和「上课/周末/放假」几种性质区分开 */
+.plan-bar {
+  margin-top: 3px;
+  height: 15px;
+  border-radius: 4px;
+  font-size: 0.62rem;
+  line-height: 15px;
+  text-align: center;
+  padding: 0 4px;
+  background: rgba(99, 102, 241, 0.2);
+  color: #4f46b8;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 /* 定位过来的那条：闪几下 */
 .dot.flash,
 .sched-block.flash {
@@ -1703,8 +1771,7 @@ function locate(t: Task): void {
   position: absolute;
   left: 62px;
   right: 10px;
-  top: 0;
-  border-radius: 8px 8px 0 0;
+  border-radius: 8px;
   pointer-events: none;
 }
 .ddl-line {
@@ -2098,7 +2165,34 @@ function locate(t: Task): void {
 .day-layout {
   display: flex;
   gap: 1.25rem;
-  align-items: flex-start;
+  align-items: stretch;
+}
+/* 左列：计划条 + 时间轴 */
+.day-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+/* 这一天的活动计划 */
+.plan-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.plan-chip {
+  background: rgba(99, 102, 241, 0.16);
+  color: #4f46b8;
+  border-radius: 999px;
+  padding: 2px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.plan-strip-hint {
+  font-size: 0.72rem;
+  color: var(--text-3);
 }
 .timeline {
   position: relative;

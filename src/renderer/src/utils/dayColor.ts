@@ -32,13 +32,18 @@ const BUSY_STOPS: BusyStop[] = [
  * 忙碌档位的唯一判定处（日历格子、周横幅、首页都用它，避免阈值漂移）
  * 刻度参考真实课表：3 节课 ≈ 5.5h → 适中；5 节课 ≈ 9.2h → 较忙。
  * bump 用于「临近截止还没完成」时把当天档位抬高一档。
+ * star 表示这天有 5 星事项（考试、重要活动）—— 那种日子再空也不能叫「空闲」。
  */
-export function busyTier(hours: number, count: number, bump = 0): string {
+export function busyTier(hours: number, count: number, bump = 0, star = false): string {
+  if (star) return '紧张'
   if (count === 0 && bump === 0) return '空闲'
   const idx = BUSY_STOPS.findIndex((s) => hours <= s.max)
   const i = Math.min(BUSY_STOPS.length - 1, (idx < 0 ? BUSY_STOPS.length - 1 : idx) + bump)
   return BUSY_STOPS[i].tier
 }
+
+/** 有空闲周末那种淡紫，也有「5 星日」的深红：视觉上一眼分得出考试日 */
+const STAR_STOP: BusyStop = { max: 0, tier: '紧张', hue: 6, sat: 72, light: 86 }
 
 /** 空闲周末：淡紫，和空闲工作日（淡蓝）区分开 */
 const WEEKEND_STOP: BusyStop = { max: 0, tier: '空闲', hue: 266, sat: 42, light: 93 }
@@ -93,20 +98,18 @@ export function computeDayColor(
   count: number,
   mood: Mood | null | undefined,
   weather: Weather | null | undefined,
-  bump = 0
+  bump = 0,
+  star = false
 ): DayColor {
-  const idle = count === 0 && bump === 0
+  const idle = count === 0 && bump === 0 && !star
   const weekend = isWeekend(date)
   const baseIdx = BUSY_STOPS.findIndex((s) => hours <= s.max)
   const idx = Math.min(
     BUSY_STOPS.length - 1,
     (baseIdx < 0 ? BUSY_STOPS.length - 1 : baseIdx) + bump
   )
-  // 空闲的周末 → 淡紫；其余按实际负担着色（周末有课就照样显示忙碌色）
-  const stop =
-    idle && weekend
-      ? WEEKEND_STOP
-      : BUSY_STOPS[idx]
+  // 5 星日（考试/重要活动）→ 紧张色；空闲的周末 → 淡紫；其余按实际负担
+  const stop = star ? STAR_STOP : idle && weekend ? WEEKEND_STOP : BUSY_STOPS[idx]
 
   const m = mood ? MOOD_ADJ[mood] : { blendTo: 0, blend: 0, sat: 1, light: 0 }
   const w = weather ? WEATHER_ADJ[weather] : { hue: 0, sat: 1, light: 0 }
@@ -127,7 +130,7 @@ export function computeDayColor(
   const line = `hsl(${hue} ${clamp(sat, 14, 92)}% ${clamp(light - 26, 42, 74)}%)`
 
   return {
-    tier: idle ? '空闲' : stop.tier,
+    tier: star ? '紧张' : idle ? '空闲' : stop.tier,
     bg: `hsl(${hue} ${sat}% ${light}%)`,
     chipBg,
     chipFg,

@@ -16,10 +16,37 @@ export const REPEAT_LABELS: Record<RepeatMode, string> = {
   weekdays: '工作日',
   weekly: '每周',
   biweekly: '每两周',
-  monthly: '每月'
+  monthly: '每月',
+  'every-n': '每几天'
 }
 
-export const REPEAT_OPTIONS: RepeatMode[] = ['none', 'daily', 'weekdays', 'weekly', 'biweekly', 'monthly']
+export const REPEAT_OPTIONS: RepeatMode[] = [
+  'none',
+  'daily',
+  'weekdays',
+  'weekly',
+  'biweekly',
+  'monthly',
+  'every-n'
+]
+
+/** 「每 N 天」到底几天：没填/填错时退回 2 天 */
+export function everyNDays(t: { repeatEvery?: number | null }): number {
+  const n = Math.round(Number(t.repeatEvery ?? 0))
+  return Number.isFinite(n) && n >= 1 ? Math.min(180, n) : 2
+}
+
+/** 重复方式的中文说法（「每 3 天」这种要带上数字） */
+export function repeatLabel(mode: RepeatMode | undefined, every?: number | null): string {
+  if (!mode || mode === 'none') return REPEAT_LABELS.none
+  if (mode === 'every-n') return `每 ${everyNDays({ repeatEvery: every })} 天`
+  return REPEAT_LABELS[mode]
+}
+
+/** 这个任务手动排掉了哪几次（放假 / 停课 / 调课） */
+export function skipSetOf(t: Task): Set<string> {
+  return new Set((t.skipOccurrences ?? []).filter(Boolean))
+}
 
 /** 把任务/日程转成日历事件；重复任务按区间展开，可跳过停课日 */
 export function eventsFromTasks(
@@ -34,7 +61,11 @@ export function eventsFromTasks(
 
     // 「停课日」只对课表类日程生效：放假不等于不用交作业，
     // 否则把 ddl 落在节假日就整个从日历上消失了
-    const skipped = (d: string): boolean => t.kind === 'schedule' && !!skipDates?.has(d)
+    // 另外：任务自己排掉的某几次（skipOccurrences）只对重复事项生效
+    const repeating = isRepeating(t)
+    const ownSkips = skipSetOf(t)
+    const skipped = (d: string): boolean =>
+      (repeating && ownSkips.has(d)) || (t.kind === 'schedule' && !!skipDates?.has(d))
 
     const mode = t.repeat && t.repeat !== 'none' ? t.repeat : null
     let emitted = false
@@ -44,7 +75,7 @@ export function eventsFromTasks(
       const from = t.due > rangeStart ? t.due : rangeStart
       const until = t.repeatUntil && t.repeatUntil < rangeEnd ? t.repeatUntil : rangeEnd
       if (until >= from) {
-        const dates = expandRepeat(t.due, mode, t.repeatUntil ?? null, from, until)
+        const dates = expandRepeat(t.due, mode, t.repeatUntil ?? null, from, until, t.repeatEvery)
         dates.forEach((d, i) => {
           if (skipped(d)) return
           out.push(makeEvent(t, d, `-r${i}`))
@@ -58,12 +89,13 @@ export function eventsFromTasks(
     const chains = t.chains ?? []
     chains.forEach((c, ci) => {
       if (!c.due || !c.repeat || c.repeat === 'none') return
+      const chainSkips = new Set(c.skipOccurrences ?? [])
       const from = rangeStart && c.due < rangeStart ? rangeStart : c.due
       const untilRaw = c.repeatUntil ?? null
       const until = rangeEnd && (!untilRaw || untilRaw > rangeEnd) ? rangeEnd : untilRaw
       if (!until || until < from) return
-      expandRepeat(c.due, c.repeat, untilRaw, from, until).forEach((d, i) => {
-        if (skipped(d)) return
+      expandRepeat(c.due, c.repeat, untilRaw, from, until, c.repeatEvery).forEach((d, i) => {
+        if (skipped(d) || chainSkips.has(d)) return
         out.push(makeEvent(t, d, `-c${ci}-${i}`, c))
       })
       emitted = true
@@ -102,7 +134,8 @@ function expandRepeat(
   mode: RepeatMode,
   repeatUntil: string | null,
   from: string,
-  until: string
+  until: string,
+  every?: number | null
 ): string[] {
   const out: string[] = []
   const hardEnd = repeatUntil && repeatUntil < until ? repeatUntil : until
@@ -112,19 +145,19 @@ function expandRepeat(
   let guard = 0
   // 先推进到区间附近，避免从很久以前开始循环
   while (cur < fromDate && guard < 4000) {
-    cur = nextDate(cur, mode)
+    cur = nextDate(cur, mode, every)
     guard++
   }
   guard = 0
   while (cur <= end && guard < 800) {
     out.push(toStr(cur))
-    cur = nextDate(cur, mode)
+    cur = nextDate(cur, mode, every)
     guard++
   }
   return out
 }
 
-function nextDate(d: Date, mode: RepeatMode): Date {
+function nextDate(d: Date, mode: RepeatMode, every?: number | null): Date {
   switch (mode) {
     case 'daily':
       return addDays(d, 1)
@@ -137,6 +170,8 @@ function nextDate(d: Date, mode: RepeatMode): Date {
       return addDays(d, 14)
     case 'monthly':
       return addMonth(d)
+    case 'every-n':
+      return addDays(d, everyNDays({ repeatEvery: every }))
     case 'weekly':
     default:
       return addDays(d, 7)
@@ -154,6 +189,88 @@ function addMonth(d: Date): Date {
   const day = d.getDate()
   const last = new Date(y, m + 1, 0).getDate()
   return new Date(y, m, Math.min(day, last))
+}
+
+/** 这个任务是不是「一次次重复发生」的（重复规则 / 重复链 / 逐次日期都算） */
+export function isRepeating(t: Task): boolean {
+  if (t.repeat && t.repeat !== 'none') return true
+  if ((t.chains ?? []).some((c) => c.due && c.repeat && c.repeat !== 'none')) return true
+  if ((t.occurrences ?? []).length > 0) return true
+  return false
+}
+
+/**
+ * 重复任务在某一天算不算「已完成」：
+ *  - 重复任务：看 doneDates 里有没有这一天（勾一次只勾掉这一天，不影响后面）
+ *  - 单次任务：看整体 status
+ */
+export function isDoneOn(t: Task, date: string): boolean {
+  if (isRepeating(t)) return (t.doneDates ?? []).includes(date)
+  return t.status === 'done'
+}
+
+/**
+ * 这一次为什么不算数：
+ *  - 'own'     = 任务自己排掉的（放假 / 调课，存在 skipOccurrences）
+ *  - 'holiday' = 校历里的停课日（只对日程类生效，见学期计划）
+ */
+export function skipReason(
+  t: Task,
+  date: string,
+  holidaySkips?: Set<string>
+): 'own' | 'holiday' | null {
+  if (isRepeating(t) && skipSetOf(t).has(date)) return 'own'
+  if (t.kind === 'schedule' && holidaySkips?.has(date)) return 'holiday'
+  return null
+}
+
+export interface OccurrenceQuery {
+  /** 上限，防跑飞 */
+  cap?: number
+  /** 把「不算数的那些次」也列出来（弹窗里显示成划掉 / 停课，可恢复） */
+  includeSkipped?: boolean
+  /** 校历停课日（学期计划里的放假），只对日程类生效 */
+  holidaySkips?: Set<string>
+}
+
+/**
+ * 重复任务的全部发生日期（升序去重），用于进度条与「这件事都会在哪几天」。
+ * 默认只算「真的会发生」的：自己排掉的 + 校历停课的都不算。
+ */
+export function allOccurrences(t: Task, q: OccurrenceQuery = {}): string[] {
+  const cap = q.cap ?? 400
+  const set = new Set<string>()
+  const repeating = isRepeating(t)
+  const skips = skipSetOf(t)
+  // 「排掉某几次」只对重复发生的事项有意义：单次任务排掉就等于删掉整个任务了
+  const keep = (d: string): boolean => {
+    const why = skipReason(t, d, q.holidaySkips)
+    if (!why) return true
+    if (!q.includeSkipped) return false
+    // 单次任务不受自己的排掉列表影响（见上）
+    return why === 'own' ? repeating : true
+  }
+  const mode = t.repeat && t.repeat !== 'none' ? t.repeat : null
+  if (mode && t.due) {
+    const until = t.repeatUntil ?? toStr(addDays(parseLocal(t.due), 370))
+    for (const d of expandRepeat(t.due, mode, t.repeatUntil ?? null, t.due, until, t.repeatEvery)) {
+      if (keep(d)) set.add(d)
+    }
+  }
+  for (const c of t.chains ?? []) {
+    if (!c.due || !c.repeat || c.repeat === 'none') continue
+    const chainSkips = new Set(c.skipOccurrences ?? [])
+    const until = c.repeatUntil ?? toStr(addDays(parseLocal(c.due), 370))
+    for (const d of expandRepeat(c.due, c.repeat, c.repeatUntil ?? null, c.due, until, c.repeatEvery)) {
+      if (keep(d) && !chainSkips.has(d)) set.add(d)
+    }
+  }
+  // 逐次列出的日期：本身就是一次「明确安排」，不受 skipOccurrences 影响，
+  // 但主重复里被排掉的那天如果也单独列了，就以「明确列出的」为准
+  for (const o of t.occurrences ?? []) if (o.date) set.add(o.date)
+  // 单次任务：只有它自己那一天
+  if (!mode && set.size === 0 && t.due) set.add(t.due)
+  return [...set].sort().slice(0, cap)
 }
 
 function makeEvent(
@@ -176,7 +293,8 @@ function makeEvent(
     refId: t.id,
     meta: {
       importance: t.importance,
-      status: t.status,
+      // 重复任务按「这一次」算完成状态，勾今天不会连累后面
+      status: isDoneOn(t, date) ? 'done' : 'todo',
       location: t.location,
       deadline: isDeadline
     }
@@ -195,8 +313,11 @@ export function deadlineTimeOf(e: CalendarEvent, t?: Task): string {
  * 单次 → 它自己的日期；重复 → 从 from 起最近的一次（跳过停课日）。
  */
 export function nextOccurrence(task: Task, from: string, skipDates?: Set<string>): string | null {
-  // 同 eventsFromTasks：停课日只对课表类日程生效
-  const skipped = (d: string): boolean => task.kind === 'schedule' && !!skipDates?.has(d)
+  // 同 eventsFromTasks：停课日只对课表类日程生效；任务自己排掉的几次只对重复事项生效
+  const repeating = isRepeating(task)
+  const ownSkips = skipSetOf(task)
+  const skipped = (d: string): boolean =>
+    (repeating && ownSkips.has(d)) || (task.kind === 'schedule' && !!skipDates?.has(d))
   const occDates = (task.occurrences ?? [])
     .map((o) => o.date)
     .filter(Boolean)
@@ -208,11 +329,11 @@ export function nextOccurrence(task: Task, from: string, skipDates?: Set<string>
   const mode = task.repeat && task.repeat !== 'none' ? task.repeat : null
   if (!mode) return task.due
 
-  if (task.due >= from) return task.due
+  if (task.due >= from && !skipped(task.due)) return task.due
   const until = task.repeatUntil ?? null
   if (until && until < from) return null // 这一轮已经结束了
   const hardEnd = until ?? toStr(addDays(parseLocal(from), 400))
-  const dates = expandRepeat(task.due, mode, until, from, hardEnd)
+  const dates = expandRepeat(task.due, mode, until, from, hardEnd, task.repeatEvery)
   for (const d of dates) if (!skipped(d)) return d
   return null
 }

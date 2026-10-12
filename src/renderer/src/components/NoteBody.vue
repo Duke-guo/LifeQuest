@@ -146,6 +146,24 @@ function toggleTaskCheckbox(text: string, idx: number): string {
   })
 }
 
+/** 块上的点击：点复选框=切换打勾（不进编辑态）；点别处=进入编辑 */
+function onBlockClick(index: number, e: MouseEvent): void {
+  const box = (e.target as HTMLElement).closest<HTMLInputElement>('input[data-task-idx]')
+  if (box) {
+    e.preventDefault()
+    e.stopPropagation()
+    const b = blocks.value[index]
+    if (!b) return
+    const ti = Number(box.dataset.taskIdx ?? 0)
+    const nextText = toggleTaskCheckbox(b.text, ti)
+    if (nextText === b.text) return
+    const next = props.modelValue.slice(0, b.start) + nextText + props.modelValue.slice(b.end)
+    emit('update:modelValue', next)
+    return
+  }
+  startEdit(index)
+}
+
 function onRootClick(e: MouseEvent): void {
   const t = e.target as HTMLElement
   if (t.tagName !== 'INPUT') return
@@ -183,7 +201,7 @@ function onRootClick(e: MouseEvent): void {
         @keydown="onKeydown"
       ></textarea>
       <template v-else>
-        <div class="md-body nb-render" v-html="html(b.text)" @click="startEdit(i)"></div>
+        <div class="md-body nb-render" v-html="html(b.text)" @click="onBlockClick(i, $event)"></div>
         <button class="nb-del" title="删除这一段" @click="removeBlock(i, $event)">✕</button>
       </template>
     </div>

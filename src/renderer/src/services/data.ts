@@ -8,7 +8,8 @@ import type {
   LinksFile,
   SemesterFile,
   DayNotesFile,
-  HistoryFile
+  HistoryFile,
+  DemoFile
 } from '../../../shared/types'
 
 /**
@@ -60,6 +61,9 @@ export const dataApi = {
     (await window.api.readJson('history')) as HistoryFile | null,
   writeHistory: (h: HistoryFile): Promise<boolean> => window.api.writeJson('history', plain(h)),
 
+  readDemo: async (): Promise<DemoFile | null> => (await window.api.readJson('demo')) as DemoFile | null,
+  writeDemo: (d: DemoFile): Promise<boolean> => window.api.writeJson('demo', plain(d)),
+
   readMarkdown: (rel: string): Promise<string> => window.api.readMarkdown(rel),
   writeMarkdown: (rel: string, content: string): Promise<boolean> =>
     window.api.writeMarkdown(rel, content),
@@ -69,6 +73,10 @@ export const dataApi = {
   saveImage: (dataUrl: string): Promise<string> => window.api.saveImage(dataUrl),
   readImage: (filename: string): Promise<string> => window.api.readImage(filename),
   deleteImage: (filename: string): Promise<boolean> => window.api.deleteImage(filename),
+
+  attachFile: (): Promise<{ canceled: boolean; name?: string; file?: string }> => window.api.attachFile(),
+  openAttachment: (filename: string): Promise<boolean> => window.api.openAttachment(filename),
+  deleteAttachment: (filename: string): Promise<boolean> => window.api.deleteAttachment(filename),
 
   aiImageToTasks: (
     dataUrl: string

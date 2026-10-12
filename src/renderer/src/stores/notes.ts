@@ -5,6 +5,11 @@ import { parseFrontMatter, serializeFrontMatter, type FrontMatter } from '../uti
 import { uid, toDateStr } from '../utils/helpers'
 import type { EntityRef } from '../../../shared/types'
 
+export type NoteAttachment = {
+  name: string
+  file: string
+}
+
 export interface Note {
   id: string
   title: string
@@ -15,6 +20,7 @@ export interface Note {
   tags: string[]
   tagIds: string[]
   images: string[]
+  attachments: NoteAttachment[]
   links: EntityRef[]
   content: string
 }
@@ -23,6 +29,17 @@ function toArr(v: unknown): string[] {
   if (v === undefined || v === null) return []
   if (Array.isArray(v)) return v.map(String)
   return [String(v)]
+}
+
+function toAttachments(v: unknown): NoteAttachment[] {
+  if (!Array.isArray(v)) return []
+  return v
+    .filter((a) => a && typeof a === 'object')
+    .map((a) => {
+      const o = a as Record<string, unknown>
+      return { name: String(o.name ?? ''), file: String(o.file ?? '') }
+    })
+    .filter((a) => a.file)
 }
 
 export const useNotesStore = defineStore('notes', () => {
@@ -54,6 +71,7 @@ export const useNotesStore = defineStore('notes', () => {
         tags: toArr(meta.tags),
         tagIds: toArr(meta.tagIds),
         images: toArr(meta.images),
+        attachments: toAttachments(meta.attachments),
         links: [],
         content: body
       })
@@ -72,6 +90,7 @@ export const useNotesStore = defineStore('notes', () => {
       tags: [],
       tagIds: [],
       images: [],
+      attachments: [],
       links: [],
       content: '',
       ...patch
@@ -93,6 +112,7 @@ export const useNotesStore = defineStore('notes', () => {
     if (note.tags.length) meta.tags = note.tags
     if (note.tagIds.length) meta.tagIds = note.tagIds
     if (note.images.length) meta.images = note.images
+    if (note.attachments.length) meta.attachments = note.attachments
     await dataApi.writeMarkdown(`notes/${note.id}.md`, serializeFrontMatter(meta, note.content))
   }
 

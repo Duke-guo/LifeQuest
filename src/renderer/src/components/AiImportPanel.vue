@@ -4,8 +4,10 @@ import { useTasksStore } from '../stores/tasks'
 import { useSemesterStore } from '../stores/semester'
 import { dataApi } from '../services/data'
 import { toDateStr } from '../utils/helpers'
-import { REPEAT_LABELS, REPEAT_OPTIONS } from '../utils/schedule'
+import { REPEAT_LABELS, REPEAT_OPTIONS, everyNDays } from '../utils/schedule'
 import AppIcon from './AppIcon.vue'
+import DateField from './DateField.vue'
+import TimeField from './TimeField.vue'
 import type { RepeatMode } from '../../../shared/types'
 
 const emit = defineEmits<{ imported: []; close: [] }>()
@@ -86,6 +88,8 @@ const courses = ref<CourseGroup[]>([])
 const globalFrom = ref(toDateStr(mondayOf(new Date())))
 const globalUntil = ref(addDays(globalFrom.value, 7 * 16))
 const repeatMode = ref<RepeatMode>('weekly')
+/** repeatMode = 'every-n' 时：隔几天一次 */
+const repeatEvery = ref(2)
 
 const elapsed = ref(0)
 let timer: number | undefined
@@ -249,6 +253,7 @@ async function importAll(): Promise<void> {
         location: s.location?.trim() || null,
         remindMinutes: s.startTime ? 15 : null,
         repeat: repeating ? repeatMode.value : 'none',
+        repeatEvery: repeatMode.value === 'every-n' ? everyNDays({ repeatEvery: repeatEvery.value }) : null,
         repeatUntil: repeating && until ? until : null
       })
     }
@@ -323,14 +328,17 @@ async function importAll(): Promise<void> {
         </p>
 
         <div v-if="courses.length" class="settings-bar">
-          <label class="sb-field"><span>默认起始</span><input v-model="globalFrom" type="date" /></label>
-          <label class="sb-field"><span>默认截止</span><input v-model="globalUntil" type="date" /></label>
+          <label class="sb-field"><span>默认起始</span><DateField v-model="globalFrom" /></label>
+          <label class="sb-field"><span>默认截止</span><DateField v-model="globalUntil" /></label>
           <label class="sb-field">
             <span>重复</span>
             <select v-model="repeatMode">
               <option v-for="m in REPEAT_OPTIONS" :key="m" :value="m">{{ REPEAT_LABELS[m] }}</option>
             </select>
           </label>
+          <span v-if="repeatMode === 'every-n'" class="every-wrap">
+            每 <input v-model.number="repeatEvery" type="number" min="1" max="180" class="c-num" /> 天
+          </span>
           <button class="add-all" @click="importAll">添加 {{ courses.length }} 门课 / {{ totalSessions }} 个时段</button>
         </div>
 
@@ -350,8 +358,8 @@ async function importAll(): Promise<void> {
                 <option :value="null">—</option>
                 <option v-for="(w, wi) in WEEKDAYS" :key="w" :value="wi + 1">{{ w }}</option>
               </select>
-              <input v-model="s.startTime" type="time" class="r-time" />
-              <input v-model="s.endTime" type="time" class="r-time" />
+              <TimeField v-model="s.startTime" placeholder="开始" />
+              <TimeField v-model="s.endTime" placeholder="结束" end-of-day />
               <input v-model="s.location" class="r-loc" placeholder="地点" />
               <span class="r-date" :class="{ warn: !sessionDate(c, s) }">
                 {{ sessionDate(c, s) ?? '需选星期' }}
@@ -365,24 +373,24 @@ async function importAll(): Promise<void> {
               <button class="ghost-mini" @click="addSession(c)">＋ 加一个时段</button>
               <label class="sb-field">
                 <span>上课期间</span>
-                <input v-model="c.from" type="date" :placeholder="globalFrom" />
+                <DateField v-model="c.from" :placeholder="globalFrom || '起始'" />
                 <em>~</em>
-                <input v-model="c.until" type="date" :placeholder="globalUntil" />
+                <DateField v-model="c.until" :placeholder="globalUntil || '截止'" />
               </label>
             </div>
 
             <div class="exam-row">
               <span class="exam-label">期中</span>
-              <input v-model="c.midterm.date" type="date" />
-              <input v-model="c.midterm.startTime" type="time" />
-              <input v-model="c.midterm.endTime" type="time" />
+              <DateField v-model="c.midterm.date" placeholder="考试日期" />
+              <TimeField v-model="c.midterm.startTime" placeholder="开始" />
+              <TimeField v-model="c.midterm.endTime" placeholder="结束" end-of-day />
               <input v-model="c.midterm.location" class="ex-loc" placeholder="考场" />
             </div>
             <div class="exam-row">
               <span class="exam-label">期末</span>
-              <input v-model="c.final.date" type="date" />
-              <input v-model="c.final.startTime" type="time" />
-              <input v-model="c.final.endTime" type="time" />
+              <DateField v-model="c.final.date" placeholder="考试日期" />
+              <TimeField v-model="c.final.startTime" placeholder="开始" />
+              <TimeField v-model="c.final.endTime" placeholder="结束" end-of-day />
               <input v-model="c.final.location" class="ex-loc" placeholder="考场" />
             </div>
           </div>
@@ -510,6 +518,24 @@ async function importAll(): Promise<void> {
   background: var(--surface);
   color: var(--text);
   font-size: 0.8rem;
+}
+/* 「每 N 天」小方框 */
+.every-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--text-2);
+}
+.c-num {
+  width: 52px;
+  text-align: center;
+  font-family: var(--font-num);
+  padding: 0.28rem 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
 }
 .add-all {
   margin-left: auto;

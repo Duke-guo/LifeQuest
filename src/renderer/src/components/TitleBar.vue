@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import AppIcon from './AppIcon.vue'
+
+defineProps<{ viewName?: string }>()
+const emit = defineEmits<{ help: [] }>()
 
 const maximized = ref(false)
 /** macOS 用系统红绿灯，就不再画右上角那三个按钮，并给左侧让出位置 */
@@ -34,6 +38,10 @@ function closeWindow(): void {
   <div class="titlebar" :class="{ mac: isMac }">
     <span class="brand">LifeQuest</span>
     <span class="spacer"></span>
+
+    <button v-if="viewName" class="help-btn" :title="`${viewName}怎么用？`" @click="emit('help')">
+      <AppIcon name="guide" :size="17" />
+    </button>
 
     <div v-if="showButtons" class="win-btns">
       <button class="wb wb-min" title="最小化" @click="minimize">
@@ -107,6 +115,27 @@ function closeWindow(): void {
 }
 .spacer {
   flex: 1;
+}
+.help-btn {
+  width: 30px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+  box-shadow: 0 2px 0 var(--surface-2);
+  margin-right: 4px;
+  -webkit-app-region: no-drag;
+  transition: transform 0.13s ease, border-color 0.13s ease, color 0.13s ease;
+}
+.help-btn:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .win-btns {
   display: flex;

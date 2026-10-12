@@ -12,6 +12,7 @@ import { subjectOfNote } from '../utils/noteSubject'
 import { extendNote } from '../utils/noteActions'
 import { toDateStr } from '../utils/helpers'
 import AppIcon from '../components/AppIcon.vue'
+import DateField from '../components/DateField.vue'
 import NotesVine from '../components/NotesVine.vue'
 import NoteBody from '../components/NoteBody.vue'
 import type { EntityRef } from '../../../shared/types'
@@ -33,6 +34,7 @@ const tagList = ref<string[]>([])
 const tagInput = ref('')
 const content = ref('')
 const images = ref<string[]>([])
+const attachments = ref<Array<{ name: string; file: string }>>([])
 const imageSrcs = ref<Record<string, string>>({})
 const previewSrc = ref('')
 const linkHint = ref('')
@@ -40,7 +42,7 @@ const saving = ref(false)
 /** 列表 / 葡萄藤 两种视图 */
 const viewMode = ref<'list' | 'vine'>('list')
 /** 除标题与正文外，其余分区用按钮「召唤」 */
-const show = reactive({ meta: false, tags: false, images: false, links: false })
+const show = reactive({ meta: false, tags: false, images: false, links: false, attachments: false })
 
 function toggle(key: keyof typeof show): void {
   show[key] = !show[key]
@@ -48,6 +50,14 @@ function toggle(key: keyof typeof show): void {
 
 /** 正文：合一（实时预览）/ 纯源码 */
 const bodyMode = ref<'live' | 'raw'>('live')
+
+/** 编辑框里滚轮只滚编辑框，不带动整页 */
+const editorScrollRef = ref<HTMLElement | null>(null)
+function onEditorWheel(e: WheelEvent): void {
+  const el = editorScrollRef.value
+  if (!el) return
+  el.scrollTop += Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX
+}
 
 /** 正在编辑的笔记 id（区别于「当前选中」，新建/切换的瞬间两者会不一致） */
 const editingId = ref<string | null>(null)
@@ -153,6 +163,7 @@ async function select(id: string): Promise<void> {
   tagList.value = [...n.tags]
   content.value = n.content
   images.value = [...n.images]
+  attachments.value = [...n.attachments]
   await loadImageSrcs()
 }
 
@@ -190,6 +201,7 @@ async function save(auto = false): Promise<void> {
     tags: [...tagList.value],
     tagIds,
     images: [...images.value],
+    attachments: [...attachments.value],
     content: content.value
   })
   await store.persist(target)
@@ -324,6 +336,32 @@ async function removeImage(name: string): Promise<void> {
   await dataApi.deleteImage(name)
   await loadImageSrcs()
   await save()
+}
+
+// ---------- 附件 ----------
+async function addAttachment(): Promise<void> {
+  const res = await dataApi.attachFile()
+  if (res.canceled || !res.file) return
+  attachments.value.push({ name: res.name ?? res.file, file: res.file })
+  show.attachments = true
+  await save()
+}
+
+async function removeAttachment(file: string): Promise<void> {
+  const ok = await confirm.ask({
+    title: '移除这个附件？',
+    message: '文件会从 assets/ 里删掉，笔记里不再显示。',
+    detail: '只删笔记里的引用，不会动你原来的文件（附件是复制进来的一份）。',
+    confirmText: '移除附件'
+  })
+  if (!ok) return
+  attachments.value = attachments.value.filter((a) => a.file !== file)
+  await dataApi.deleteAttachment(file)
+  await save()
+}
+
+async function openAttachment(file: string): Promise<void> {
+  await dataApi.openAttachment(file)
 }
 
 // ---------- 标签 ----------
@@ -496,18 +534,20 @@ function onEditorClick(): void {
               <button :class="{ on: bodyMode === 'raw' }" @click="bodyMode = 'raw'">源码</button>
             </div>
           </div>
-          <NoteBody
-            v-if="bodyMode === 'live'"
-            v-model="content"
-            :resolve-image="(name: string) => imageSrcs[name]"
-          />
-          <textarea
-            v-else
-            v-model="content"
-            class="content-input"
-            placeholder="整篇 Markdown 源码…"
-            @click="onEditorClick"
-          ></textarea>
+          <div ref="editorScrollRef" class="editor-scroll" @wheel.prevent.stop="onEditorWheel">
+            <NoteBody
+              v-if="bodyMode === 'live'"
+              v-model="content"
+              :resolve-image="(name: string) => imageSrcs[name]"
+            />
+            <textarea
+              v-else
+              v-model="content"
+              class="content-input"
+              placeholder="整篇 Markdown 源码…"
+              @click="onEditorClick"
+            ></textarea>
+          </div>
         </div>
 
         <!-- 工具条：其余信息用按钮召唤 -->
@@ -522,6 +562,10 @@ function onEditorClick(): void {
           <button class="tool-btn" :class="{ on: show.images }" @click="toggle('images')">
             <AppIcon name="image" :size="14" /> 图片
             <em v-if="images.length">{{ images.length }}</em>
+          </button>
+          <button class="tool-btn" :class="{ on: show.attachments }" @click="toggle('attachments')">
+            <AppIcon name="attach" :size="14" /> 附件
+            <em v-if="attachments.length">{{ attachments.length }}</em>
           </button>
           <button class="tool-btn" :class="{ on: show.links }" @click="toggle('links')">
             <AppIcon name="map" :size="14" /> 关联
@@ -545,7 +589,7 @@ function onEditorClick(): void {
           </label>
           <label class="field">
             <span>日期</span>
-            <input v-model="date" type="date" />
+            <DateField v-model="date" />
           </label>
           <label class="field">
             <span>评价</span>
@@ -590,6 +634,24 @@ function onEditorClick(): void {
             </div>
           </div>
           <div v-else class="none">还没有图片</div>
+        </div>
+
+        <!-- 附件 -->
+        <div v-if="show.attachments" class="sec att-sec">
+          <div class="sec-head">
+            <span class="sec-label">附件</span>
+            <button class="upload-btn" type="button" @click="addAttachment">
+              <AppIcon name="plus" :size="15" /> 添加附件
+            </button>
+            <span class="hint">会复制一份进 assets/，点文件名用系统默认程序打开</span>
+          </div>
+          <div v-if="attachments.length" class="att-list">
+            <span v-for="a in attachments" :key="a.file" class="att-chip">
+              <button class="att-open" @click="openAttachment(a.file)">{{ a.name }}</button>
+              <button class="tag-x" @click="removeAttachment(a.file)">✕</button>
+            </span>
+          </div>
+          <div v-else class="none">还没有附件（PDF、文档、压缩包、音视频都能放）</div>
         </div>
 
         <!-- 关联 -->
@@ -970,6 +1032,37 @@ function onEditorClick(): void {
   padding: 2px 6px 2px 9px;
   font-size: 0.78rem;
 }
+/* 附件 */
+.att-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.att-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  background: rgba(91, 141, 239, 0.14);
+  color: #3f6fd0;
+  border-radius: 10px;
+  padding: 2px 6px 2px 4px;
+  font-size: 0.78rem;
+}
+.att-open {
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 3px 4px;
+  font-size: 0.78rem;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.att-open:hover {
+  text-decoration: underline;
+}
 .tag-x {
   border: none;
   background: none;
@@ -1086,6 +1179,19 @@ function onEditorClick(): void {
   font: inherit;
   line-height: 1.7;
   resize: vertical;
+}
+/* 编辑框：长文在框内滚动，滚轮不会把整页带走 */
+.editor-scroll {
+  max-height: 60vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.editor-scroll::-webkit-scrollbar {
+  width: 9px;
+}
+.editor-scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 5px;
 }
 /* 正文头部：模式切换 */
 .body-head {

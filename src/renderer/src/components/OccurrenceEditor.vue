@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import AppIcon from './AppIcon.vue'
+import DateField from './DateField.vue'
+import TimeField from './TimeField.vue'
 import type { TaskOccurrence } from '../../../shared/types'
 
 const props = defineProps<{ modelValue: TaskOccurrence[] }>()
@@ -22,24 +24,22 @@ function remove(i: number): void {
 <template>
   <div class="occ">
     <div v-for="(o, i) in modelValue" :key="i" class="occ-row">
-      <input
-        :value="o.date"
-        type="date"
-        class="occ-date"
-        @input="update(i, { date: ($event.target as HTMLInputElement).value })"
+      <DateField
+        :model-value="o.date"
+        placeholder="选日期"
+        @update:model-value="(v: string) => update(i, { date: v })"
       />
-      <input
-        :value="o.startTime ?? ''"
-        type="time"
-        class="occ-time"
-        @input="update(i, { startTime: ($event.target as HTMLInputElement).value || null })"
+      <TimeField
+        :model-value="o.startTime ?? ''"
+        placeholder="开始"
+        @update:model-value="(v: string) => update(i, { startTime: v || null })"
       />
       <span class="dash">–</span>
-      <input
-        :value="o.endTime ?? ''"
-        type="time"
-        class="occ-time"
-        @input="update(i, { endTime: ($event.target as HTMLInputElement).value || null })"
+      <TimeField
+        :model-value="o.endTime ?? ''"
+        placeholder="结束"
+        end-of-day
+        @update:model-value="(v: string) => update(i, { endTime: v || null })"
       />
       <button type="button" class="occ-del" title="删掉这一次" @click="remove(i)">
         <AppIcon name="close" :size="13" />

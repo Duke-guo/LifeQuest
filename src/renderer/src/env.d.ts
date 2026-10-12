@@ -22,6 +22,9 @@ interface Window {
     saveImage: (dataUrl: string) => Promise<string>
     readImage: (filename: string) => Promise<string>
     deleteImage: (filename: string) => Promise<boolean>
+    attachFile: () => Promise<{ canceled: boolean; name?: string; file?: string }>
+    openAttachment: (filename: string) => Promise<boolean>
+    deleteAttachment: (filename: string) => Promise<boolean>
     aiImageToTasks: (
       dataUrl: string
     ) => Promise<{ ok: boolean; items?: unknown[]; error?: string }>

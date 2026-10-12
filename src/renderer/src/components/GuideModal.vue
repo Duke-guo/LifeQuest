@@ -2,7 +2,8 @@
 import { ref, computed } from 'vue'
 import AppIcon from './AppIcon.vue'
 
-const emit = defineEmits<{ close: [] }>()
+const props = defineProps<{ hasDemo?: boolean }>()
+const emit = defineEmits<{ close: []; demo: [] }>()
 
 const step = ref(0)
 
@@ -15,25 +16,32 @@ const steps = [
   {
     icon: 'tasks',
     title: '右下角 · 召唤导航',
-    body: '点击右下角的罗盘按钮，6 个模块会像水滴一样分裂出来，点图标进入对应功能。'
+    body: '点右下角罗盘，6 个模块像水滴一样分裂出来：任务、日历、日记、笔记、计划、赛季。每个页面右上角都有一个「?」，点了就是本页说明。'
   },
   {
     icon: 'tasks',
-    title: '截止任务会自己冒头',
-    body:
-      '只填「截止日期 / 截止时刻」的任务（也就是 ddl）不会安静躺着：从今天起它每天都会出现在任务列表的「截止清单」里，' +
-      '越接近截止，显示的重要度会自动抬高（今天截止或逾期 +2★，三天内 +1★，只影响显示，不改你填的星数）。' +
-      '日历里它是插在时间点上的一面小旗；日视图里则是一条横线加渐变压迫带，越接近截止颜色越深。'
+    title: '任务与重复',
+    body: '任务分主线 / 支线 / 每日；重复方式有每天 / 工作日 / 每周 / 每两周 / 每 N 天 / 每月。\n点任务卡上的日历按钮能列出它的所有日期：只勾某一天、跳到那一周，或者「删掉这一次」（放假 / 调课）。\n只有截止日期的任务（ddl）会每天自动冒头，越接近截止越醒目。'
   },
   {
-    icon: 'journal',
-    title: '左上角 · 这里常驻',
-    body: '左上角图标随时可打开：新手导引、设置，以及后续的用户相关内容，都从这里进入。'
+    icon: 'calendar',
+    title: '日历',
+    body: '月 / 周 / 日三种视图。周视图每天自动配色（色相＝忙碌、饱和度＝心情、明度＝天气）；\n学期计划里设的「停课日」会自动消失；结束时间可以选 24:00（当天结束）；有 5 星任务的那天会算「紧张」。'
   },
   {
     icon: 'notes',
+    title: '日记 · 笔记 · 知识地图',
+    body: '日记每天几行，日历和主线地图上会长出蓝点；笔记支持 Markdown / 图片 / 附件，打标签、关联到任务之后，「知识地图」会把它们织成一张网。'
+  },
+  {
+    icon: 'sparkle',
+    title: '赛季 · 成就 · 回顾',
+    body: '「赛季」是内容节奏：主线地图上主轴是学期、支线是假期；你会得到称号和里程碑成就，也能自己定目标；点赛季里的「生成回顾」，直接在应用里看这一季的统计、高光时刻、你写过的原话。'
+  },
+  {
+    icon: 'journal',
     title: '数据属于你',
-    body: '所有数据都是本机文件夹里普通的 Markdown / JSON 文件：程序外也能打开、改、备份，整个文件夹拷过去就完成搬家。'
+    body: '所有数据都是本机文件夹里普通的 Markdown / JSON 文件，程序外也能打开、改、备份。\n第一次用的话，可以先载入一份「示例数据」看看每个页面长什么样——随时可以一键清空，不碰你自己的东西。'
   }
 ]
 
@@ -52,7 +60,16 @@ function next(): void {
       <button class="close" @click="emit('close')"><AppIcon name="close" :size="20" /></button>
       <div class="guide-icon"><AppIcon :name="current.icon" :size="34" /></div>
       <h2>{{ current.title }}</h2>
-      <p>{{ current.body }}</p>
+      <p class="body">{{ current.body }}</p>
+
+      <div v-if="step === total - 1" class="demo-row">
+        <button class="demo" @click="emit('demo')">
+          <AppIcon name="sparkle" :size="15" />
+          {{ props.hasDemo ? '清空示例数据' : '载入一份示例数据' }}
+        </button>
+        <span class="demo-hint">示例数据都带「示例」前缀，可随时清空</span>
+      </div>
+
       <div class="footer">
         <div class="dots">
           <span v-for="(s, i) in steps" :key="i" class="dot" :class="{ on: i === step }"></span>
@@ -81,7 +98,7 @@ function next(): void {
 }
 .guide-card {
   position: relative;
-  width: min(440px, 88vw);
+  width: min(480px, 90vw);
   background: var(--surface);
   border-radius: 20px;
   padding: 2rem 2rem 1.5rem;
@@ -122,11 +139,40 @@ function next(): void {
   margin: 0 0 0.75rem;
   color: var(--accent);
 }
-.guide-card p {
+.body {
   color: var(--text-2);
-  line-height: 1.7;
+  line-height: 1.75;
   margin: 0;
   min-height: 54px;
+  white-space: pre-line;
+  font-size: 0.92rem;
+}
+.demo-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 0.9rem;
+}
+.demo {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0.4rem 1rem;
+  border: 2px dashed var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 12px;
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+}
+.demo:hover {
+  border-style: solid;
+}
+.demo-hint {
+  font-size: 0.72rem;
+  color: var(--text-3);
 }
 .footer {
   margin-top: 1.25rem;

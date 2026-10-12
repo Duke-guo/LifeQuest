@@ -2,7 +2,7 @@
 import { computed, ref, nextTick } from 'vue'
 import type { Task } from '../../../shared/types'
 import { formatDate, todayStr } from '../utils/helpers'
-import { REPEAT_LABELS } from '../utils/schedule'
+import { repeatLabel, allOccurrences, isDoneOn, isRepeating } from '../utils/schedule'
 import {
   deadlineBump,
   deadlineShort,
@@ -12,21 +12,27 @@ import {
   isDeadline
 } from '../utils/deadline'
 import { useTasksStore } from '../stores/tasks'
+import { useSemesterStore } from '../stores/semester'
 import { draggingTaskId, dropTargetId, clearDrag, startAutoScroll } from '../utils/taskDrag'
 import AppIcon from './AppIcon.vue'
+import TaskOccurrencesModal from './TaskOccurrencesModal.vue'
 
-const props = defineProps<{ task: Task; flash?: boolean; today?: string }>()
+const props = defineProps<{ task: Task; flash?: boolean; today?: string; date?: string }>()
 const emit = defineEmits<{
   toggle: []
   remove: []
   edit: []
   note: []
+  /** 打开「这件事都会在哪几天出现」的窗口 */
   locate: []
+  /** 窗口里选了某一天要去日历 */
+  locateOn: [date: string]
   /** 子任务要打开编辑弹窗时，把子任务本身抛给视图 */
   editChild: [task: Task]
 }>()
 
 const store = useTasksStore()
+const semesterStore = useSemesterStore()
 /** 附属支线：只有顶层任务会挂子任务，避免递归套娃 */
 const children = computed(() =>
   props.task.parentId ? [] : store.tasks.filter((t) => t.parentId === props.task.id)
@@ -34,6 +40,8 @@ const children = computed(() =>
 const addingChild = ref(false)
 const childTitle = ref('')
 const childInput = ref<HTMLInputElement | null>(null)
+/** 「这件事都会在哪几天出现」的窗口 */
+const showOcc = ref(false)
 
 async function startAddChild(): Promise<void> {
   addingChild.value = !addingChild.value
@@ -61,7 +69,7 @@ async function addChild(): Promise<void> {
 }
 
 async function toggleChild(c: Task): Promise<void> {
-  await store.setStatus(c.id, c.status === 'done' ? 'todo' : 'done')
+  await store.toggleDone(c.id, props.date ?? props.today ?? todayStr())
 }
 
 // ---------- 拖拽：把一条任务拖到另一条上，它就变成那条的支线 ----------
@@ -116,10 +124,28 @@ async function detach(): Promise<void> {
   await store.updateTask(props.task.id, { parentId: null })
 }
 
-const done = computed(() => props.task.status === 'done')
 const isSchedule = computed(() => props.task.kind === 'schedule')
 /** 详情默认收成一行，长内容不撑高列表 */
 const descOpen = ref(false)
+
+/**
+ * 完成状态：重复任务按「这一天」算（勾今天不影响后面几次）；
+ * 列表里没给日期时，就看今天那一次。
+ */
+const viewDate = computed(() => props.date ?? props.today ?? todayStr())
+const done = computed(() => isDoneOn(props.task, viewDate.value))
+const repeating = computed(() => isRepeating(props.task))
+
+/** 重复任务的进度：已完成次数 / 总次数（勾一次涨一点）
+ *  校历停课的那几次不算进来，和日历上看到的次数一致 */
+const progress = computed(() => {
+  if (!repeating.value) return null
+  const all = allOccurrences(props.task, { holidaySkips: semesterStore.noClassDates })
+  if (all.length === 0) return null
+  const doneSet = new Set(props.task.doneDates ?? [])
+  const doneCount = all.filter((d) => doneSet.has(d)).length
+  return { done: doneCount, total: all.length, pct: Math.round((doneCount / all.length) * 100) }
+})
 
 // ---------- 截止型任务：临近截止时重要度自动抬高（只影响显示，不改磁盘数据） ----------
 const today = computed(() => props.today ?? todayStr())
@@ -177,6 +203,14 @@ const dialColor = computed(() => GEM_COLOR[imp.value] ?? 'var(--text-3)')
         <div class="meta">
           <span v-if="isDdl && ddlShort" class="pill ddl" :class="ddlTier" :title="ddlTip">⚑ {{ ddlShort }}</span>
           <span
+            v-if="progress"
+            class="pill prog"
+            :title="`重复任务：已完成 ${progress.done}/${progress.total} 次（勾掉的是当天那一次，不影响后面）`"
+          >
+            <i class="prog-bar"><b :style="{ width: progress.pct + '%' }"></b></i>
+            {{ progress.done }}/{{ progress.total }}
+          </span>
+          <span
             v-if="bump > 0"
             class="pill auto-imp"
             :title="`临近截止，重要度自动从 ${task.importance}★ 提到 ${imp}★（不改动你填的星数）`"
@@ -189,9 +223,12 @@ const dialColor = computed(() => GEM_COLOR[imp.value] ?? 'var(--text-3)')
           <span v-else-if="task.due" class="pill">{{ formatDate(task.due) }}</span>
           <span v-if="task.location" class="loc">{{ task.location }}</span>
           <span v-if="task.repeat && task.repeat !== 'none'" class="pill weekly">
-            {{ REPEAT_LABELS[task.repeat] }}
+            {{ repeatLabel(task.repeat, task.repeatEvery) }}
           </span>
           <span v-if="task.repeatUntil" class="pill range">至 {{ task.repeatUntil.slice(5) }}</span>
+          <span v-if="(task.skipOccurrences ?? []).length" class="pill skipped" title="有几次被排掉了（放假 / 调课），点日历按钮可以看或恢复">
+            排掉 {{ task.skipOccurrences!.length }} 次
+          </span>
         </div>
         <div v-if="task.description" class="desc-row">
           <span class="desc" :class="{ open: descOpen }" :title="task.description">{{ task.description }}</span>
@@ -209,7 +246,7 @@ const dialColor = computed(() => GEM_COLOR[imp.value] ?? 'var(--text-3)')
         <AppIcon name="plus" :size="14" />
       </button>
 
-      <button class="locate" title="在日历里定位到这件事所在的那一周" @click.stop="emit('locate')">
+      <button class="locate" title="看这件事都会在哪几天出现（可勾选 / 可跳日历）" @click.stop="showOcc = true">
         <AppIcon name="calendar" :size="15" />
       </button>
 
@@ -231,8 +268,8 @@ const dialColor = computed(() => GEM_COLOR[imp.value] ?? 'var(--text-3)')
 
     <!-- 附属的支线任务 -->
     <div v-if="children.length || addingChild" class="kids">
-      <div v-for="c in children" :key="c.id" class="kid" :class="{ done: c.status === 'done' }">
-        <button class="kid-check" @click.stop="toggleChild(c)">{{ c.status === 'done' ? '✓' : '' }}</button>
+      <div v-for="c in children" :key="c.id" class="kid" :class="{ done: isDoneOn(c, viewDate) }">
+        <button class="kid-check" @click.stop="toggleChild(c)">{{ isDoneOn(c, viewDate) ? '✓' : '' }}</button>
         <span class="kid-title" title="点击编辑" @click.stop="emit('editChild', c)">{{ c.title }}</span>
         <span v-if="c.startTime" class="kid-time">{{ c.startTime }}<template v-if="c.endTime">–{{ c.endTime }}</template></span>
         <span v-else-if="c.due" class="kid-time">{{ c.due.slice(5) }}</span>
@@ -251,6 +288,13 @@ const dialColor = computed(() => GEM_COLOR[imp.value] ?? 'var(--text-3)')
         />
       </div>
     </div>
+
+    <TaskOccurrencesModal
+      v-if="showOcc"
+      :task="task"
+      @close="showOcc = false"
+      @locate="(d: string) => emit('locateOn', d)"
+    />
   </div>
 </template>
 
@@ -426,6 +470,12 @@ const dialColor = computed(() => GEM_COLOR[imp.value] ?? 'var(--text-3)')
   background: var(--surface-2);
   color: var(--text-2);
 }
+/* 「排掉 N 次」：安静一点，别抢戏 */
+.pill.skipped {
+  background: none;
+  border: 1px dashed var(--border);
+  color: var(--text-3);
+}
 /* 截止徽章：越紧迫越深 */
 .pill.ddl {
   font-weight: 600;
@@ -451,6 +501,29 @@ const dialColor = computed(() => GEM_COLOR[imp.value] ?? 'var(--text-3)')
   background: rgba(207, 74, 60, 0.14);
   color: var(--accent);
   font-weight: 700;
+}
+/* 重复任务进度条 */
+.pill.prog {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-num);
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+.prog-bar {
+  display: inline-block;
+  width: 46px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(120, 120, 130, 0.2);
+  overflow: hidden;
+}
+.prog-bar b {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--success);
 }
 .loc {
   color: var(--text-3);
