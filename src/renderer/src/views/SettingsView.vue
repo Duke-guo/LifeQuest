@@ -112,6 +112,24 @@ async function openRelease(): Promise<void> {
         </div>
       </header>
 
+      <section class="card" :class="{ highlight: hasUpdate }">
+        <h3>
+          版本与更新
+          <span v-if="hasUpdate" class="new-dot" />
+        </h3>
+        <p class="row">
+          当前版本：<code>v{{ version }}</code>
+          <template v-if="hasUpdate"> · 新版 <code>v{{ latestVersion }}</code></template>
+        </p>
+        <div class="update-actions">
+          <button class="btn" :disabled="updateStore.checking" @click="checkUpdate">
+            {{ updateStore.checking ? '正在检查…' : '检查更新' }}
+          </button>
+          <button v-if="hasUpdate" class="btn alt" @click="openRelease">去 GitHub 下载</button>
+        </div>
+        <p v-if="updateMsg" class="msg" :class="{ err: isUpdateError }">{{ updateMsg }}</p>
+      </section>
+
       <section class="card">
         <h3>外观</h3>
         <div class="theme-row">
@@ -194,17 +212,6 @@ async function openRelease(): Promise<void> {
         <p v-if="exportMsg" class="msg">{{ exportMsg }}</p>
       </section>
 
-      <section class="card">
-        <h3>关于 / 更新</h3>
-        <p class="row">当前版本：<code>v{{ version }}</code></p>
-        <button class="btn" :disabled="updateStore.checking" @click="checkUpdate">
-          {{ updateStore.checking ? '正在检查…' : '检查更新' }}
-        </button>
-        <p v-if="updateMsg" class="msg" :class="{ err: isUpdateError }">{{ updateMsg }}</p>
-        <button v-if="hasUpdate" class="btn alt" @click="openRelease">
-          去 GitHub 下载 v{{ latestVersion }}
-        </button>
-      </section>
     </div>
   </div>
 </template>
@@ -324,6 +331,24 @@ h3 {
   background: var(--surface);
   color: var(--accent);
   border: 1px solid var(--accent);
+}
+.update-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.new-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--danger);
+  vertical-align: middle;
+}
+.card.highlight {
+  box-shadow: inset 3px 0 0 var(--danger);
 }
 .toggle {
   display: flex;
