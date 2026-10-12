@@ -9,7 +9,8 @@ import type {
   SemesterFile,
   DayNotesFile,
   HistoryFile,
-  DemoFile
+  DemoFile,
+  UpdateCheckResult
 } from '../../../shared/types'
 
 /**
@@ -24,6 +25,9 @@ function plain<T>(value: T): T {
 // 渲染进程的数据服务层：统一封装对主进程 IPC 的调用
 export const dataApi = {
   getRoot: (): Promise<string> => window.api.dataRoot(),
+  getVersion: (): Promise<string> => window.api.version(),
+  checkUpdate: (): Promise<UpdateCheckResult> => window.api.checkUpdate(),
+  openExternal: (url: string): Promise<boolean> => window.api.openExternal(url),
 
   readSettings: async (): Promise<Settings | null> =>
     (await window.api.readJson('settings')) as Settings | null,

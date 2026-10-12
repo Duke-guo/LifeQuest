@@ -337,3 +337,8 @@ export interface CalendarEvent {
     deadline?: boolean
   }
 }
+
+// ===================== 更新检查 =====================
+export type UpdateCheckResult =
+  | { ok: true; current: string; latest: string; hasUpdate: boolean; url: string; notes: string }
+  | { ok: false; error: string }

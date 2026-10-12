@@ -12,10 +12,16 @@ const store = useSettingsStore()
 const dataRoot = ref('')
 const exportMsg = ref('')
 const aiSaved = ref('')
+const version = ref('')
+const updateState = ref<'idle' | 'checking' | 'latest' | 'available' | 'error'>('idle')
+const updateMsg = ref('')
+const latestVersion = ref('')
+const releaseUrl = ref('')
 
 onMounted(async () => {
   await store.load()
   dataRoot.value = await dataApi.getRoot()
+  version.value = await dataApi.getVersion()
   if (store.settings && !store.settings.ai) {
     store.settings.ai = {
       enabled: false,
@@ -75,6 +81,31 @@ function onAiInput(field: 'baseUrl' | 'apiKey' | 'model', value: string): void {
 async function doExport(): Promise<void> {
   const res = await dataApi.export()
   exportMsg.value = res.canceled ? '已取消' : `导出成功：${res.dest}`
+}
+
+async function checkUpdate(): Promise<void> {
+  if (updateState.value === 'checking') return
+  updateState.value = 'checking'
+  updateMsg.value = ''
+  const res = await dataApi.checkUpdate()
+  if (res.ok) {
+    if (res.hasUpdate) {
+      updateState.value = 'available'
+      latestVersion.value = res.latest
+      releaseUrl.value = res.url
+      updateMsg.value = `发现新版 v${res.latest}（当前 v${res.current}）`
+    } else {
+      updateState.value = 'latest'
+      updateMsg.value = `已是最新版本（v${res.current}）`
+    }
+  } else {
+    updateState.value = 'error'
+    updateMsg.value = res.error
+  }
+}
+
+async function openRelease(): Promise<void> {
+  if (releaseUrl.value) await dataApi.openExternal(releaseUrl.value)
 }
 </script>
 
@@ -169,6 +200,18 @@ async function doExport(): Promise<void> {
         <p class="row hint">数据即普通文件（Markdown + JSON + 图片），可随时复制、备份、迁移。</p>
         <button class="btn" @click="doExport">导出数据（复制到指定文件夹）</button>
         <p v-if="exportMsg" class="msg">{{ exportMsg }}</p>
+      </section>
+
+      <section class="card">
+        <h3>关于 / 更新</h3>
+        <p class="row">当前版本：<code>v{{ version }}</code></p>
+        <button class="btn" :disabled="updateState === 'checking'" @click="checkUpdate">
+          {{ updateState === 'checking' ? '正在检查…' : '检查更新' }}
+        </button>
+        <p v-if="updateMsg" class="msg" :class="{ err: updateState === 'error' }">{{ updateMsg }}</p>
+        <button v-if="updateState === 'available'" class="btn alt" @click="openRelease">
+          去 GitHub 下载 v{{ latestVersion }}
+        </button>
       </section>
     </div>
   </div>
@@ -277,6 +320,18 @@ h3 {
   color: var(--success);
   font-size: 0.85rem;
   margin-top: 0.5rem;
+}
+.msg.err {
+  color: var(--danger);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.btn.alt {
+  background: var(--surface);
+  color: var(--accent);
+  border: 1px solid var(--accent);
 }
 .toggle {
   display: flex;

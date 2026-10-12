@@ -1,4 +1,4 @@
-import { ipcMain, dialog, shell } from 'electron'
+import { ipcMain, dialog, shell, app } from 'electron'
 import { join, relative, isAbsolute } from 'path'
 import { request as httpsRequest } from 'https'
 import { request as httpRequest } from 'http'
@@ -130,6 +130,56 @@ async function postJson(
     }
   }
   throw lastError ?? new Error('请求失败')
+}
+
+// ---- 更新检查（手动触发，查 GitHub Releases 最新版本）----
+const GITHUB_REPO = 'Duke-guo/LifeQuest'
+const GITHUB_LATEST = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`
+const RELEASES_URL = `https://github.com/${GITHUB_REPO}/releases`
+
+/** 简单语义化版本比较：a 是否比 b 新（忽略前导 v，逐段按数字比较） */
+function isNewer(a: string, b: string): boolean {
+  const pa = a.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0)
+  const pb = b.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0)
+  const len = Math.max(pa.length, pb.length)
+  for (let i = 0; i < len; i++) {
+    const x = pa[i] ?? 0
+    const y = pb[i] ?? 0
+    if (x > y) return true
+    if (x < y) return false
+  }
+  return false
+}
+
+/** 单次 GET（走主进程自己的 socket；GitHub API 要求带 User-Agent） */
+function getText(url: string, timeoutMs: number): Promise<{ status: number; text: string }> {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url)
+    const req = httpsRequest(
+      {
+        method: 'GET',
+        hostname: u.hostname,
+        port: u.port || (u.protocol === 'https:' ? 443 : 80),
+        path: `${u.pathname}${u.search}`,
+        headers: {
+          'User-Agent': 'LifeQuest',
+          Accept: 'application/vnd.github+json',
+          'Accept-Encoding': 'identity'
+        }
+      },
+      (res) => {
+        const chunks: Buffer[] = []
+        res.on('data', (c: Buffer) => chunks.push(c))
+        res.on('end', () =>
+          resolve({ status: res.statusCode ?? 0, text: Buffer.concat(chunks).toString('utf8') })
+        )
+        res.on('error', (e) => reject(e))
+      }
+    )
+    req.setTimeout(timeoutMs, () => req.destroy(new Error(`请求超时（${timeoutMs}ms）`)))
+    req.on('error', (e) => reject(e))
+    req.end()
+  })
 }
 
 function register(): void {  ipcMain.handle('data:root', () => dataRoot)
@@ -269,6 +319,35 @@ function register(): void {  ipcMain.handle('data:root', () => dataRoot)
     } catch (e) {
       console.error('[ai] 异常:', e)
       return { ok: false, error: `请求失败：${(e as Error).message}` }
+    }
+  })
+
+  // ---- 应用版本 / 更新检查 / 打开外链 ----
+  ipcMain.handle('app:version', () => app.getVersion())
+
+  ipcMain.handle('app:openExternal', async (_e, url: string) => {
+    if (!/^https?:\/\//i.test(url)) return false
+    await shell.openExternal(url)
+    return true
+  })
+
+  ipcMain.handle('update:check', async () => {
+    try {
+      const { status, text } = await getText(GITHUB_LATEST, 10000)
+      if (status !== 200) return { ok: false, error: `GitHub 返回 ${status}` }
+      const json = JSON.parse(text) as { tag_name?: string; html_url?: string; body?: string }
+      const latest = (json.tag_name || '').replace(/^v/, '')
+      const current = app.getVersion()
+      return {
+        ok: true,
+        current,
+        latest,
+        hasUpdate: latest !== '' && isNewer(latest, current),
+        url: json.html_url || RELEASES_URL,
+        notes: (json.body || '').slice(0, 2000)
+      }
+    } catch (e) {
+      return { ok: false, error: `检查更新失败：${(e as Error).message}` }
     }
   })
 }

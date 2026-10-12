@@ -1,8 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { UpdateCheckResult } from '../shared/types'
 
 // 白名单 API：渲染进程唯一能触达主进程的入口
 const api = {
   ping: (): Promise<string> => ipcRenderer.invoke('ping'),
+  /** 当前应用版本号（来自 package.json） */
+  version: (): Promise<string> => ipcRenderer.invoke('app:version'),
+  /** 查 GitHub Releases 最新版本（手动触发） */
+  checkUpdate: (): Promise<UpdateCheckResult> => ipcRenderer.invoke('update:check'),
+  /** 用系统浏览器打开外链 */
+  openExternal: (url: string): Promise<boolean> => ipcRenderer.invoke('app:openExternal', url),
   /** 当前平台：'win32' | 'darwin' | 'linux'（界面按平台调整标题栏/快捷键提示） */
   platform: process.platform,
   dataRoot: (): Promise<string> => ipcRenderer.invoke('data:root'),

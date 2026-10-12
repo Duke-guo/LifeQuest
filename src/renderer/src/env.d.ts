@@ -9,6 +9,12 @@ declare module '*.vue' {
 interface Window {
   api: {
     ping: () => Promise<string>
+    version: () => Promise<string>
+    checkUpdate: () => Promise<
+      | { ok: true; current: string; latest: string; hasUpdate: boolean; url: string; notes: string }
+      | { ok: false; error: string }
+    >
+    openExternal: (url: string) => Promise<boolean>
     /** 'win32' | 'darwin' | 'linux' */
     platform: string
     dataRoot: () => Promise<string>
