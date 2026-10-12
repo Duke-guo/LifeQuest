@@ -4,6 +4,8 @@
 > **本地优先**：所有数据都是你自己电脑上的普通 Markdown 和 JSON 文件，随时能打开、复制、备份、带走。
 > **游戏化只是可选外壳**：没有排行榜，没有连续打卡惩罚，没有强制任务。
 
+**🌐 产品主页（含截图与下载）：<https://duke-guo.github.io/LifeQuest/>**
+
 ![首页](docs/screenshots/01-home.png)
 
 ---
@@ -88,7 +90,8 @@
 
 ## 下载即用
 
-到 [Releases](../../releases) 页面下载对应系统的文件：
+**推荐从产品主页下载：<https://duke-guo.github.io/LifeQuest/>**（图文介绍 + 三平台按钮）。
+也可以直接到 [Releases](../../releases) 页面挑对应系统的文件：
 
 | 系统 | 文件 | 说明 |
 |---|---|---|
