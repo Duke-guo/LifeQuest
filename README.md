@@ -4,24 +4,26 @@
 > **本地优先**：所有数据都是你自己电脑上的普通 Markdown 和 JSON 文件，随时能打开、复制、备份、带走。
 > **游戏化只是可选外壳**：没有排行榜，没有连续打卡惩罚，没有强制任务。
 
+![license](https://img.shields.io/badge/license-MIT-green) ![platform](https://img.shields.io/badge/平台-Windows%20%7C%20macOS%20%7C%20Linux-blue) ![stack](https://img.shields.io/badge/技术栈-Electron%20%2B%20Vue%203%20%2B%20TypeScript-orange)
+
 **🌐 产品主页（含截图与下载）：<https://duke-guo.github.io/LifeQuest/>**
 
 ![首页](docs/screenshots/01-home.png)
 
 ---
 
-## 这是给谁用的
+## 这是什么
 
 给「想认真记录生活，但讨厌被工具 PUA」的人。
 
 - 有课程表、有 deadline、想记日记和笔记，但不想在五六个 App 之间来回切
 - 喜欢游戏化的反馈感（等级、成就、完成度），但反感打卡断签、每日强制任务、排行榜比较
-- 在意数据归属：不想把日记存在别人的服务器上，也不想哪天服务关停就全没了
+- 在意数据归属：不想把日记存在别人的服务器上
 
 ## 它不是什么
 
 - 不是打卡类自律 App：**不制造焦虑**是硬性设计原则，失败没有惩罚
-- 不是云笔记：默认不联网、不上传（唯一会联网的功能是「AI 识图导入」，用你自己的 API Key，可关闭）
+- 不是云笔记：默认不联网、不上传（唯一联网功能是「AI 识图导入」，用你自己的 API Key，可关闭）
 - 不是团队协作工具：单人本地应用
 
 ---
@@ -34,195 +36,325 @@
 
 - **一列一天，滚轮左右连贯滑动**（不是一页一周），进页面自动把今天放在屏幕正中
 - 鼠标悬停时下边缘跟着鼠标平缓起伏；移开就重新突出**今天**
-- 每天自动配色：**色相＝忙碌程度、饱和度＝心情、明度＝天气**，一眼看出这周哪几天重
-- 一天的「性质」可手动指定：上课 / 周末 / 放假停课 / 考试 / 空白 / 自定义（比如"实习"）
-- 忙碌程度可以手写覆盖算法默认值；过完的日子会按完成度给 **S / A / B / C / D** 评级
-- 截止任务在日历上是一面**插在时间点上的小旗**，压在日程文字上时自动收成一个小旗
+- 每天自动配色：**色相＝忙碌程度、饱和度＝心情、明度＝天气**
+- 一天的「性质」可手动指定：上课 / 周末 / 放假停课 / 考试 / 空白 / 自定义
+- 忙碌程度可手写覆盖；过完的日子按完成度给 **S / A / B / C / D** 评级
 
 ### 日视图：时间轴 + 截止压迫带
 
 ![日视图](docs/screenshots/03-day.png)
 
 - 左时间轴 06:00–24:00，日程按时间块排；图上直接增删改、调重要度
-- 截止型任务画成**一条横线 + 渐变**（越接近截止颜色越深）；和别的日程块重叠时只留一条线 + 文字
-- 填日期/时间用的是自绘的小面板（不是系统那种）：日历带**事件小圆点**、点标题能直接跳年/月；时间面板有**常用时刻**一键填，结束时间还能选 **24:00 = 当天结束**（"到半夜"这种再也不用写成 23:59）
+- 截止型任务画成**横线 + 渐变**；结束时间可选 **24:00 = 当天结束**
 
 ### 任务：主线 / 支线 / 每日，以及会自己冒头的 ddl
 
 ![任务页](docs/screenshots/04-tasks.png)
 
-- 三类任务：**主线**（课程、长期目标）、**支线**（一次性事情）、**每日**（习惯）
-- 重要度 1–5 星，卡片上的**罗盘指针**会跟着指向上方
-- 重复：每天 / 工作日 / 每周 / 双周 / **每 N 天** / 每月；支持**重复链**（同一门课周二的时段和周四的时段写在一个任务里）
-- 也支持**不规律日期**：一节一节地填具体日期
-- **跳过某几次**：点任务卡上的日历按钮，列出这件事的所有日期 —— 今天/下次一眼可见，可以只勾掉某一天、跳到那一周，也可以**删掉这一次**（放假、调课、老师临时不上），删之前会先问你一句，随时能恢复
-- 支线可以**拖到主线上**变成它的子任务，也可以一键摘下来；长列表拖拽有自动滚动
-- **截止清单**：只有截止日期/时刻的任务（也就是 ddl）从今天起每天都会露头，越接近截止**显示的重要度自动抬高**（今天/逾期 +2★，三天内 +1★，只影响显示，不改你填的星数）
-- 任务页同时露出「今天」和「明天」，不用翻日历
+- 重要度 1–5 星，卡片上的**罗盘指针**跟着指向
+- 重复：每天 / 工作日 / 每周 / 双周 / **每 N 天** / 每月；支持**重复链**（一周上两次）
+- **跳过某几次**：点任务卡的日历按钮，列出所有日期 → 只勾某一天 / 跳到那一周 / **删掉这一次**（放假调课，带确认）
+- **截止清单**：ddl 每天自动冒头，越接近截止显示重要度越高
+- 支线可**拖到主线**上变成子任务；长列表拖拽自动滚动
 
 ### 日记：每日日记与周记在同一页
 
-![日记页](docs/screenshots/06-journal.png)
-
-- 顶部一键切换**每日日记 / 周记**，都存在同一个 `journal/` 目录里
-- 天气与心情会**染色到日历**（就是上面那套"色相/饱和度/明度"）
-- 有提示词（"今天最开心的一件事"…）可以点一下插进正文
-- 正文右上角可以**关联笔记**（和"知识地图"共用同一套关联数据），点标题直接进那篇笔记
-- 下面的**葡萄藤**一条藤串起所有日子：一天一颗果实，写过的果子有颜色；切成"周记"就是一周一颗，滚动速度是上面的 1/7
+- 每日日记 + 周记（`w<周日>.md`），天气/心情参与日历配色
+- 「葡萄藤」视图：果实＝写过日记的日子，滚动与日历同步
 
 ### 笔记：Markdown + 块级即时编辑
 
-![笔记葡萄藤](docs/screenshots/05-notes-vine.png)
+- 段落级就地编辑、图片/附件（Ctrl+V 贴截图）、标签、评价
+- **关联**：把笔记关联到任务/另一篇笔记/计划，还能一键关联「今天的课」
 
-- 存成普通 `.md`（带 YAML front matter），别的编辑器也能打开
-- **点哪写哪**：正文按段落分块，点一块就地变成输入框，Esc / Ctrl+Enter 提交，不用在"编辑/预览"之间切
-- 支持 `- [ ]` 任务清单、代码块、图片（拖进来自动存到 `assets/`）
-- 两种视图：**列表**（总列表 / 按时间 / 按内容）和**葡萄藤**（时间主线 / 学科主线，滚轮换主线、点葡萄选、双击进编辑）
-- 自动保存（改完不用记得按保存）
+### 计划、知识地图、主线地图
 
-### 计划、知识地图
-
-![知识地图](docs/screenshots/07-graph.png)
-
-- **学期计划**：校历起止、假期（放假当天自动停课）、考试周
-- **活动计划**：给一段时间定一个主题（"期中复习周"），会铺到日历上
-- **知识地图**：把笔记、任务、标签之间的关联画成一张网，关联越多的节点自动聚得越近
+- **学期计划**：校历起止、假期（放假自动停课）、考试周
+- **活动计划**：给一段时间定个主题，铺到日历上
+- **知识地图**：笔记 / 任务 / 标签的关系网
+- **主线 / 支线地图**：主轴是学期、支线是假期，日记是蓝点，点一下回到那一天
 
 ### 赛季 · 成长 · 回顾
 
-- **主线 / 支线地图**：主轴是学期、支线是假期，写过的日记变成蓝点，点一下回到那一天
-- **成就**：里程碑成就（第一次做某件事就点亮）+ 自定义成就（自己定目标，可只统计某个赛季）；**称号为主、等级藏角落**，不制造压力
-- **赛季回顾**：点「生成回顾」在应用里直接看这一季的统计、高光时刻、你写过的原话，也能存成 Markdown
+- **称号为主、等级藏角落**（记录者 → 生活史官…）
+- **里程碑成就**（第一次做某件事就点亮）+ **自定义成就**（可只统计某个赛季）
+- **赛季回顾**：应用内直接看统计 / 高光时刻 / 你写过的原话，可存 Markdown
 
 ### 新手导引 · 每页帮助 · 示例数据
 
-- 左上角罗盘 →「新手导引」7 步入门；**每个页面右上角都有「?」**，点了是本页说明
-- 第一次用可以先**载入一份示例数据**（带「示例」前缀的课程/任务/计划/笔记/日记），看清楚每个页面长什么样，随时一键清空、不碰自己的东西
+- 左上角罗盘 →「新手导引」；**每个页面右上角「?」**是本页说明
+- 第一次用可**载入示例数据**（带「示例」前缀，随时一键清空）
 
 ---
 
 ## 下载即用
 
-**推荐从产品主页下载：<https://duke-guo.github.io/LifeQuest/>**（图文介绍 + 三平台按钮）。
-也可以直接到 [Releases](../../releases) 页面挑对应系统的文件：
+**推荐从产品主页下载：<https://duke-guo.github.io/LifeQuest/>**，或直接到 [Releases](../../releases) 挑对应系统的文件：
 
 | 系统 | 文件 | 说明 |
 |---|---|---|
 | **Windows** | `LifeQuest-*-portable.exe` | 免安装，双击就能跑；数据落在 exe 同级的 `LifeQuest-Data/` |
-| **macOS** | `LifeQuest-*-mac-x64.dmg` / `LifeQuest-*-mac-arm64.dmg` | Intel 芯片选 x64，Apple 芯片（M 系列）选 arm64；打开后拖进「应用程序」，数据在「文稿」目录下的 `LifeQuest-Data/` |
-| **Linux** | `LifeQuest-*-linux-x86_64.AppImage` | `chmod +x` 后直接运行；数据落在 AppImage 同级的 `LifeQuest-Data/`。也有 `.deb` |
+| **macOS** | `LifeQuest-*-mac-x64.dmg` / `-mac-arm64.dmg` | Intel 选 x64，Apple 芯片选 arm64 |
+| **Linux** | `LifeQuest-*-linux-x86_64.AppImage` | `chmod +x` 后运行；也有 `.deb` |
 
-**首次运行的安全提示**（个人项目，没有购买代码签名证书，属于正常现象）：
+**首次运行提示**（个人项目，未购买代码签名证书，属正常现象）：
 
-- Windows：「未知发布者」→ 点「更多信息 → 仍要运行」
-- macOS：右键 App → 「打开」；若提示"已损坏"，在终端执行 `xattr -cr /Applications/LifeQuest.app`
-- Linux：个别发行版上 AppImage 会报沙箱错误，用 `./LifeQuest-*.AppImage --no-sandbox` 启动
+- Windows：「未知发布者」→「更多信息 → 仍要运行」
+- macOS：右键 App →「打开」；若提示"已损坏"，执行 `xattr -cr /Applications/LifeQuest.app`
+- Linux：个别发行版报沙箱错误时，用 `./LifeQuest-*.AppImage --no-sandbox`
 
-想放到别处放数据？设环境变量 `LIFEQUEST_DATA_ROOT=/你的/目录` 即可，三个平台都支持。
+---
+
+# 开发者指南 · 项目全貌
+
+> 下面面向**想参与开发 / 想读懂这个项目**的人，把技术栈、架构、每个目录和文件的职责、数据如何管理、怎么构建与发布讲清楚。更细的数据契约见 [docs/架构与数据设计.md](docs/架构与数据设计.md)，协作约定见 [CONTRIBUTING.md](CONTRIBUTING.md) 与 [AGENT.md](AGENT.md)。
+
+## 技术栈
+
+| 层 | 技术 | 版本 | 作用 |
+|---|---|---|---|
+| 桌面壳 | Electron | 44.x | 跨平台桌面运行时，主进程 + 渲染进程 |
+| 界面 | Vue 3 | 3.5.x | 组合式 API（`<script setup>`） |
+| 状态 | Pinia | 4.x | 全局 store，按「数据域」划分 |
+| 构建 | Vite | 7.x | 通过 **electron-vite** 分别打包 main / preload / renderer |
+| 语言 | TypeScript | 5.9 | 严格模式，共享类型集中在 `src/shared/types.ts` |
+| 打包 | electron-builder | 26.x | 生成 Windows portable / macOS dmg+zip / Linux AppImage+deb |
+| 字体 | ZCOOL KuaiLe + Baloo 2 | — | 中文标题字体 + 圆润数字字体（woff2 内嵌） |
+
+**没有数据库、没有后端、没有云服务**——一切读写都落在本地文件上。
+
+## 架构分层
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  src/main        Electron 主进程（Node 环境，能碰文件系统）      │
+│    index.ts      窗口/菜单/更新检查/窗口控制/调试装置           │
+│    ipc.ts        所有 data:* / ai:* / update:* 的 IPC 处理   │
+│    dataStore.ts  数据根目录定位、建目录、schemaVersion 迁移、    │
+│                  文件读写与「防目录穿越」校验                  │
+├─────────────────────────────────────────────────────────┤
+│  src/preload     contextBridge 白名单：把 window.api 暴露给界面 │
+├─────────────────────────────────────────────────────────┤
+│  src/renderer/src   Vue 界面（跑在渲染进程，只有 window.api）    │
+│    services/data.ts   ← 唯一的数据入口 dataApi（关键接缝）      │
+│    stores/            Pinia，按数据域封装状态与持久化           │
+│    views/             9 个视图 + 设置                          │
+│    components/        可复用 UI 组件                           │
+│    utils/             纯函数：日程展开、配色、截止、Markdown…    │
+├─────────────────────────────────────────────────────────┤
+│  src/shared/types.ts  主进程与渲染进程共用的类型（数据契约唯一来源） │
+└─────────────────────────────────────────────────────────┘
+```
+
+**一条写操作的完整链路**（以保存任务为例）：
+
+`TasksView → store.addTask → dataApi.writeTasks()（services/data.ts，先把响应式对象 JSON 深拷贝成普通对象）→ window.api.writeJson('tasks')（preload）→ ipcMain.handle('data:writeJson')（ipc.ts）→ dataStore.writeJsonFile() → 磁盘 tasks/tasks.json`。
+
+要点：**渲染进程永远不直接碰 Node API**，只通过 `window.api.*`；`services/data.ts` 的 `dataApi` 是唯一接缝——这也是将来做网页版/PWA 时唯一需要替换的实现（见 [docs/移动端方案.md](docs/移动端方案.md)）。
+
+## 目录结构（逐项说明）
+
+```
+LifeQuest/
+├── src/
+│   ├── main/                    # Electron 主进程
+│   │   ├── index.ts             # 应用生命周期、无边框窗口、菜单、窗口控制、
+│   │   │                        #   检查更新；以及一套环境变量驱动的“无头调试装置”
+│   │   ├── ipc.ts               # 注册全部 ipcMain.handle：
+│   │   │                        #   data:*（读写 JSON/Markdown/图片/附件/导出）、
+│   │   │                        #   ai:imageToTasks、app:version、update:check
+│   │   └── dataStore.ts         # resolveDataRoot()、建目录、seedDefaults()、
+│   │                            #   migrateIfNeeded()（schemaVersion 迁移）、
+│   │                            #   readJsonFile/writeJsonFile/read|writeMarkdownFile/listFiles
+│   ├── preload/index.ts         # contextBridge 白名单：window.api（见上文）
+│   ├── renderer/
+│   │   ├── index.html           # 挂载点
+│   │   └── src/
+│   │       ├── main.ts          # Vue 入口
+│   │       ├── App.vue          # 视图路由、返回栈、全局弹窗（确认框/帮助/导引/设置）
+│   │       ├── env.d.ts         # window.api 的类型声明
+│   │       ├── assets/          # main.css（主题变量）+ 字体
+│   │       ├── services/data.ts # dataApi：渲染进程唯一数据入口
+│   │       ├── stores/          # Pinia（见下）
+│   │       ├── views/           # 9 个视图 + 设置（见下）
+│   │       ├── components/      # 可复用组件（见下）
+│   │       └── utils/           # 纯函数（见下）
+│   └── shared/types.ts          # 全部共享类型（Task/Note/Semester/Plan/…）
+├── docs/                        # 设计文档 + 落地页 + 截图
+│   ├── 架构与数据设计.md          # 数据契约权威文档（每份 JSON 的 schema）
+│   ├── 成就与回顾设计.md
+│   ├── 移动端方案.md
+│   └── index.html               # GitHub Pages 产品主页
+├── scripts/                     # 开发/发布辅助脚本（见下）
+├── .github/workflows/release.yml # 三平台打包 + 发布 Release
+├── build/icon.png               # 应用图标源（1024²，由它生成 ico/icns）
+├── electron.vite.config.ts      # 打包入口与别名（@ → renderer/src）
+├── package.json                 # 版本、依赖、脚本、electron-builder 配置
+└── LifeQuest-Data/              # 运行时数据（被 .gitignore 排除，不进仓库）
+```
+
+## 核心模块逐个说明
+
+### views/（视图，App.vue 里按 active 切换）
+
+| 文件 | 实现什么 |
+|---|---|
+| `HomeView.vue` | 首页：本周色带、今天/明天安排、最近三天日记、★重要提醒、学期进度 |
+| `TasksView.vue` | 任务/日程：新增表单、主线/支线/每日/截止清单分组、拖拽挂支线、AI 识图入口 |
+| `CalendarView.vue` | 日历三视图（月/周/日）：连续周带、每日配色、停课日、截止旗标、当日日记 |
+| `NotesView.vue` | 笔记：列表（葡萄藤）+ Markdown 块级编辑 + 图片/附件 + 标签 + 关联 |
+| `JournalView.vue` | 日记/周记：每日正文 + 天气心情 + 葡萄藤 |
+| `PlansView.vue` | 学期计划（校历/假期停课）+ 活动计划 |
+| `SeasonsView.vue` | 赛季/成长：称号、里程碑/自定义成就、赛季回顾入口、新建赛季 |
+| `GraphView.vue` | 知识地图：笔记/任务/标签的力导向关系图 |
+| `QuestMapView.vue` | 主线/支线地图：赛季时间轴 + 日记锚点传送 |
+| `SettingsView.vue` | 设置：主题、动画、游戏化开关、AI 配置、数据导出 |
+
+### stores/（Pinia，按数据域划分）
+
+| store | 职责 |
+|---|---|
+| `tasks.ts` | 任务的增删改、按类型分组、`toggleDone`（按次完成）、`skipOccurrence`（跳过某次） |
+| `notes.ts` | 笔记列表、读写、当前选中 |
+| `journal.ts` | 单日日记的读/写（含天气心情） |
+| `journalIndex.ts` | 所有日记日期的索引（供日历染色/葡萄藤/回顾用，不读正文） |
+| `weeklyJournal.ts` | 周记 |
+| `semester.ts` | 学期校历：周号、停课日集合、某天性质 |
+| `seasons.ts` | 赛季增删、进行中/未开始/已结束判定 |
+| `plans.ts` | 活动计划 |
+| `tags.ts` / `links.ts` | 标签、实体关联（笔记↔任务↔笔记） |
+| `dayNotes.ts` | 每天的忙碌标签/性质/备注 |
+| `history.ts` | 增删历史（误删一键找回） |
+| `gamification.ts` | 里程碑成就、自定义成就、称号、等级（进度实时从数据算） |
+| `settings.ts` / `confirm.ts` / `update.ts` | 设置、全局确认框、检查更新 |
+
+### utils/（纯函数，组件里不重复造轮子）
+
+| 文件 | 实现什么 |
+|---|---|
+| `schedule.ts` | **核心**：重复规则展开（每天/每周/每N天…）、任务→日历事件、跳过某次、冲突检测、周概括 |
+| `dayColor.ts` | 每天的色相（忙碌）/饱和度（心情）/明度（天气）→ 忙碌分级（空闲…紧张） |
+| `dayGrade.ts` | 过完的一天按完成度给 S/A/B/C/D |
+| `deadline.ts` | 截止压力、重要度自动抬高、`daysLeft` |
+| `markdown.ts` | Markdown → HTML（渲染笔记/日记） |
+| `frontmatter.ts` | Markdown 的 front matter 解析/序列化 |
+| `helps.ts` | 每页「?」帮助文案（9 个视图） |
+| `demoData.ts` | 一键载入/清空示例数据（记录在 config/demo.json，可精准清理） |
+| `noteActions.ts` / `noteSubject.ts` | 从任务一键写笔记、按学科归类 |
+| `taskDrag.ts` | 任务拖拽挂支线 |
+| `helpers.ts` / `theme.ts` | uid/日期工具、主题切换 |
+
+### components/（可复用 UI）
+
+- **任务相关**：`TaskItem`（罗盘任务卡）、`TaskEditModal`、`TaskOccurrencesModal`（列出所有日期/按次勾/删单次）、`ChainEditor`（重复链）、`OccurrenceEditor`（逐次日期）、`AddHistory`
+- **笔记/日记**：`NoteBody`（块级编辑）、`NotesVine` / `JournalVine`（葡萄藤）、`WeeklyJournalModal`
+- **通用**：`ConfirmDialog`、`HelpModal`、`GuideModal`（新手导引）、`GuideDrawer`（左上角罗盘菜单）、`RadialMenu`（右下角导航）、`TitleBar`（自绘标题栏）、`ReminderBanner`、`AppIcon`（内联 SVG 图标集）、`DateField` / `TimeField`（自绘日期/时间面板，支持 24:00）
+- **AI / 赛季**：`AiImportPanel`（识图导入）、`SeasonReviewModal`（应用内赛季回顾）
+
+## 数据如何管理
+
+### 目录布局（运行时 `LifeQuest-Data/`）
+
+```
+LifeQuest-Data/
+├── config/          JSON：settings / semester / seasons / achievements /
+│                    tags / links / daynotes / history / demo
+├── tasks/tasks.json 全部任务与日程
+├── plans/plans.json 活动计划
+├── journal/         YYYY-MM-DD.md（日记）、w<周日>.md（周记）
+├── notes/           <uuid>.md（每篇笔记一个文件）
+├── assets/          笔记图片与附件
+└── archive/         生成的赛季回顾 md
+```
+
+- **结构化数据**（任务/赛季/标签…）放 JSON，每份带 `schemaVersion`；结构变更时在 `dataStore.ts` 的迁移表里登记，旧数据自动备份后升级。
+- **长文本**（日记/周记/笔记）放 Markdown，正文用 front matter 存元信息。
+- 数据根目录：Windows 便携版＝exe 旁、macOS＝文稿、Linux AppImage＝同目录；可用环境变量 `LIFEQUEST_DATA_ROOT` 覆盖。
+
+### 三条必须遵守的约定
+
+1. 渲染进程**只通过 `window.api` / `dataApi`** 读写文件，不直接 import Node API。
+2. 新增/修改数据结构 → 同步改 `src/shared/types.ts`（唯一类型来源）+ 在 `dataStore.ts` 登记 `schemaVersion` 迁移 + 更新 `docs/架构与数据设计.md`。
+3. **不要把 `LifeQuest-Data/` 提交进仓库**（已在 `.gitignore`）。
 
 ## 从源码运行
 
-需要 Node.js 20+ 和 npm（Windows / macOS / Linux 都可以）。
+需要 Node.js 20+ 与 npm（三平台均可）。
 
 ```bash
 git clone https://github.com/Duke-guo/LifeQuest.git
 cd LifeQuest
 npm install
-npm run dev        # 开发模式（热更新）
+npm run dev          # 开发模式（热更新）
 ```
 
 常用命令：
 
 ```bash
-npm run typecheck  # TypeScript 检查
-npm run build      # 编译到 out/
-npm run dist       # 打包成当前平台的安装包（产物在 release/）
-npm run release    # 打包 + （Windows）把便携版复制到 app/
+npm run typecheck    # TypeScript 检查（提交前请保证 0 错误）
+npm run build        # 编译 main/preload/renderer 到 out/
+npm run dist         # 打包当前平台安装包（产物在 release/）
+npm run release      # 打包 + （Windows）把便携版同步到 app/
+npm run check:workflow  # 校验 release.yml（含重复键检测）
 ```
 
-> 想改应用图标：编辑 `scripts/make-icon.cjs` 里的 SVG，跑 `npx electron scripts/make-icon.cjs` 生成 `build/icon.png`（1024×1024），三个平台的图标都会由它生成。
+改图标：编辑 `scripts/make-icon.cjs` 里的 SVG，运行生成 `build/icon.png`（1024²），三平台图标由它派生。
 
-## 数据存在哪 & 隐私
+## 打包与发布（CI）
 
-| 平台 | 默认位置 |
+`.github/workflows/release.yml`：
+
+- 触发：推 `main`、打 `v*` tag、手动 workflow_dispatch
+- 矩阵：Windows（portable）/ macOS（dmg+zip，x64+arm64）/ Linux（AppImage+deb）
+- 打 tag 后自动创建 GitHub Release，附上各平台产物
+
+`scripts/` 里的辅助工具：
+
+| 脚本 | 作用 |
 |---|---|
-| Windows 便携版 | exe 同级的 `LifeQuest-Data/` |
-| macOS | 「文稿」下的 `LifeQuest-Data/`（若 App 旁边已有同名文件夹则优先用它，方便绿色携带） |
-| Linux AppImage | AppImage 文件同级的 `LifeQuest-Data/` |
-| 开发模式 | 工程根目录的 `LifeQuest-Data/`（会向上层目录查找已有的同名文件夹） |
-| 想自定义 | 设环境变量 `LIFEQUEST_DATA_ROOT=/某个目录`（三平台通用） |
+| `post-release.mjs` | 按 package.json 版本号挑便携版，复制免解压版到 `app/` |
+| `make-icon.cjs` | SVG → `build/icon.png` |
+| `check-workflow.mjs` | 校验 workflow YAML（含重复键，防历史踩坑） |
+| `list-models.mjs` / `probe-vision.mjs` / `test-ai.mjs` | AI 识图联调工具 |
 
-目录结构（全是明文，随时可以手改）：
+## 无头调试装置（对贡献者有用）
 
-```
-LifeQuest-Data/
-├── config/     settings.json / semester.json / daynotes.json / links.json …
-├── tasks/      tasks.json
-├── journal/    2026-10-10.md（日记）、w2026-10-04.md（周记）
-├── notes/      <uuid>.md（每篇笔记一个文件）
-├── plans/      plans.json
-├── assets/     笔记里插入的图片
-└── archive/
-```
+主进程 `index.ts` 内置一套**环境变量驱动的调试装置**，可在不开图形界面点鼠标的情况下跑流程、截图、断言（本项目大量 UI 验证就靠它）：
 
-**隐私**：程序默认完全离线，不会向任何服务器发送你的数据。唯一联网的功能是「AI 识图导入」（把图片发给你在设置里指定的模型服务），默认关闭。
-
-⚠️ **注意**：AI 的 API Key 以明文存在 `LifeQuest-Data/config/settings.json` 里。分享数据文件夹或截图前记得清掉；这个目录也已经被 `.gitignore` 排除，不会被提交。
-
-## 配置 AI 识图（可选）
-
-设置 → AI → 填 `baseUrl` / `apiKey` / `model`（默认指向 DeepSeek，任何兼容 OpenAI 接口的服务都可以）。配好后可以把课表、通知、手写便签的图片丢进去，自动识别成任务。
-
-## 操作小抄
-
-| 位置 | 操作 |
+| 变量 | 作用 |
 |---|---|
-| 日历（周） | 滚轮＝左右滑动 · 点一列＝进日视图 |
-| 日历（月） | 滚轮＝翻月 · 点格子＝进日视图 |
-| 笔记葡萄藤 | 滚轮＝换主线 · 点葡萄＝选中 · 双击＝进入编辑 |
-| 日记葡萄藤 | 滚轮＝左右滑（和上面的日历同步）· 点果实＝进入日记 |
-| 笔记正文 | 点段落＝就地编辑 · Esc/Ctrl+Enter＝提交 |
-| 任务 | 拖动一条任务到另一条上＝挂成它的支线 |
-| 任意位置 | 右下角罗盘＝导航 · 左上角头像＝导引与设置 |
+| `LIFEQUEST_SCREENSHOT=<路径>` | 启动后截图到该文件 |
+| `LIFEQUEST_DUMP=<路径>` | 把页面文字 + 布局体检信息写到该文件 |
+| `LIFEQUEST_VIEW=任务` | 自动切到指定视图 |
+| `LIFEQUEST_CLICK=...` | 按逗号分隔执行动作（`@wait:` / `@eval:` / `@type:` / `@hover:` / `@drag:` / 裸选择器＝点击） |
+| `LIFEQUEST_IMAGE=<路径>` | 配合 `@image` 注入一张图（测 AI 识图/粘贴） |
 
-## 项目结构
+示例：
 
+```bash
+LIFEQUEST_DATA_ROOT=.scratch/data \
+LIFEQUEST_VIEW=任务 \
+LIFEQUEST_DUMP=.scratch/o.txt \
+LIFEQUEST_SCREENSHOT=.scratch/o.png \
+LIFEQUEST_CLICK="@eval:document.querySelector('.help-btn').click(),@wait:900" \
+npx electron .
 ```
-src/
-├── main/        Electron 主进程：窗口、IPC、文件读写（dataStore.ts 负责数据目录与迁移）
-├── preload/     contextBridge，暴露 window.api
-├── renderer/    Vue 3 界面
-│   └── src/
-│       ├── views/       首页 / 任务 / 日历 / 笔记 / 日记 / 计划 / 赛季 / 知识地图
-│       ├── components/  任务卡、葡萄藤、笔记块编辑器、确认弹窗、自绘标题栏…
-│       ├── stores/      Pinia：tasks / journal / notes / links / semester…
-│       └── utils/       日程展开、日期配色、日评级、Markdown 渲染、截止计算…
-└── shared/      主进程与渲染进程共用的类型定义
-docs/            设计文档与截图
-```
-
-技术栈：**Electron + Vue 3 + TypeScript + Vite（electron-vite）+ Pinia**，无数据库、无后端。
-
-## 常见问题
-
-**Q：有哪些平台版本？**
-Windows（便携版 exe）、macOS（dmg，Intel 与 Apple 芯片）、Linux（AppImage / deb）都有，见 [Releases](../../releases)。三平台共用同一套代码，界面会按平台自适应（macOS 用系统红绿灯按钮，Windows / Linux 用自绘标题栏）。
-
-**Q：macOS 上提示「已损坏」或「无法验证开发者」？**
-个人项目没有购买 Apple 开发者证书（每年 99 美元），属于预期情况：右键 App → 打开；若仍被拦，执行 `xattr -cr /Applications/LifeQuest.app` 后再打开。
-
-**Q：换电脑怎么搬？**
-把整个 `LifeQuest-Data/` 文件夹拷过去放到对应位置即可，格式是纯文本，跨版本向上迁移。
-
-**Q：会不会丢数据？**
-所有写入都是先落到本地文件；但请自行定期备份（复制 `LifeQuest-Data/` 即可）。删任务可以在「历史添加」里一键找回。
-
-**Q：能出手机版 / 网页版吗？**
-短期内不会：这个应用的前提是"数据在自己电脑上的普通文件里"，做成云服务就违背了初衷。
 
 ## 参与贡献
 
-见 [CONTRIBUTING.md](CONTRIBUTING.md)。Issue 和 PR 都欢迎，中文英文都可以。
+见 [CONTRIBUTING.md](CONTRIBUTING.md)。Issue 和 PR 都欢迎，中文英文都可以。开始前请先读 [AGENT.md](AGENT.md)（项目纲要）和 [docs/架构与数据设计.md](docs/架构与数据设计.md)（数据契约）。
+
+## 常见问题
+
+**Q：有哪些平台版本？** Windows（便携 exe）、macOS（dmg，Intel/Apple）、Linux（AppImage/deb），见 [Releases](../../releases)。三平台同一套代码，界面按平台自适应（macOS 用系统红绿灯，Windows/Linux 用自绘标题栏）。
+
+**Q：macOS 提示「已损坏」？** 个人项目未购买 Apple 开发者证书：右键 App → 打开；仍被拦则 `xattr -cr /Applications/LifeQuest.app`。
+
+**Q：换电脑怎么搬？** 整个 `LifeQuest-Data/` 拷过去即可，纯文本、跨版本向上迁移。
+
+**Q：会不会丢数据？** 所有写入都先落本地文件；删任务可在「历史添加」找回。建议定期备份 `LifeQuest-Data/`。
+
+**Q：能出手机版 / 网页版吗？** 方案已在筹划（优先 PWA，复用现有界面层），详见 [docs/移动端方案.md](docs/移动端方案.md)。当前桌面版是主线。
 
 ## 协议与致谢
 
